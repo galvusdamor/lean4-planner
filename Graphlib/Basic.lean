@@ -208,56 +208,7 @@ theorem pairwise_elem_before {α: Type} {pr: α → α → Prop} {l1 l2 : List �
         · exact rest_of_list
         · exact xinRest
 
-
-theorem switched_lists_under_pairwise_eq {α: Type} {pr: α → α → Prop} {symm: Symmetric pr} {l1 l2 : List α}:
-    (List.Pairwise pr (List.append l1 l2)) = (List.Pairwise pr (List.append l2 l1)) := by -- pr = predicate that all pairs in pairwise have to satisfy
-    simp [append]
-    induction l1
-    case nil =>
-      simp
-      --apply List.nil_append
-      --apply List.append_nil
-      --rfl
-    case cons l ls IH =>
-      simp [List.Pairwise]
-      constructor
-      · intro cond
-        let ⟨ q, sublist⟩ := cond
-        clear cond
-        let ⟨ ihl, ihr ⟩ := IH
-        clear IH
-        let qq := ihl sublist
-        apply pairwise_add_anywhere
-        exact symm  -- apply the proof that pr is symmetric
-        constructor
-        · intro a' a
-          simp_all only [imp_self]
-          cases a with
-          | inl h => simp_all only [or_true]
-          | inr h_1 => simp_all only [true_or]
-        · exact qq
-      · intro cond
-        constructor
-        · intro x
-          intro or
-          cases or
-          case inl ha =>
-            apply @pairwise_elem_after α pr l2 ls
-            constructor
-            · exact cond
-            · exact ha
-          case inr ha =>
-            apply symm
-            apply @pairwise_elem_before α pr l2 ls
-            constructor
-            · exact cond
-            · exact ha
-        · simp [IH]
-          exact pairwise_additional_does_not_matter cond
-
-
-/-- theorem `extend_walk_support_node_added_at_end`: support of extended walk is the
-same as the support list of the old walk ectended by one -/
+/-- Support of extended walk is the same as the support list of the old walk ectended by one. -/
 theorem extend_walk_support_node_added_at_end
      [FinEnum V'] {G : WeightedDiGraph V' E'} {h : G.Adj v w} { www : Walk G a v } :
     (support G (extend_walk G www h)) = List.append (support G www) [w]  := by
@@ -288,8 +239,9 @@ def extend_path (p : Path G u v) (h : G.Adj v w) (proof_w_not_in_support : w ∉
   let path_nodup : List.Nodup (support G path_walk) := by
     simp [List.Nodup]
     rw [set_eq]
-    rw [switched_lists_under_pairwise_eq]
-    simp [List.append]
+    simp only [List.append_eq, path_walk]
+    rw [List.pairwise_append_comm]
+    simp only [List.cons_append, List.nil_append, List.pairwise_cons, path_walk]
     apply And.intro
     ·
       intro a ha
@@ -298,7 +250,6 @@ def extend_path (p : Path G u v) (h : G.Adj v w) (proof_w_not_in_support : w ∉
       simp_all only [not_true_eq_false]
     exact p.support_nodup
     -- we need to prove that the ≠ function that occurs in nodup is symmetric (otherwise one of our helper theorems does not hold any more)
-    simp [Symmetric]
     intro x y
     intro notEq
     intro h
@@ -308,22 +259,8 @@ def extend_path (p : Path G u v) (h : G.Adj v w) (proof_w_not_in_support : w ∉
 
 omit [DecidableEq V] [DecidableEq E] in
 theorem extend_walk_extends_support (ww: Walk G u v) (h: G.Adj v w):
-  support G (extend_walk G ww h) = (support G ww) ++ [w] :=
-  by
-    induction ww
-    case nil =>
-      unfold extend_walk
-      unfold append
-      unfold support
-      unfold support
-      simp
-    case cons hh restP IH =>
-      unfold extend_walk
-      unfold append
-      unfold support
-      unfold extend_walk at IH
-      simp
-      apply IH
+    support G (extend_walk G ww h) = (support G ww) ++ [w] := by
+  induction ww <;> simp_all [extend_walk, append, support]
 
 omit [DecidableEq V] [DecidableEq E] in
 theorem extend_path_extends_support (p: Path G u v) (h: G.Adj v w)(proof_w_not_in_support : w ∉ support G p.walk):
@@ -357,35 +294,22 @@ def inner_dfs [FinEnum V] [DecidableEq E] [DecidableEq V]
   match stack with
     | [] => none -- goal not found
     | (s :: xs) =>
-    if h : s.node = goal then some (by
-      subst h
-      exact s.path
-      )
+    if h : s.node = goal then some (h ▸ s.path)
     else
-      let u : Finset V := Finset.univ
-      let l0 : List V := FinEnum.toList u
-      let newly_visited : Finset V := Finset.filterMap
-       (λ v =>
-          let edgePresent := g.instDecAdj s.node v
-          let edge : Prop := g.Adj s.node v -- proof edge is there
-          if d : decide edge ∧ v ∉ visited then -- here check condition if not in visited
-             some v
-          else
-            none -- edge does not exist
-      ) Finset.univ (by
-        intro a a' b a_1 a_2
-        simp_all only [decide_eq_true_eq, dite_eq_ite, Option.mem_def, Option.ite_none_right_eq_some, Option.some.injEq]
-      ) -- filter neighbors to expand the visited list
+      let newly_visited : Finset V := (Finset.univ).filterMap
+        (λ v => if @decide (g.Adj s.node v) (g.instDecAdj s.node v) ∧ v ∉ visited
+                  then some v
+                  else none)
+        (by intro a a' b a_1 a_2; simp_all) -- filter neighbors to expand the visited list
 
       let new_visited := visited ∪ newly_visited
 
-      let new_nodes_neighbors : List (NodePathPair g start new_visited):= List.filterMap
+      let new_nodes_neighbors : List (NodePathPair g start new_visited) :=
+      (FinEnum.toList (Finset.univ : Finset V)).filterMap
        (λ v =>
          if notVisited : v ∉ visited then
-           -- get the proof that determining the edge between s.node and v is decidable. We need this later when we decide edge
-          let edgePresent := g.instDecAdj s.node v
-          let edge : Prop := g.Adj s.node v -- proof edge is there
-          if d : decide edge then
+          have := g.instDecAdj s.node v -- We need this later.
+          if d : decide (g.Adj s.node v) then
             let oldpath : Path g start s.node := s.path
             let w : Path g start v := extend_path g oldpath (by
               exact of_decide_eq_true d
@@ -398,13 +322,10 @@ def inner_dfs [FinEnum V] [DecidableEq E] [DecidableEq V]
               exact notVisited
             )
             let r : NodePathPair g start new_visited := NodePathPair.mk v w (by -- proof that support(path) ⊆ new_visisted
-              simp [new_visited]
-
-              simp [w]
-              simp [extend_path_extends_support]
+              simp [new_visited,w,extend_path_extends_support]
               apply Finset.union_subset_union
               exact s.reached_nodes_proofs
-              simp_all only [decide_eq_true_eq, dite_eq_ite, Finset.singleton_subset_iff, Finset.mem_filterMap, Finset.mem_univ, Option.ite_none_right_eq_some, Option.some.injEq, true_and, exists_eq_right, oldpath, w, new_visited, edge, newly_visited]
+              simp_all only [decide_eq_true_eq, dite_eq_ite, Finset.singleton_subset_iff, Finset.mem_filterMap, Finset.mem_univ, Option.ite_none_right_eq_some, Option.some.injEq, true_and, exists_eq_right, oldpath, w, new_visited, newly_visited]
               simp
               exact of_decide_eq_true d
             )
@@ -413,7 +334,7 @@ def inner_dfs [FinEnum V] [DecidableEq E] [DecidableEq V]
             none -- edge does not exist
         else
           none -- target node has already been visited
-      ) l0 -- filter neighbors to expand stack
+      ) -- filter neighbors to expand stack
 
       let new_stack_old_nodes : List (NodePathPair g start new_visited):= List.map (fun npp =>
         NodePathPair.mk npp.node npp.path (by
@@ -520,8 +441,6 @@ def dfs [FinEnum V] [DecidableEq V] [DecidableEq E] (g: WeightedDiGraph V E) (st
     let p : NodePathPair g start {start} := NodePathPair.mk start emptyP reached_nodes_proof
     inner_dfs g start {start} [p] goal
 
-
-
 theorem dfs_is_sound (g: WeightedDiGraph V E) (start : V) (goal : V) :
     (Option.isSome (dfs g start goal) → (∃ x : (Path g start goal), x = x)) := by
   intro h -- Option.isSome true on some and false on none, x = x since we need a formula
@@ -531,7 +450,7 @@ theorem dfs_is_sound (g: WeightedDiGraph V E) (start : V) (goal : V) :
   apply w
   simp_all
 
-theorem dfs_is_complete(g: WeightedDiGraph V E) (start : V) (goal : V) :
+theorem dfs_is_complete (g: WeightedDiGraph V E) (start : V) (goal : V) :
     ((∃ x : (Path g start goal), x = x) → Option.isSome (dfs g start goal)) := by -- or Option.isNone (dfs g start goal) → ∄ x (Path g start goal), x = x
       intro walk_exists
       apply Exists.elim walk_exists
