@@ -3,6 +3,7 @@ Copyright (c) 2025 Simone Kilian. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Simone Kilian, Supervisor: Malvin Gattinger
 -/
+import Init.Core
 import Mathlib.Data.Fintype.Basic
 import Mathlib.Data.Fintype.Defs
 import Mathlib.Data.Fintype.Card
@@ -450,13 +451,174 @@ theorem dfs_is_sound (g: WeightedDiGraph V E) (start : V) (goal : V) :
   apply w
   simp_all
 
+
+structure dfs_state [FinEnum V] [DecidableEq E] [DecidableEq V]
+    (g: WeightedDiGraph V E) (start : V) where
+    visited : Finset V
+    stack : List (NodePathPair g start visited)
+    invar : ∀ x : visited, (¬ ∃ y ∈ stack, y.node = x) ∨ ∀ y : V, (g.Adj x y) → y ∈ visited
+
+
+
+
+def inner_dfs_monad [FinEnum V] [DecidableEq E] [DecidableEq V]
+    (g: WeightedDiGraph V E) (start : V) (goal : V) : StateM (dfs_state g start) (Option (Option (Path g start goal))) := by sorry
+
+    --WellFounded.fix (by sorry)
+
+
+def dfs_monad_loop [FinEnum V] [DecidableEq E] [DecidableEq V]
+    (g: WeightedDiGraph V E) (start : V) (goal : V) (fuel : Nat × Nat): StateM (dfs_state g start) (Option (Path g start goal)) :=
+    do
+    --if fuel = (0,0) then pure Option.none
+    --else
+      let state_before ← get -- needed for the proof.
+      let one_round_result ← inner_dfs_monad g start goal
+      let state_after ← get
+      match one_round_result with
+        | none => 
+            dfs_monad_loop g start goal
+              (Fintype.card V - state_after.visited.card, state_after.stack.length)
+        | some result => pure result
+termination_by fuel
+decreasing_by
+
+sorry
+
+
+
+def inner_dfs_not_really_monad [FinEnum V] [DecidableEq E] [DecidableEq V]
+    (g: WeightedDiGraph V E) (start : V) (goal : V) 
+    (priorState : dfs_state g start) : 
+    (dfs_state g start) × (Option (Option (Path g start goal))) :=
+  match priorState.stack with
+    | [] => (priorState, some none) -- goal not found
+    | (s :: xs) => 
+    if h : s.node = goal then (priorState, some (some (h ▸ s.path)))
+    else
+      let newly_visited : Finset V := (Finset.univ).filterMap
+        (λ v => if @decide (g.Adj s.node v) (g.instDecAdj s.node v) ∧ v ∉ priorState.visited
+                  then some v
+                  else none)
+        (by intro a a' b a_1 a_2; simp_all) -- filter neighbors to expand the visited list
+
+      let new_visited := priorState.visited ∪ newly_visited
+
+      let new_nodes_neighbors : List (NodePathPair g start new_visited) :=
+      (FinEnum.toList (Finset.univ : Finset V)).filterMap
+       (λ v =>
+         if notVisited : v ∉ priorState.visited then
+          have := g.instDecAdj s.node v -- We need this later.
+          if d : decide (g.Adj s.node v) then
+            let oldpath : Path g start s.node := s.path
+            let w : Path g start v := extend_path g oldpath (by
+              exact of_decide_eq_true d
+            ) (by
+              let oldpath_proof : (support g s.path.walk).toFinset ⊆ priorState.visited := s.reached_nodes_proofs
+              simp [oldpath]
+              rw [← List.mem_toFinset]
+              apply Set.not_mem_subset
+              exact oldpath_proof
+              exact notVisited
+            )
+            let r : NodePathPair g start new_visited := NodePathPair.mk v w (by -- proof that support(path) ⊆ new_visisted
+              simp [new_visited,w,extend_path_extends_support]
+              apply Finset.union_subset_union
+              exact s.reached_nodes_proofs
+              simp_all only [decide_eq_true_eq, dite_eq_ite, Finset.singleton_subset_iff, Finset.mem_filterMap, Finset.mem_univ, Option.ite_none_right_eq_some, Option.some.injEq, true_and, exists_eq_right, oldpath, w, new_visited, newly_visited]
+              simp
+              exact of_decide_eq_true d
+            )
+            r
+          else
+            none -- edge does not exist
+        else
+          none -- target node has already been visited
+      ) -- filter neighbors to expand stack
+
+      let new_stack_old_nodes : List (NodePathPair g start new_visited):= List.map (fun npp =>
+        NodePathPair.mk npp.node npp.path (by
+          let partPath := npp.reached_nodes_proofs
+          simp [new_visited]
+          apply subset_trans
+          exact partPath
+          apply Finset.subset_union_left
+        )
+      ) xs  -- updates old stack with paths and updates type
+
+      let new_stack : List (NodePathPair g start new_visited):=
+        new_nodes_neighbors ++ new_stack_old_nodes -- add neighbors in front to stack
+
+      let nextState := dfs_state.mk new_visited new_stack (by
+        intro x
+        sorry)
+
+      (nextState, none)
+
+
+
+def dfs_not_really_monad_loop [FinEnum V] [DecidableEq E] [DecidableEq V]
+    (g: WeightedDiGraph V E) (start : V) (goal : V)
+    (priorState : dfs_state g start) : 
+      (Option (Path g start goal)) :=
+      let (nextState, one_round_result) := inner_dfs_not_really_monad g start goal priorState
+      match one_round_result with
+        | none => 
+            dfs_not_really_monad_loop g start goal nextState
+        | some result => result
+termination_by (Fintype.card V - priorState.visited.card, priorState.stack.length)
+decreasing_by
+sorry
+
+
+
+
+def inner_dfs_invar [FinEnum V] [DecidableEq E] [DecidableEq V]
+    (g: WeightedDiGraph V E) (start : V) (goal : V)
+    (visited : Finset V)
+    (stack : List (NodePathPair g start visited))  
+    (invar : ∀ x ∈ visited, (∃ y ∈ stack, y.node = x) ∨ (∀ y : V, (g.Adj x y) → y ∈ visited))
+    : Σ (path: Option (Path g start goal)),
+    (Σ (finalVisited : Finset V),
+    (Σ' (finalstack : List (NodePathPair g start finalVisited)),
+    (∀ x : finalVisited, (∃ y ∈ finalstack, y.node = x) ∨ (∀ y : V, (g.Adj x y) → y ∈ finalVisited))))
+
+    := by sorry
+
+
+
+
+/-- `DFS`is the algorithm depth first search, expecting a `WeightedDiGraph V E`, a start node `start : V`and a goal node `goal : V`as imput. -/
+def dfsInvar [FinEnum V] [DecidableEq V] [DecidableEq E] (g: WeightedDiGraph V E) (start : V) (goal : V) : (Option (Path g start goal)) :=
+    let emptyW : Walk g start start := Walk.nil
+    let emptyP : Path g start start := Path.mk emptyW (by
+      simp [emptyW]
+      unfold support
+      simp
+    )
+    -- initially the visited list only contains start and we have a path that goes from start to itself (a nil path)
+    let reached_nodes_proof : (support g emptyW).toFinset ⊆ {start} := by
+      simp [emptyW]
+      right
+      simp [support]
+    let p : NodePathPair g start {start} := NodePathPair.mk start emptyP reached_nodes_proof
+    let dfs_result := inner_dfs_invar g start {start} [p] goal
+
+    dfs_result
+
+
+
+
 theorem dfs_is_complete (g: WeightedDiGraph V E) (start : V) (goal : V) :
     ((∃ x : (Path g start goal), x = x) → Option.isSome (dfs g start goal)) := by -- or Option.isNone (dfs g start goal) → ∄ x (Path g start goal), x = x
       intro walk_exists
       apply Exists.elim walk_exists
       intro theWalk
       intro
-      unfold dfs
+      by_contra terminates_with_none
+      simp at terminates_with_none
+     
+      --unfold dfs
       sorry
 
 
