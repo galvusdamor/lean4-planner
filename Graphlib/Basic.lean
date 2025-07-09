@@ -286,6 +286,7 @@ structure NodePathPair (start : V) (visited : Finset V)  where
   reached_nodes_proofs : (support G path.walk).toFinset ⊆ visited
   --deriving DecidableEq
 
+
 /-- `inner_DFS` is the main part of the algorithm depth first search,
 called from `DFS` with an the `start` node in the visited list and a first `NodePathPair` with the
 `start` vertex in the first coordinate as an input, a `WeightedDiGraph V E`,
@@ -456,41 +457,16 @@ structure dfs_state [FinEnum V] [DecidableEq E] [DecidableEq V]
     (g: WeightedDiGraph V E) (start : V) where
     visited : Finset V
     stack : List (NodePathPair g start visited)
-    invar : ∀ x : visited, (∃ y ∈ stack, y.node = x) ∨ ∀ y : V, (g.Adj x y) → y ∈ visited
 
 
-
-
-def inner_dfs_monad [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) (start : V) (goal : V) : StateM (dfs_state g start) (Option (Option (Path g start goal))) := by sorry
-
-    --WellFounded.fix (by sorry)
-
--- Gregors (failed) approach:
-def dfs_monad_loop [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) (start : V) (goal : V) (fuel : Nat × Nat): StateM (dfs_state g start) (Option (Path g start goal)) :=
-    do
-    --if fuel = (0,0) then pure Option.none
-    --else
-      let state_before ← get -- needed for the proof.
-      let one_round_result ← inner_dfs_monad g start goal
-      let state_after ← get
-      match one_round_result with
-        | none => 
-            dfs_monad_loop g start goal
-              (Fintype.card V - state_after.visited.card, state_after.stack.length)
-        | some result => pure result
-termination_by fuel
-decreasing_by
-
-sorry
-
-
+abbrev dep_invar[FinEnum V] [DecidableEq E] [DecidableEq V]
+    (g: WeightedDiGraph V E) (start : V) (s : dfs_state g start):=
+      ∀ x : s.visited, (∃ y ∈ s.stack, y.node = x) ∨ ∀ y : V, (g.Adj x y) → y ∈ s.visited
 
 def inner_dfs_not_really_monad [FinEnum V] [DecidableEq E] [DecidableEq V]
     (g: WeightedDiGraph V E) (start : V) (goal : V) 
     (priorState : dfs_state g start) : 
-    (dfs_state g start) × (Option (Option (Path g start goal))) :=
+    (dfs_state g start) × (Option (Option (Path g start goal))) := 
   match priorState.stack with
     | [] => (priorState, some none) -- goal not found
     | (s :: xs) => 
@@ -549,35 +525,136 @@ def inner_dfs_not_really_monad [FinEnum V] [DecidableEq E] [DecidableEq V]
       let new_stack : List (NodePathPair g start new_visited):=
         new_nodes_neighbors ++ new_stack_old_nodes -- add neighbors in front to stack
 
-      let nextState := dfs_state.mk new_visited new_stack (by
-        -- invar : ∀ x : visited, (∃ y ∈ stack, y.node = x) ∨ ∀ y : V, (g.Adj x y) → y ∈ visited
-        intro x 
-        by_cases  h : ∃ y ∈ new_stack, y.node = x 
-        · left 
-          exact h 
-        · right 
-          intros y hy 
-          refine Finset.mem_union.mpr ?_
-          by_cases h' : y ∈ priorState.visited
-          · exact Or.inl h'
-          · right -- t.s.: y ∈ newly_visited  
-            by_cases x_has_already_been_expanded : ↑x ∈ priorState.visited
-            · have oldInvar := priorState.invar ⟨ x, x_has_already_been_expanded ⟩
-              cases oldInvar with
-              | inl a => exact False.elim (h a) 
-              | inr a => sorry
-
-              --sorry
-            · 
-                sorry
-            --by_cases 
-            --⬝ sorry
-            --⬝ sorry
-
-      )
-          --exact hy -- y ∈ visited, da new_visited alles enthält)
+      let nextState := dfs_state.mk new_visited new_stack 
       (nextState, none)
 
+
+lemma foofoo
+    (g: WeightedDiGraph V E) (start : V) (goal : V) (priorState : dfs_state g start)
+    (stack_not_empty : priorState.stack ≠ [])
+    (stack_head_is_goal : (priorState.stack.head stack_not_empty).node = goal)
+    :
+      (inner_dfs_not_really_monad g start goal priorState).1 = priorState := by
+        unfold inner_dfs_not_really_monad
+        aesop
+
+lemma nodePathPairNodeKeepsEquality
+    (visited : Finset V)
+    (p : NodePathPair g start visited) (eq : visited = visited') : 
+    p.node = (eq ▸ p).node := by
+      subst eq
+      simp_all only
+
+lemma foo[FinEnum V] [DecidableEq E] [DecidableEq V]
+    (g: WeightedDiGraph V E) (start : V) (goal : V) (priorState : dfs_state g start):
+      dep_invar g start priorState → dep_invar g start (inner_dfs_not_really_monad g start goal priorState).1 := by
+        intro priorInvar
+        --
+        by_cases stack_empty : priorState.stack = []
+        · unfold inner_dfs_not_really_monad
+          simp_all
+          exact priorInvar
+        --next prior_state_stack expanded_node rest_of_stack stack_composition => 
+        · by_cases stack_head_is_goal : (priorState.stack.head stack_empty).node = goal 
+          · unfold dep_invar
+            intro x
+            by_cases x_is_on_stack : (∃ y ∈ priorState.stack, y.node = x) 
+            · left
+              clear priorInvar
+              convert x_is_on_stack
+              all_goals
+                simp [inner_dfs_not_really_monad]
+                aesop 
+            · right
+              unfold dep_invar at priorInvar
+              specialize priorInvar ⟨ x.1, ?_⟩
+              · have ⟨ x_as_v , x_in_after_inner ⟩ := x
+                simp
+                convert x_in_after_inner
+                simp_all [foofoo]
+              · apply Or.resolve_left at priorInvar
+                simp_all
+                convert priorInvar
+                simp_all [foofoo]
+          · -- case: stack is not empty
+            -- head of the stack was not the goal node
+            -- so we took some node from the stack, expanded it
+            let dfs_step_result := inner_dfs_not_really_monad g start goal priorState
+            change dep_invar g start dfs_step_result.1
+            intro x
+            by_cases  h : ∃ y ∈ dfs_step_result.1.stack, y.node = x 
+            · left 
+              exact h 
+            · right 
+              
+
+
+              -- introduction should happen later
+              intros y hy 
+              --unfold dep_invar
+              
+              refine Finset.mem_union.mpr ?_
+              by_cases h' : y ∈ priorState.visited
+              · exact Or.inl h'
+              · right -- t.s.: y ∈ newly_visited  
+                by_cases x_has_already_been_expanded : ↑x ∈ priorState.visited
+                · have oldInvar := priorState.invar ⟨ x, x_has_already_been_expanded ⟩
+                  cases oldInvar with
+                  | inl a => exact False.elim (h a) 
+                  | inr a => sorry
+
+                  --sorry
+                · 
+                    sorry
+                --by_cases 
+                --⬝ sorry
+                --⬝ sorry
+
+
+            sorry
+
+
+
+
+
+
+
+
+
+
+def inner_dfs_monad [FinEnum V] [DecidableEq E] [DecidableEq V]
+    (g: WeightedDiGraph V E) (start : V) (goal : V) : StateM (dfs_state g start) (Option (Option (Path g start goal))) := by sorry
+
+    --WellFounded.fix (by sorry)
+
+
+-- Gregors (failed) approach:
+def dfs_monad_loop [FinEnum V] [DecidableEq E] [DecidableEq V]
+    (g: WeightedDiGraph V E) (start : V) (goal : V) (fuel : Nat × Nat): StateM (dfs_state g start) (Option (Path g start goal)) :=
+    do
+    --if fuel = (0,0) then pure Option.none
+    --else
+      let state_before ← get -- needed for the proof.
+      let one_round_result ← inner_dfs_monad g start goal
+      let state_after ← get
+      match one_round_result with
+        | none => 
+            let h : fuel = (Fintype.card V - state_before.visited.card, state_before.stack.length) :=
+             by sorry
+            dfs_monad_loop g start goal
+              (Fintype.card V - state_after.visited.card, state_after.stack.length)
+        | some result => pure result
+termination_by fuel
+decreasing_by
+
+sorry
+
+
+
+def inner_dfs_not_really_monad [FinEnum V] [DecidableEq E] [DecidableEq V]
+    (g: WeightedDiGraph V E) (start : V) (goal : V) 
+    (priorState : dfs_state g start) : 
+    (dfs_state g start) × (Option (Option (Path g start goal))) :=
 
 
 def dfs_not_really_monad_loop [FinEnum V] [DecidableEq E] [DecidableEq V]
