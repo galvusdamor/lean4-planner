@@ -1,13 +1,9 @@
 name = "graphlib"
 version = "0.1.0"
-defaultTargets = ["graphlib"]
+defaultTargets = ["Graphlib"]
 
 [[lean_lib]]
 name = "Graphlib"
-
-[[lean_exe]]
-name = "graphlib"
-root = "Main"
 
 [[require]]
 name = "mathlib"

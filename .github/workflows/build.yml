@@ -1,0 +1,34 @@
+on:
+  push:
+
+name: CI
+
+jobs:
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ env.GIT_HISTORY_DEPTH }}
+
+      - name: Install elan
+        run: |
+          set -o pipefail
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- --default-toolchain none -y
+          ~/.elan/bin/lean --version
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Cache both .lake/build folders
+        uses: actions/cache@v4
+        with:
+          path: |
+            .lake/build
+            docbuild/.lake/build
+          key: lakeBuild-${{ hashFiles('lake-manifest.json') }}
+          restore-keys: lakeBuild-
+
+      - name: Build
+        run: lake build
