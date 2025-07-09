@@ -456,7 +456,7 @@ structure dfs_state [FinEnum V] [DecidableEq E] [DecidableEq V]
     (g: WeightedDiGraph V E) (start : V) where
     visited : Finset V
     stack : List (NodePathPair g start visited)
-    invar : ∀ x : visited, (¬ ∃ y ∈ stack, y.node = x) ∨ ∀ y : V, (g.Adj x y) → y ∈ visited
+    invar : ∀ x : visited, (∃ y ∈ stack, y.node = x) ∨ ∀ y : V, (g.Adj x y) → y ∈ visited
 
 
 
@@ -466,7 +466,7 @@ def inner_dfs_monad [FinEnum V] [DecidableEq E] [DecidableEq V]
 
     --WellFounded.fix (by sorry)
 
-
+-- Gregors (failed) approach:
 def dfs_monad_loop [FinEnum V] [DecidableEq E] [DecidableEq V]
     (g: WeightedDiGraph V E) (start : V) (goal : V) (fuel : Nat × Nat): StateM (dfs_state g start) (Option (Path g start goal)) :=
     do
@@ -550,9 +550,32 @@ def inner_dfs_not_really_monad [FinEnum V] [DecidableEq E] [DecidableEq V]
         new_nodes_neighbors ++ new_stack_old_nodes -- add neighbors in front to stack
 
       let nextState := dfs_state.mk new_visited new_stack (by
-        intro x
-        sorry)
+        -- invar : ∀ x : visited, (∃ y ∈ stack, y.node = x) ∨ ∀ y : V, (g.Adj x y) → y ∈ visited
+        intro x 
+        by_cases  h : ∃ y ∈ new_stack, y.node = x 
+        · left 
+          exact h 
+        · right 
+          intros y hy 
+          refine Finset.mem_union.mpr ?_
+          by_cases h' : y ∈ priorState.visited
+          · exact Or.inl h'
+          · right -- t.s.: y ∈ newly_visited  
+            by_cases x_has_already_been_expanded : ↑x ∈ priorState.visited
+            · have oldInvar := priorState.invar ⟨ x, x_has_already_been_expanded ⟩
+              cases oldInvar with
+              | inl a => exact False.elim (h a) 
+              | inr a => sorry
 
+              --sorry
+            · 
+                sorry
+            --by_cases 
+            --⬝ sorry
+            --⬝ sorry
+
+      )
+          --exact hy -- y ∈ visited, da new_visited alles enthält)
       (nextState, none)
 
 
@@ -568,11 +591,11 @@ def dfs_not_really_monad_loop [FinEnum V] [DecidableEq E] [DecidableEq V]
         | some result => result
 termination_by (Fintype.card V - priorState.visited.card, priorState.stack.length)
 decreasing_by
-sorry
+sorry  -- 2 heute
 
 
 
-
+-- with dependent types -> not good
 def inner_dfs_invar [FinEnum V] [DecidableEq E] [DecidableEq V]
     (g: WeightedDiGraph V E) (start : V) (goal : V)
     (visited : Finset V)
