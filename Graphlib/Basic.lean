@@ -1,8 +1,3 @@
-/-
-Copyright (c) 2025 Simone Kilian. All rights reserved.
-Released under Apache 2.0 license as described in the file LICENSE.
-Authors: Simone Kilian, Supervisor: Malvin Gattinger
--/
 import Init.Core
 import Mathlib.Data.Fintype.Basic
 import Mathlib.Data.Fintype.Defs
@@ -14,6 +9,8 @@ import Mathlib.Data.FinEnum
 import Mathlib.Combinatorics.Digraph.Basic
 import Mathlib.Tactic.FinCases
 import Mathlib.Tactic.Linarith
+
+set_option trace.split.failure true
 
 /-!
 # Weighted Digraphs
@@ -545,6 +542,27 @@ lemma nodePathPairNodeKeepsEquality
       subst eq
       simp_all only
 
+def nodePathPairNodeKeepsSubset
+    (visited : Finset V)
+    (sub : visited ⊆ visited') : 
+    (NodePathPair g start visited) → (NodePathPair g start visited') := by
+      intro small
+      have npp : NodePathPair g start visited' :=
+        NodePathPair.mk small.node small.path (by
+          let partPath := small.reached_nodes_proofs
+          apply subset_trans
+          exact partPath
+          exact sub
+        )
+      exact npp
+
+
+
+lemma help (x : V)(g: WeightedDiGraph V E) (start : V) (goal : V) (s : dfs_state g start):
+    x ∈ s.stack.map (fun elem => elem.node) → ∃ y ∈ s.stack, y.node = x := by
+      sorry
+
+
 lemma foo[FinEnum V] [DecidableEq E] [DecidableEq V]
     (g: WeightedDiGraph V E) (start : V) (goal : V) (priorState : dfs_state g start):
       dep_invar g start priorState → dep_invar g start (inner_dfs_not_really_monad g start goal priorState).1 := by
@@ -556,69 +574,202 @@ lemma foo[FinEnum V] [DecidableEq E] [DecidableEq V]
           exact priorInvar
         --next prior_state_stack expanded_node rest_of_stack stack_composition => 
         · by_cases stack_head_is_goal : (priorState.stack.head stack_empty).node = goal 
-          · unfold dep_invar
-            intro x
-            by_cases x_is_on_stack : (∃ y ∈ priorState.stack, y.node = x) 
-            · left
-              clear priorInvar
-              convert x_is_on_stack
-              all_goals
-                simp [inner_dfs_not_really_monad]
-                aesop 
-            · right
-              unfold dep_invar at priorInvar
-              specialize priorInvar ⟨ x.1, ?_⟩
-              · have ⟨ x_as_v , x_in_after_inner ⟩ := x
-                simp
-                convert x_in_after_inner
-                simp_all [foofoo]
-              · apply Or.resolve_left at priorInvar
-                simp_all
-                convert priorInvar
-                simp_all [foofoo]
+          · -- unfold dep_invar
+            -- intro x
+            -- by_cases x_is_on_stack : (∃ y ∈ priorState.stack, y.node = x) 
+            -- · left
+            --   clear priorInvar
+            --   convert x_is_on_stack
+            --   all_goals
+            --     simp [inner_dfs_not_really_monad]
+            --     aesop 
+            -- · right
+            --   unfold dep_invar at priorInvar
+            --   specialize priorInvar ⟨ x.1, ?_⟩
+            --   · have ⟨ x_as_v , x_in_after_inner ⟩ := x
+            --     simp
+            --     convert x_in_after_inner
+            --     simp_all [foofoo]
+            --   · apply Or.resolve_left at priorInvar
+            --     simp_all
+            --     convert priorInvar
+            --     simp_all [foofoo]
+            sorry
           · -- case: stack is not empty
             -- head of the stack was not the goal node
             -- so we took some node from the stack, expanded it
             let dfs_step_result := inner_dfs_not_really_monad g start goal priorState
             change dep_invar g start dfs_step_result.1
             intro x
-            by_cases  h : ∃ y ∈ dfs_step_result.1.stack, y.node = x 
+            by_cases x_is_on_stack : ∃ y ∈ dfs_step_result.1.stack, y.node = x 
             · left 
-              exact h 
-            · right 
-              
+              exact x_is_on_stack 
+            · right
+              -- x is not part of the result stack, but is visited
+              by_cases x_has_already_been_expanded : ↑x ∈ priorState.visited
+              · specialize priorInvar ⟨ x.1, ?_⟩ 
+                · exact x_has_already_been_expanded
+                · -- x was already in the visited list. It was either the expanded node or not
+                  by_cases x_is_stack_head : (priorState.stack.head stack_empty).node = x 
+                  · -- -- x is the head of the stack, so all its neighbours got added
+                    -- intro y
+                    -- intro y_neighbour_of_x
 
-
-              -- introduction should happen later
-              intros y hy 
-              --unfold dep_invar
-              
-              refine Finset.mem_union.mpr ?_
-              by_cases h' : y ∈ priorState.visited
-              · exact Or.inl h'
-              · right -- t.s.: y ∈ newly_visited  
-                by_cases x_has_already_been_expanded : ↑x ∈ priorState.visited
-                · have oldInvar := priorState.invar ⟨ x, x_has_already_been_expanded ⟩
-                  cases oldInvar with
-                  | inl a => exact False.elim (h a) 
-                  | inr a => sorry
-
-                  --sorry
-                · 
+                    -- unfold dfs_step_result
+                    -- unfold inner_dfs_not_really_monad -- at dfs_step_result
+                    -- split
+                    -- next stack_empty' => exact False.elim (stack_empty stack_empty')
+                    -- split
+                    -- next stack_head rest_stack stack_composition is_goal' =>
+                    --   have contra: stack_head.node ≠ goal := by
+                    --     simp_all
+                    --   exact False.elim (contra is_goal')
+                    -- simp_all
+                    -- apply Decidable.em
                     sorry
-                --by_cases 
-                --⬝ sorry
-                --⬝ sorry
+                  · -- x was not the head of the stack
+                    -- x was previously in visited
+                    -- x is still in visited
+                    -- either it was on the stack then it still is,
+                    -- or it is was on the stack, then the invariant holds
+                    by_cases x_was_on_stack : ∃ y ∈ priorState.stack, y.node = x
+                    · -- x was previously on the stack
+                      cases x_was_on_stack with
+                      | intro z hz  =>
+                        have ⟨ z_on_stack, z_node_is_x ⟩ := hz 
+                        have x_actually_on_stack : ∃ y ∈ dfs_step_result.1.stack, y.node = x := by
+                         
+                          --have visiSubset : priorState.visited ⊆ dfs_step_result.1.visited := by sorry
 
+                          --let transZ : NodePathPair g start dfs_step_result.1.visited :=
+                          --  NodePathPair.mk z.node z.path (by
+                          --          let partPath := z.reached_nodes_proofs
+                          --          apply subset_trans
+                          --          exact partPath
+                          --          apply visiSubset
+                          --        )
+                          --use transZ
+                          --constructor
+                          --·  
+                          --  sorry
+                          --· simp_all
+                          --  rw [z_node_is_x]
 
-            sorry
+                          let f_node_is_x :
+                            (NodePathPair g start dfs_step_result.1.visited) → Bool :=
+                            (fun elem => elem.node = x.1)
+                          let matchingOption := dfs_step_result.1.stack.find? f_node_is_x
 
+                          have matchIsSome : matchingOption.isSome = true := by
+                            unfold matchingOption 
+                            unfold dfs_step_result 
+                            unfold inner_dfs_not_really_monad
 
+                            --cases priorState.stack with
+                            --| nil => sorry
+                            --| cons head rest => 
 
+                            --by_contra notFound 
+                            --simp at notFound
+                            --unfold matchingOption at notFound
+                            --unfold dfs_step_result at notFound
+                            --
+                            --unfold inner_dfs_not_really_monad at notFound
+                            --simp at notFound
+                              
+                            sorry
 
+                          sorry
+                          --let matching := matchingOption.get matchIsSome
+                          --use matching
+                          --constructor
+                          --· apply List.mem_of_find?_eq_some
+                          --  aesop
+                          --· --convert decide (matching.node = ↑x)
+                          --  --convert f_node_is_x matching
+                          --  --simp [List.find?_some]
+                          --  have le : f_node_is_x matching = true → matching.node = x:= by
+                          --    intro fun_is_true
+                          --    unfold f_node_is_x at fun_is_true
+                          --    simp_all
+                          --  apply le
+                          --  apply List.find?_some
+                          --  simp_all only [Subtype.forall, not_exists, not_and, and_self, decide_eq_true_eq, implies_true, Option.some_get, dfs_step_result, f_node_is_x, matching, matchingOption]
+                          --  rfl
+                          --  --· exact dfs_step_result.1.stack
+                        exact False.elim (x_is_on_stack x_actually_on_stack)
+                    · -- -- x was not previously on the stack
+                      -- simp_all
+                      -- intro y
+                      -- intro x_nei_y
+                      -- specialize priorInvar y
+                      -- simp [x_nei_y] at priorInvar
+                      -- unfold dfs_step_result
+                      -- unfold inner_dfs_not_really_monad
+                      -- split
+                      -- next stack_empty' => exact False.elim (stack_empty stack_empty')
+                      -- split
+                      -- next stack_head rest_stack stack_composition is_goal' =>
+                      --   have contra: stack_head.node ≠ goal := by
+                      --     simp_all
+                      --   exact False.elim (contra is_goal')
+                      -- simp_all
+                      sorry
 
+                    --  clear x_is_on_stack
+                    --  clear priorInvar
+                    --  refine' Exists.intro ?w ?h
+                    --  · -- we find the right NodePathPair
+                    --    sorry
+                    --  · sorry
+              · -- x has been newly added to the visited list
+                -- x has to be one of the newly added nodes
+                -- and thus it is on the stack!
+                have ⟨ pure_x, is_is_visited⟩ := x 
+                have x_must_be_on_strack : ∃ y ∈ dfs_step_result.1.stack, y.node = pure_x := by
+                  simp_all
+                  unfold dfs_step_result
+                  unfold inner_dfs_not_really_monad
+                  split
+                  simp_all 
+                  next strange_list stack_head rest_stack stack_compose =>
+                    simp_all 
+                    refine' Exists.intro ?w ?h
+                    · simp_all
+                      apply nodePathPairNodeKeepsSubset
+                      apply Finset.subset_union_left
+                      exact stack_head
+                    --rw [if_neg stack_head_is_goal]
+                    simp_all
+                    sorry
 
-
+                  --next stack_empty' => exact False.elim (stack_empty stack_empty')
+                  --split
+                  --
+                  --  simp_all
+                  --simp_all
+                  --sorry
+                exact False.elim (x_is_on_stack x_must_be_on_strack)
+                --intro y
+                --intro x_nei_y
+                --unfold dfs_step_result
+                --unfold inner_dfs_not_really_monad
+                --split
+                --next stack_empty' => exact False.elim (stack_empty stack_empty')
+                --split
+                --next stack_head rest_stack stack_composition is_goal' =>
+                --  have contra: stack_head.node ≠ goal := by
+                --    simp_all
+                --  exact False.elim (contra is_goal')
+                --simp_all
+                --by_cases y_prior : y ∈ priorState.visited
+                --· left
+                --  exact y_prior
+                --· right
+                --  constructor
+                --  convert x_nei_y
+                --  sorry
+                --  exact y_prior
 
 
 
