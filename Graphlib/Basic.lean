@@ -1,4 +1,5 @@
 import Init.Core
+import Mathlib.Data.Bool.AllAny
 import Mathlib.Data.Fintype.Basic
 import Mathlib.Data.Fintype.Defs
 import Mathlib.Data.Fintype.Card
@@ -9,6 +10,7 @@ import Mathlib.Data.FinEnum
 import Mathlib.Combinatorics.Digraph.Basic
 import Mathlib.Tactic.FinCases
 import Mathlib.Tactic.Linarith
+import Init.Data.List.Find
 
 set_option trace.split.failure true
 
@@ -449,26 +451,91 @@ theorem dfs_is_sound (g: WeightedDiGraph V E) (start : V) (goal : V) :
   apply w
   simp_all
 
+-------------------------------------------------------------------------------------------------
+--
+-- heute: Funktion auf Listen. Das eigentliche Lemma ist listFind, listFind.go ist eine Hilfe für die Induktion
+--
+-------------------------------------------------------------------------------------------------
+
+-- heute: allgemeinstes Lemma. Ein Beweis für dieses Lemma könnte reichen. einfachere typen
+lemma listFind_general 
+  (α : Type)
+  (list : List α)
+  (p : α → Bool)
+  (hasElem : (list.findFinIdx? p).isSome = true):
+    p list[(list.findFinIdx? p).get hasElem] := by sorry
+
+
+
+lemma listFind.go
+  (g: WeightedDiGraph V E) (start : V) (visited : Finset V)
+  (x : V)
+  (list : List (NodePathPair g start visited))
+  (curlist : List (NodePathPair g start visited))
+  (sameList : curlist = list)
+  (h : curlist.length = list.length)
+  (hasElem : (List.findFinIdx?.go (fun elem => elem.node = x) list curlist 0 h).isSome = true):
+    list[(List.findFinIdx?.go (fun elem => elem.node = x) list curlist 0 h).get hasElem].node = x
+  := by 
+      induction curlist
+      · have noElemIn :
+          (List.findFinIdx?.go (fun elem : NodePathPair g start visited=> decide (elem.node = x)) list [] 0 h).isSome = false := by
+          simp
+          rfl
+        rw [noElemIn] at hasElem
+        contradiction
+      next head tail ih =>
+        simp_all
+        by_cases head_is_x : head.node = x
+        · unfold List.findFinIdx?.go
+          simp_all
+          sorry
+        · unfold List.findFinIdx?.go
+          simp [head_is_x]
+          sorry
+
+lemma listFind 
+  (g: WeightedDiGraph V E) (start : V) (visited : Finset V)
+  (x : V)
+  (list : List (NodePathPair g start visited))
+  (hasElem : (list.findFinIdx? (fun elem => elem.node = x)).isSome = true):
+    list[(list.findFinIdx? (fun elem => elem.node = x)).get hasElem].node = x
+  := by 
+    unfold List.findFinIdx?
+    let list' := list
+    apply listFind.go
+
+
+-------------------------------------------------------------------------------------------------
+--
+-- New implementation that uses a monad-like structure.
+--
+-------------------------------------------------------------------------------------------------
 
 structure dfs_state [FinEnum V] [DecidableEq E] [DecidableEq V]
     (g: WeightedDiGraph V E) (start : V) where
     visited : Finset V
     stack : List (NodePathPair g start visited)
 
-
+--- invariant for all nodes
+-- TODO: should use dep_invar_for_x instead
 abbrev dep_invar[FinEnum V] [DecidableEq E] [DecidableEq V]
     (g: WeightedDiGraph V E) (start : V) (s : dfs_state g start):=
       ∀ x : s.visited, (∃ y ∈ s.stack, y.node = x) ∨ ∀ y : V, (g.Adj x y) → y ∈ s.visited
 
-def inner_dfs_not_really_monad [FinEnum V] [DecidableEq E] [DecidableEq V]
+-- invariant formulated for one node x only
+abbrev dep_invar_for_x[FinEnum V] [DecidableEq E] [DecidableEq V]
+    (g: WeightedDiGraph V E) (start : V) (s : dfs_state g start)
+    (x : V):=
+      x ∈ s.visited → (∃ y ∈ s.stack, y.node = x) ∨ ∀ y : V, (g.Adj x y) → y ∈ s.visited
+
+
+def inner_dfs_not_really_monad_compute_next[FinEnum V] [DecidableEq E] [DecidableEq V]
     (g: WeightedDiGraph V E) (start : V) (goal : V) 
-    (priorState : dfs_state g start) : 
+    (priorState : dfs_state g start)
+    (s : NodePathPair g start priorState.visited) 
+    (xs : List (NodePathPair g start priorState.visited)): 
     (dfs_state g start) × (Option (Option (Path g start goal))) := 
-  match priorState.stack with
-    | [] => (priorState, some none) -- goal not found
-    | (s :: xs) => 
-    if h : s.node = goal then (priorState, some (some (h ▸ s.path)))
-    else
       let newly_visited : Finset V := (Finset.univ).filterMap
         (λ v => if @decide (g.Adj s.node v) (g.instDecAdj s.node v) ∧ v ∉ priorState.visited
                   then some v
@@ -498,7 +565,7 @@ def inner_dfs_not_really_monad [FinEnum V] [DecidableEq E] [DecidableEq V]
               simp [new_visited,w,extend_path_extends_support]
               apply Finset.union_subset_union
               exact s.reached_nodes_proofs
-              simp_all only [decide_eq_true_eq, dite_eq_ite, Finset.singleton_subset_iff, Finset.mem_filterMap, Finset.mem_univ, Option.ite_none_right_eq_some, Option.some.injEq, true_and, exists_eq_right, oldpath, w, new_visited, newly_visited]
+              simp_all only [decide_eq_true_eq, Finset.singleton_subset_iff, Finset.mem_filterMap, Finset.mem_univ, Option.ite_none_right_eq_some, Option.some.injEq, true_and, exists_eq_right, newly_visited]
               simp
               exact of_decide_eq_true d
             )
@@ -526,7 +593,18 @@ def inner_dfs_not_really_monad [FinEnum V] [DecidableEq E] [DecidableEq V]
       (nextState, none)
 
 
-lemma foofoo
+def inner_dfs_not_really_monad [FinEnum V] [DecidableEq E] [DecidableEq V]
+    (g: WeightedDiGraph V E) (start : V) (goal : V) 
+    (priorState : dfs_state g start) : 
+    (dfs_state g start) × (Option (Option (Path g start goal))) := 
+  match priorState.stack with
+    | [] => (priorState, some none) -- goal not found
+    | (s :: xs) => 
+    if h : s.node = goal then (priorState, some (some (h ▸ s.path)))
+    else
+      inner_dfs_not_really_monad_compute_next g start goal priorState s xs
+
+lemma dfs_not_really_monad_if_goal_return_same_state
     (g: WeightedDiGraph V E) (start : V) (goal : V) (priorState : dfs_state g start)
     (stack_not_empty : priorState.stack ≠ [])
     (stack_head_is_goal : (priorState.stack.head stack_not_empty).node = goal)
@@ -536,8 +614,8 @@ lemma foofoo
         aesop
 
 lemma nodePathPairNodeKeepsEquality
-    (visited : Finset V)
-    (p : NodePathPair g start visited) (eq : visited = visited') : 
+    (g: WeightedDiGraph V E) (start : V) (visited : Finset V)
+    (eq : visited = visited') (p : NodePathPair g start visited)  : 
     p.node = (eq ▸ p).node := by
       subst eq
       simp_all only
@@ -558,289 +636,448 @@ def nodePathPairNodeKeepsSubset
 
 
 
-lemma help (x : V)(g: WeightedDiGraph V E) (start : V) (goal : V) (s : dfs_state g start):
-    x ∈ s.stack.map (fun elem => elem.node) → ∃ y ∈ s.stack, y.node = x := by
-      sorry
+lemma dfs_not_really_monad_invar_one_step_stack_empty
+    (g: WeightedDiGraph V E) (start : V) (goal : V) (priorState : dfs_state g start)
+    (stack_empty: priorState.stack = []):
+      dep_invar g start priorState → dep_invar g start (inner_dfs_not_really_monad g start goal priorState).1 := by
+        intro priorInvar
+        unfold inner_dfs_not_really_monad
+        simp_all
+        exact priorInvar
+
+lemma dfs_not_really_monad_invar_one_step_head_is_goal
+    (g: WeightedDiGraph V E) (start : V) (goal : V) (priorState : dfs_state g start)
+    (stack_not_empty: priorState.stack ≠ [])
+    (stack_head_is_goal: (priorState.stack.head stack_not_empty).node = goal):
+      dep_invar g start priorState → dep_invar g start (inner_dfs_not_really_monad g start goal priorState).1 := by
+        intro priorInvar
+        unfold dep_invar
+        intro x
+        by_cases x_is_on_stack : (∃ y ∈ priorState.stack, y.node = x) 
+        · left
+          clear priorInvar
+          convert x_is_on_stack
+          all_goals
+            simp [inner_dfs_not_really_monad]
+            aesop 
+        · right
+          unfold dep_invar at priorInvar
+          specialize priorInvar ⟨ x.1, ?_⟩
+          · have ⟨ x_as_v , x_in_after_inner ⟩ := x
+            simp
+            convert x_in_after_inner
+            simp_all [dfs_not_really_monad_if_goal_return_same_state]
+          · apply Or.resolve_left at priorInvar
+            simp_all
+            convert priorInvar
+            simp_all [dfs_not_really_monad_if_goal_return_same_state]
 
 
-lemma foo[FinEnum V] [DecidableEq E] [DecidableEq V]
+
+-- if the node was not visited before, the invariant does not say anything about it!
+lemma dfs_not_really_monad_invar_one_step_head_is_not_goal_node_x_not_previously_visited
+    (g: WeightedDiGraph V E) (start : V) (goal : V) (priorState : dfs_state g start)
+    (stack_not_empty: priorState.stack ≠ [])
+    (stack_head_is_not_goal: (priorState.stack.head stack_not_empty).node ≠ goal)
+    (x : V) (x_in_prior_visited : x ∉ priorState.visited):
+        dep_invar_for_x g start (inner_dfs_not_really_monad g start goal priorState).1 x := by
+        unfold dep_invar_for_x
+        intro x_is_now_visited
+        left
+        -- we know that the node x has been added newly to visited. This is only possible
+        -- if was added to the stack by expanding a neighbour
+        unfold inner_dfs_not_really_monad
+        split
+        · next stack_empty' =>
+          exact False.elim (stack_not_empty stack_empty')
+        · next _ignore stack_head rest_stack stack_composition =>
+          simp_all
+          refine' Exists.intro ?w ?hh
+          · simp_all
+            unfold inner_dfs_not_really_monad_compute_next
+            simp_all
+            sorry
+
+
+          sorry
+          next stack_head rest_stack stack_composition is_goal' =>
+            have contra: stack_head.node ≠ goal := by
+              simp_all
+            exact False.elim (contra is_goal')
+          simp_all
+          sorry
+
+lemma dfs_not_really_monad_invar_one_step_head_is_not_goal_node_x_previously_visited_and_stack_head
+    (g: WeightedDiGraph V E) (start : V) (goal : V) (priorState : dfs_state g start)
+    (stack_not_empty: priorState.stack ≠ [])
+    (stack_head_is_not_goal: (priorState.stack.head stack_not_empty).node ≠ goal)
+    (x : V) (x_in_prior_visited : x ∈ priorState.visited)
+    (x_is_stack_head : (priorState.stack.head stack_not_empty).node = x):
+        dep_invar_for_x g start (inner_dfs_not_really_monad g start goal priorState).1 x := by
+      unfold dep_invar_for_x
+      intro x_is_now_in_visited
+      simp_all
+      -- x was the stack of the head, so its neighbours got inserted into visited list
+      right 
+      intro y
+      intro x_nei_y
+      unfold inner_dfs_not_really_monad
+      split
+      · next stack_empty => exact False.elim (stack_not_empty stack_empty)
+      simp_all
+      unfold inner_dfs_not_really_monad_compute_next
+      simp_all
+      apply Decidable.em
+
+lemma dfs_not_really_monad_invar_one_step_head_is_not_goal_node_x_previously_visited_and_not_on_stack
+    (g: WeightedDiGraph V E) (start : V) (goal : V) (priorState : dfs_state g start)
+    (stack_not_empty: priorState.stack ≠ [])
+    (stack_head_is_not_goal: (priorState.stack.head stack_not_empty).node ≠ goal)
+    (x : V) (x_in_prior_visited : x ∈ priorState.visited)
+    (x_is_not_stack_head : (priorState.stack.head stack_not_empty).node ≠ x)
+    (x_was_not_on_previous_stack : ∀ y ∈ priorState.stack, y.node ≠ x):
+      dep_invar_for_x g start priorState x →
+        dep_invar_for_x g start (inner_dfs_not_really_monad g start goal priorState).1 x := by
+      intro priorInvar
+      unfold dep_invar_for_x 
+      intro x_is_in_new_visited
+      right -- this was true previously, so also now
+      intro y
+      intro x_nei_y
+      unfold inner_dfs_not_really_monad
+      split
+      next stack_empty' => exact False.elim (stack_not_empty stack_empty')
+      split
+      next stack_head rest_stack stack_composition is_goal' =>
+        have contra: stack_head.node ≠ goal := by
+          simp_all
+        exact False.elim (contra is_goal')
+      unfold inner_dfs_not_really_monad_compute_next
+      next stack_head rest_stack stack_composition s_not_goal =>
+        simp_all
+        have ⟨ x_not_stack_head , x_not_in_rest_stack ⟩ := x_was_not_on_previous_stack
+        left
+        cases priorInvar with
+        | inl a =>
+          obtain ⟨w, w_in_stack, w_is_x⟩ := a
+          exact False.elim (x_not_in_rest_stack w w_in_stack w_is_x)
+        | inr a => 
+          exact a y x_nei_y
+
+lemma nodePathPairNodeKeepsEqualityForCast 
+  (g: WeightedDiGraph V E) (start : V) (visited : Finset V)
+    (eq : visited = visited')
+    (eqq : NodePathPair g start visited = NodePathPair g start visited')
+    (p : NodePathPair g start visited):
+    (cast eqq p).node = p.node := by
+      subst eq
+      simp_all only [cast_eq]
+
+
+
+
+
+lemma dfs_not_really_monad_invar_one_step_head_is_not_goal_node_x_previously_visited_and_on_stack_but_not_head
+    (g: WeightedDiGraph V E) (start : V) (goal : V) (priorState : dfs_state g start)
+    (stack_not_empty: priorState.stack ≠ [])
+    (stack_head_is_not_goal: (priorState.stack.head stack_not_empty).node ≠ goal)
+    (x : V) (x_in_prior_visited : x ∈ priorState.visited)
+    (x_is_not_stack_head : (priorState.stack.head stack_not_empty).node ≠ x)
+    (x_was_on_previous_stack : ∃ y ∈ priorState.stack, y.node = x):
+        dep_invar_for_x g start (inner_dfs_not_really_monad g start goal priorState).1 x := by
+      intro x_is_visited_afterwards
+      left -- it still has to be on the stack
+      unfold inner_dfs_not_really_monad
+      split
+      next stack_empty' => exact False.elim (stack_not_empty stack_empty')
+      next stack_head rest_stack stack_composition =>
+      simp_all
+      --split -- Malvin: not possible here
+      let isNodeX : NodePathPair g start priorState.visited → Bool :=
+        (fun elem => elem.node = x)
+      let priorIndexOpt: Option (Fin priorState.stack.length) :=
+        priorState.stack.findFinIdx? isNodeX
+      let priorIndex : Fin priorState.stack.length := priorIndexOpt.get (by
+        unfold priorIndexOpt
+        convert List.isSome_findFinIdx?
+        symm
+        rw [List.any_iff_exists_prop]
+        simp_all
+        )
+      let priourIndexNat : Nat := priorIndex.1
+
+      -- reststack as at least one element
+      have reststack_at_least_one : rest_stack.length ≥ 1 := by
+        simp
+        apply List.length_pos_of_mem
+        exact x_was_on_previous_stack.2.1
+
+      -- stack as at least two elements
+      have priorState_stack_at_least_two : priorState.stack.length ≥ 2 := by
+        simp_all only [ne_eq, reduceCtorEq, not_false_eq_true, List.length_cons, ge_iff_le, Nat.reduceLeDiff]
+        
+      let oneAsFin : Fin priorState.stack.length := Fin.mk 1 (by omega)
+
+
+      have priorIndex_at_least_one : priorIndex ≥ oneAsFin := by 
+        unfold oneAsFin
+        unfold priorIndex
+        unfold priorIndexOpt
+        simp_all
+        rw [Fin.le_def]
+        conv =>
+          right
+          rw [stack_composition] -- Malvin: Motive not correct ???
+        unfold List.findFinIdx?
+        unfold List.findFinIdx?.go
+
+        sorry
+      let priorFromEnd : Fin priorState.stack.length := ⟨ priorState.stack.length - priorIndex - 1, by omega⟩ 
+
+      let inner_dfs_result := (inner_dfs_not_really_monad_compute_next g start goal priorState stack_head rest_stack).1
+      let outer_dfs_result := (inner_dfs_not_really_monad g start goal priorState).1
+      have visiteds_are_the_same :
+        inner_dfs_result.visited = outer_dfs_result.visited := by
+        unfold outer_dfs_result
+        unfold inner_dfs_not_really_monad
+        simp_all
+        rfl
+      have myTypeRewrite :=
+        nodePathPairNodeKeepsEquality g start inner_dfs_result.visited visiteds_are_the_same
+
+      let result_stack_length := inner_dfs_result.stack.length
+
+      have prior_stack_size : priorState.stack.length ≥ 1 := by simp_all
+      have prior_stack_size_two : priorState.stack.length ≥ 2 := by simp_all
+      have stack_size_not_too_decreasing :
+        result_stack_length + 1 ≥ priorState.stack.length := by
+          unfold result_stack_length
+          unfold inner_dfs_result
+          unfold inner_dfs_not_really_monad_compute_next
+          simp_all
+
+      have priorIndexNatGreaterOne : ((↑priorIndex):Nat) ≥ 1 := by
+         simp_all only [ge_iff_le, inner_dfs_result, outer_dfs_result, priorIndex, priorIndexOpt, isNodeX]
+         obtain ⟨w, h⟩ := x_was_on_previous_stack
+         obtain ⟨left, right⟩ := h
+         subst right
+         exact priorIndex_at_least_one
+
+
+      have prior_from_end_not_max :
+        priorFromEnd < priorState.stack.length - 1 := by
+          unfold priorFromEnd
+
+          simp_all only [ne_eq, reduceCtorEq, not_false_eq_true, ge_iff_le, List.length_cons, le_add_iff_nonneg_left, zero_le, Nat.reduceLeDiff, add_le_add_iff_right, add_tsub_cancel_right, inner_dfs_result, outer_dfs_result, result_stack_length, priorIndex, priorIndexOpt, isNodeX]
+          obtain ⟨w, h⟩ := x_was_on_previous_stack
+          obtain ⟨left, right⟩ := h
+          subst right
+          omega
+
+
+      let indexInResult : Fin inner_dfs_result.stack.length :=
+        ⟨ inner_dfs_result.stack.length - 1 - priorFromEnd, by omega⟩ 
+    
+      -- neded for omega
+      have reverseSameLength : inner_dfs_result.stack.length = inner_dfs_result.stack.reverse.length := by
+        symm
+        exact List.length_reverse
+      
+      let priorFromEndOtherLimit : Fin inner_dfs_result.stack.reverse.length :=
+  ⟨ priorFromEnd, by omega⟩ 
+
+      let element_in_result := inner_dfs_result.stack.reverse.get priorFromEndOtherLimit
+
+
+
+      refine' Exists.intro ?w ?_
+      · simp_all
+        exact element_in_result
+      · constructor
+        · simp
+          sorry -- Malvin: how to get rid of cast here? split before sorry is not possible!
+        · unfold element_in_result
+          unfold inner_dfs_result
+          unfold inner_dfs_not_really_monad_compute_next
+          simp_all
+          rw [List.getElem_append_left]
+          · rw [List.getElem_reverse]
+            · simp_all
+              rw [nodePathPairNodeKeepsEqualityForCast]
+              · unfold priorFromEndOtherLimit
+                unfold priorFromEnd
+                --unfold priorIndex
+                --unfold priorIndexOpt
+                simp_all
+
+                -- needed for the next omega in arith_helper
+                have help42: ((↑priorIndex):Nat) ≤ rest_stack.length := by
+                  have help43: ((↑priorIndex):Nat) < priorState.stack.length := by 
+                    omega
+                 
+                  have help44: priorState.stack.length - 1 = rest_stack.length := by
+                    simp_all only [List.length_cons, add_tsub_cancel_right, inner_dfs_result, outer_dfs_result, priorIndex, priorIndexOpt,isNodeX]
+                  
+                  omega
+
+                have arith_helper : rest_stack.length - 1 - (rest_stack.length + 1 - ((↑priorIndex):Nat) - 1) = ((↑priorIndex):Nat) - 1 := by
+                  omega
+
+                simp [arith_helper]
+                
+                have goal : priorState.stack[↑ priorIndex].node = x := by
+                  unfold priorIndex
+                  unfold priorIndexOpt
+                  apply listFind
+                convert goal
+                simp_all
+                symm
+               
+                conv =>
+                  right
+                  rw [← List.getElem_cons_succ]
+                  rfl
+                  exact stack_head
+                  tactic => 
+                    simp_all
+                    omega  
+                congr
+                omega
+              · simp_all only [decide_eq_true_eq, ↓reduceDIte, dite_not, Finset.mem_univ, forall_const,List.flatMap_subtype, List.flatMap_singleton', inner_dfs_result, outer_dfs_result]
+            · simp
+              unfold priorFromEndOtherLimit
+              simp
+              unfold priorFromEnd
+              simp
+              --unfold priorIndex
+              have ⟨priorIndex_as_Nat, proof⟩ := priorIndex
+              simp_all
+              unfold oneAsFin at priorIndex_at_least_one
+              have hh : priorIndex_as_Nat ≥ 1 := by simp_all only [Fin.mk_le_mk, ge_iff_le, inner_dfs_result,
+                outer_dfs_result]
+              omega
+
+lemma dfs_not_really_monad_invar_one_step_head_is_not_goal_node_x_previously_visited_and_not_stack_head
+    (g: WeightedDiGraph V E) (start : V) (goal : V) (priorState : dfs_state g start)
+    (stack_not_empty: priorState.stack ≠ [])
+    (stack_head_is_not_goal: (priorState.stack.head stack_not_empty).node ≠ goal)
+    (x : V) (x_in_prior_visited : x ∈ priorState.visited)
+    (x_is_not_stack_head : (priorState.stack.head stack_not_empty).node ≠ x):
+      dep_invar_for_x g start priorState x →
+        dep_invar_for_x g start (inner_dfs_not_really_monad g start goal priorState).1 x := by
+      intro priorInvar
+      by_cases x_was_on_previous_stack : ∃ y ∈ priorState.stack, y.node = x
+      · apply dfs_not_really_monad_invar_one_step_head_is_not_goal_node_x_previously_visited_and_on_stack_but_not_head
+        exact stack_head_is_not_goal
+        exact x_in_prior_visited
+        exact x_is_not_stack_head
+        exact x_was_on_previous_stack
+      · apply dfs_not_really_monad_invar_one_step_head_is_not_goal_node_x_previously_visited_and_not_on_stack
+        exact stack_head_is_not_goal
+        exact x_in_prior_visited
+        exact x_is_not_stack_head
+        simp at x_was_on_previous_stack
+        exact x_was_on_previous_stack
+        exact priorInvar
+
+lemma dfs_not_really_monad_invar_one_step_head_is_not_goal_node_x_previously_visited
+    (g: WeightedDiGraph V E) (start : V) (goal : V) (priorState : dfs_state g start)
+    (stack_not_empty: priorState.stack ≠ [])
+    (stack_head_is_not_goal: (priorState.stack.head stack_not_empty).node ≠ goal)
+    (x : V) (x_in_prior_visited : x ∈ priorState.visited)
+    :
+      dep_invar_for_x g start priorState x →
+        dep_invar_for_x g start (inner_dfs_not_really_monad g start goal priorState).1 x := by
+        intro priorInvar
+        by_cases x_is_stack_head : (priorState.stack.head stack_not_empty).node = x
+        · apply dfs_not_really_monad_invar_one_step_head_is_not_goal_node_x_previously_visited_and_stack_head
+          exact stack_head_is_not_goal
+          exact x_in_prior_visited
+          exact x_is_stack_head
+        · apply dfs_not_really_monad_invar_one_step_head_is_not_goal_node_x_previously_visited_and_not_stack_head
+          exact stack_head_is_not_goal
+          exact x_in_prior_visited
+          exact x_is_stack_head
+          exact priorInvar
+
+lemma dfs_not_really_monad_invar_one_step_head_is_not_goal
+    (g: WeightedDiGraph V E) (start : V) (goal : V) (priorState : dfs_state g start)
+    (stack_not_empty: priorState.stack ≠ [])
+    (stack_head_is_not_goal: (priorState.stack.head stack_not_empty).node ≠ goal):
+      dep_invar g start priorState → dep_invar g start (inner_dfs_not_really_monad g start goal priorState).1 := by
+        ---- case: stack is not empty
+        ---- head of the stack was not the goal node
+        ---- so we took some node from the stack, expanded it
+        intro priorInvar
+        intro x
+        have ⟨x_as_v, x_is_in_new_visited ⟩ := x 
+        simp
+        by_cases x_was_previously_visited : x_as_v ∈ priorState.visited
+        · apply dfs_not_really_monad_invar_one_step_head_is_not_goal_node_x_previously_visited
+          exact stack_head_is_not_goal
+          exact x_was_previously_visited
+          unfold dep_invar_for_x
+          simp_all
+          exact x_is_in_new_visited
+        · apply dfs_not_really_monad_invar_one_step_head_is_not_goal_node_x_not_previously_visited
+          exact stack_head_is_not_goal
+          exact x_was_previously_visited
+          simp_all
+
+lemma dfs_not_really_monad_invar_one_step
     (g: WeightedDiGraph V E) (start : V) (goal : V) (priorState : dfs_state g start):
       dep_invar g start priorState → dep_invar g start (inner_dfs_not_really_monad g start goal priorState).1 := by
         intro priorInvar
         --
         by_cases stack_empty : priorState.stack = []
-        · unfold inner_dfs_not_really_monad
-          simp_all
+        · apply dfs_not_really_monad_invar_one_step_stack_empty
+          exact stack_empty
           exact priorInvar
         --next prior_state_stack expanded_node rest_of_stack stack_composition => 
         · by_cases stack_head_is_goal : (priorState.stack.head stack_empty).node = goal 
-          · -- unfold dep_invar
-            -- intro x
-            -- by_cases x_is_on_stack : (∃ y ∈ priorState.stack, y.node = x) 
-            -- · left
-            --   clear priorInvar
-            --   convert x_is_on_stack
-            --   all_goals
-            --     simp [inner_dfs_not_really_monad]
-            --     aesop 
-            -- · right
-            --   unfold dep_invar at priorInvar
-            --   specialize priorInvar ⟨ x.1, ?_⟩
-            --   · have ⟨ x_as_v , x_in_after_inner ⟩ := x
-            --     simp
-            --     convert x_in_after_inner
-            --     simp_all [foofoo]
-            --   · apply Or.resolve_left at priorInvar
-            --     simp_all
-            --     convert priorInvar
-            --     simp_all [foofoo]
-            sorry
-          · -- case: stack is not empty
-            -- head of the stack was not the goal node
-            -- so we took some node from the stack, expanded it
-            let dfs_step_result := inner_dfs_not_really_monad g start goal priorState
-            change dep_invar g start dfs_step_result.1
-            intro x
-            by_cases x_is_on_stack : ∃ y ∈ dfs_step_result.1.stack, y.node = x 
-            · left 
-              exact x_is_on_stack 
-            · right
-              -- x is not part of the result stack, but is visited
-              by_cases x_has_already_been_expanded : ↑x ∈ priorState.visited
-              · specialize priorInvar ⟨ x.1, ?_⟩ 
-                · exact x_has_already_been_expanded
-                · -- x was already in the visited list. It was either the expanded node or not
-                  by_cases x_is_stack_head : (priorState.stack.head stack_empty).node = x 
-                  · -- -- x is the head of the stack, so all its neighbours got added
-                    -- intro y
-                    -- intro y_neighbour_of_x
-
-                    -- unfold dfs_step_result
-                    -- unfold inner_dfs_not_really_monad -- at dfs_step_result
-                    -- split
-                    -- next stack_empty' => exact False.elim (stack_empty stack_empty')
-                    -- split
-                    -- next stack_head rest_stack stack_composition is_goal' =>
-                    --   have contra: stack_head.node ≠ goal := by
-                    --     simp_all
-                    --   exact False.elim (contra is_goal')
-                    -- simp_all
-                    -- apply Decidable.em
-                    sorry
-                  · -- x was not the head of the stack
-                    -- x was previously in visited
-                    -- x is still in visited
-                    -- either it was on the stack then it still is,
-                    -- or it is was on the stack, then the invariant holds
-                    by_cases x_was_on_stack : ∃ y ∈ priorState.stack, y.node = x
-                    · -- x was previously on the stack
-                      cases x_was_on_stack with
-                      | intro z hz  =>
-                        have ⟨ z_on_stack, z_node_is_x ⟩ := hz 
-                        have x_actually_on_stack : ∃ y ∈ dfs_step_result.1.stack, y.node = x := by
-                         
-                          --have visiSubset : priorState.visited ⊆ dfs_step_result.1.visited := by sorry
-
-                          --let transZ : NodePathPair g start dfs_step_result.1.visited :=
-                          --  NodePathPair.mk z.node z.path (by
-                          --          let partPath := z.reached_nodes_proofs
-                          --          apply subset_trans
-                          --          exact partPath
-                          --          apply visiSubset
-                          --        )
-                          --use transZ
-                          --constructor
-                          --·  
-                          --  sorry
-                          --· simp_all
-                          --  rw [z_node_is_x]
-
-                          let f_node_is_x :
-                            (NodePathPair g start dfs_step_result.1.visited) → Bool :=
-                            (fun elem => elem.node = x.1)
-                          let matchingOption := dfs_step_result.1.stack.find? f_node_is_x
-
-                          have matchIsSome : matchingOption.isSome = true := by
-                            unfold matchingOption 
-                            unfold dfs_step_result 
-                            unfold inner_dfs_not_really_monad
-
-                            --cases priorState.stack with
-                            --| nil => sorry
-                            --| cons head rest => 
-
-                            --by_contra notFound 
-                            --simp at notFound
-                            --unfold matchingOption at notFound
-                            --unfold dfs_step_result at notFound
-                            --
-                            --unfold inner_dfs_not_really_monad at notFound
-                            --simp at notFound
-                              
-                            sorry
-
-                          sorry
-                          --let matching := matchingOption.get matchIsSome
-                          --use matching
-                          --constructor
-                          --· apply List.mem_of_find?_eq_some
-                          --  aesop
-                          --· --convert decide (matching.node = ↑x)
-                          --  --convert f_node_is_x matching
-                          --  --simp [List.find?_some]
-                          --  have le : f_node_is_x matching = true → matching.node = x:= by
-                          --    intro fun_is_true
-                          --    unfold f_node_is_x at fun_is_true
-                          --    simp_all
-                          --  apply le
-                          --  apply List.find?_some
-                          --  simp_all only [Subtype.forall, not_exists, not_and, and_self, decide_eq_true_eq, implies_true, Option.some_get, dfs_step_result, f_node_is_x, matching, matchingOption]
-                          --  rfl
-                          --  --· exact dfs_step_result.1.stack
-                        exact False.elim (x_is_on_stack x_actually_on_stack)
-                    · -- -- x was not previously on the stack
-                      -- simp_all
-                      -- intro y
-                      -- intro x_nei_y
-                      -- specialize priorInvar y
-                      -- simp [x_nei_y] at priorInvar
-                      -- unfold dfs_step_result
-                      -- unfold inner_dfs_not_really_monad
-                      -- split
-                      -- next stack_empty' => exact False.elim (stack_empty stack_empty')
-                      -- split
-                      -- next stack_head rest_stack stack_composition is_goal' =>
-                      --   have contra: stack_head.node ≠ goal := by
-                      --     simp_all
-                      --   exact False.elim (contra is_goal')
-                      -- simp_all
-                      sorry
-
-                    --  clear x_is_on_stack
-                    --  clear priorInvar
-                    --  refine' Exists.intro ?w ?h
-                    --  · -- we find the right NodePathPair
-                    --    sorry
-                    --  · sorry
-              · -- x has been newly added to the visited list
-                -- x has to be one of the newly added nodes
-                -- and thus it is on the stack!
-                have ⟨ pure_x, is_is_visited⟩ := x 
-                have x_must_be_on_strack : ∃ y ∈ dfs_step_result.1.stack, y.node = pure_x := by
-                  simp_all
-                  unfold dfs_step_result
-                  unfold inner_dfs_not_really_monad
-                  split
-                  simp_all 
-                  next strange_list stack_head rest_stack stack_compose =>
-                    simp_all 
-                    refine' Exists.intro ?w ?h
-                    · simp_all
-                      apply nodePathPairNodeKeepsSubset
-                      apply Finset.subset_union_left
-                      exact stack_head
-                    --rw [if_neg stack_head_is_goal]
-                    simp_all
-                    sorry
-
-                  --next stack_empty' => exact False.elim (stack_empty stack_empty')
-                  --split
-                  --
-                  --  simp_all
-                  --simp_all
-                  --sorry
-                exact False.elim (x_is_on_stack x_must_be_on_strack)
-                --intro y
-                --intro x_nei_y
-                --unfold dfs_step_result
-                --unfold inner_dfs_not_really_monad
-                --split
-                --next stack_empty' => exact False.elim (stack_empty stack_empty')
-                --split
-                --next stack_head rest_stack stack_composition is_goal' =>
-                --  have contra: stack_head.node ≠ goal := by
-                --    simp_all
-                --  exact False.elim (contra is_goal')
-                --simp_all
-                --by_cases y_prior : y ∈ priorState.visited
-                --· left
-                --  exact y_prior
-                --· right
-                --  constructor
-                --  convert x_nei_y
-                --  sorry
-                --  exact y_prior
+          · apply dfs_not_really_monad_invar_one_step_head_is_goal
+            exact stack_head_is_goal
+            exact priorInvar
+          · apply dfs_not_really_monad_invar_one_step_head_is_not_goal
+            exact stack_head_is_goal
+            exact priorInvar
 
 
-
-def inner_dfs_monad [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) (start : V) (goal : V) : StateM (dfs_state g start) (Option (Option (Path g start goal))) := by sorry
-
-    --WellFounded.fix (by sorry)
-
-
--- Gregors (failed) approach:
-def dfs_monad_loop [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) (start : V) (goal : V) (fuel : Nat × Nat): StateM (dfs_state g start) (Option (Path g start goal)) :=
-    do
-    --if fuel = (0,0) then pure Option.none
-    --else
-      let state_before ← get -- needed for the proof.
-      let one_round_result ← inner_dfs_monad g start goal
-      let state_after ← get
-      match one_round_result with
-        | none => 
-            let h : fuel = (Fintype.card V - state_before.visited.card, state_before.stack.length) :=
-             by sorry
-            dfs_monad_loop g start goal
-              (Fintype.card V - state_after.visited.card, state_after.stack.length)
-        | some result => pure result
-termination_by fuel
-decreasing_by
-
-sorry
-
-
-
-def inner_dfs_not_really_monad [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) (start : V) (goal : V) 
-    (priorState : dfs_state g start) : 
-    (dfs_state g start) × (Option (Option (Path g start goal))) :=
-
+------------------------------------------------------------------------------------------------
+-- Actual main DFS algorithm
+------------------------------------------------------------------------------------------------
 
 def dfs_not_really_monad_loop [FinEnum V] [DecidableEq E] [DecidableEq V]
     (g: WeightedDiGraph V E) (start : V) (goal : V)
     (priorState : dfs_state g start) : 
-      (Option (Path g start goal)) :=
+      (dfs_state g start) × (Option (Path g start goal)) :=
       let (nextState, one_round_result) := inner_dfs_not_really_monad g start goal priorState
       match one_round_result with
         | none => 
             dfs_not_really_monad_loop g start goal nextState
-        | some result => result
+        | some result => (nextState, result)
 termination_by (Fintype.card V - priorState.visited.card, priorState.stack.length)
 decreasing_by
-sorry  -- 2 heute
+sorry  -- to be copied from above and changed accordingly.
 
 
-
--- with dependent types -> not good
-def inner_dfs_invar [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) (start : V) (goal : V)
-    (visited : Finset V)
-    (stack : List (NodePathPair g start visited))  
-    (invar : ∀ x ∈ visited, (∃ y ∈ stack, y.node = x) ∨ (∀ y : V, (g.Adj x y) → y ∈ visited))
-    : Σ (path: Option (Path g start goal)),
-    (Σ (finalVisited : Finset V),
-    (Σ' (finalstack : List (NodePathPair g start finalVisited)),
-    (∀ x : finalVisited, (∃ y ∈ finalstack, y.node = x) ∨ (∀ y : V, (g.Adj x y) → y ∈ finalVisited))))
-
-    := by sorry
-
+-- heute: lemma: die Loop erhält die Invariante. D.h. wenn invariante davor, dann gilt invariante danach!
+-- mit hilfe von: dfs_not_really_monad_invar_one_step
+-- schritte: intro (für die linke Seite vom →); dann unfold;
+-- dann split (wegen dem match in dfs_not_really_monad_loop)
+-- dann hab ich zwei Fälle; einer müsste trivial sein (der some fall), 
+-- für den anderen müsste ich die nötige invariante haben.
+-- möglicherweise muss man auch irgendwie induktion machen? 
+-- Unklar worüber. Will ich hier einen zyklischen Beweis führen? ...
+lemma dfs_not_really_monad_invar_loop
+    (g: WeightedDiGraph V E) (start : V) (goal : V) (priorState : dfs_state g start):
+      dep_invar g start priorState → dep_invar g start (dfs_not_really_monad_loop g start goal priorState).1 := by
+  sorry
 
 
 
 /-- `DFS`is the algorithm depth first search, expecting a `WeightedDiGraph V E`, a start node `start : V`and a goal node `goal : V`as imput. -/
-def dfsInvar [FinEnum V] [DecidableEq V] [DecidableEq E] (g: WeightedDiGraph V E) (start : V) (goal : V) : (Option (Path g start goal)) :=
+def dfs_not_really_monad [FinEnum V] [DecidableEq V] [DecidableEq E] (g: WeightedDiGraph V E) (start : V) (goal : V) : (Option (Path g start goal)) :=
     let emptyW : Walk g start start := Walk.nil
     let emptyP : Path g start start := Path.mk emptyW (by
       simp [emptyW]
@@ -853,15 +1090,22 @@ def dfsInvar [FinEnum V] [DecidableEq V] [DecidableEq E] (g: WeightedDiGraph V E
       right
       simp [support]
     let p : NodePathPair g start {start} := NodePathPair.mk start emptyP reached_nodes_proof
-    let dfs_result := inner_dfs_invar g start {start} [p] goal
 
-    dfs_result
-
-
+    -- generate initial DFS state
+    dfs_not_really_monad_loop g start goal (by sorry) -- heute!
 
 
-theorem dfs_is_complete (g: WeightedDiGraph V E) (start : V) (goal : V) :
-    ((∃ x : (Path g start goal), x = x) → Option.isSome (dfs g start goal)) := by -- or Option.isNone (dfs g start goal) → ∄ x (Path g start goal), x = x
+theorem dfs_not_really_monad_is_sound (g: WeightedDiGraph V E) (start : V) (goal : V) :
+    (Option.isSome (dfs_not_really_monad g start goal) → (∃ x : (Path g start goal), x = x)) := by
+  intro h -- Option.isSome true on some and false on none, x = x since we need a formula
+  constructor -- since goal is existence
+  rfl
+  let w := Option.get (dfs g start goal) -- Option.get extracts value of returned some and fails otherwise
+  apply w
+
+-- heute: Korrektheit der DFS. Benutze die Lemmas über die Invariante!
+theorem dfs_not_really_monad_is_complete (g: WeightedDiGraph V E) (start : V) (goal : V) :
+    ((∃ x : (Path g start goal), x = x) → Option.isSome (dfs_not_really_monad g start goal)) := by -- or Option.isNone (dfs g start goal) → ∄ x (Path g start goal), x = x
       intro walk_exists
       apply Exists.elim walk_exists
       intro theWalk
@@ -873,85 +1117,175 @@ theorem dfs_is_complete (g: WeightedDiGraph V E) (start : V) (goal : V) :
       sorry
 
 
-
--- current further ideas:
--- possible invariants:
---$\forall v \in $ \texttt{visited} $\setminus $  \texttt{vertices(stack) :}  \texttt{neighbors(v)} $ \subseteq $ \texttt{visited}
--- h: $\forall $ \texttt{paths(start,goal)} $\exists v \in $ \texttt{vertices(stack) :}  \texttt{isPath(v,goal)}
--- return (pfad, h (h= hyp), maybe the stack, but then also visited set
--- or with mutual block mutual inner_dfs .. theorem end, and later call theorem in completeness proof
--- rewrite algorithm?:
--- using state monads to simulate step function, make outside a step function for a call on each step, try to use kind of a loop
-
-
-
-
-
--- tests
-
-def graph1 : WeightedDiGraph (Fin 3) (Nat) where
-  Adj := fun f t =>
-    match (f,t) with
-     | (0,1) => true
-     | (1,2) => true
-     | (2,1) => true
-     | (_,_) => false
-  Payload := fun f t h => by
-      by_cases hf0: f = 0
-      <;> by_cases hf1: f = 1
-      <;> by_cases hf2: f = 2
-      <;> by_cases ht0: t = 0
-      <;> by_cases ht1: t = 1
-      <;> by_cases ht2: t = 2
-      -- now we have 64 goals
-      <;> try omega
-      all_goals simp_all
-      exact 3 -- 0 1 edge
-      exact 4 -- 1 2 edge
-      exact 5 -- 2 1 edge
-
-  instDecAdj := fun a b => by
-    simp
-    obtain ⟨ va, lta ⟩ := a
-    obtain ⟨ vb, ltb ⟩ := b
-    cases va
-    case zero =>
-      cases vb
-      case zero => simp; exact instDecidableFalse
-      case succ n =>
-        cases n
-        case zero => simp; exact instDecidableTrue
-        case succ n' => simp; exact instDecidableFalse
-    case succ n =>
-      cases vb
-      case zero => simp; exact instDecidableFalse
-      case succ nb =>
-        cases n
-        case zero =>
-          simp
-          cases nb
-          case zero => simp; exact instDecidableFalse
-          case succ nb'' =>
-            cases nb''
-            case zero => simp; exact instDecidableTrue
-            case succ nb3 => simp; exact instDecidableFalse
-        case succ n' =>
-          cases n'
-          case succ n'' => simp; exact instDecidableFalse
-          case zero =>
-            simp
-            cases nb
-            case zero => simp; exact instDecidableTrue
-            case succ x => simp; exact instDecidableFalse
-
-#eval List.dropLast [1, 2, 3, 4]  -- Output: [1, 2, 3]
-
---#eval graph1.Adj 1 0 -- none
---#eval dfs graph1 1 0  -- false
---#eval dfs graph1 0 2  -- true
---#eval Finset.toList (neighbors graph1 1)
---#eval neighbors graph1 1
---#eval is_valid_path graph1 [1,2]   --true
---#eval is_valid_path graph1 [0,1,2] --true
---#eval is_valid_path graph1 [1,2,3] --false
---#eval is_valid_path graph1 [1,2,1] --false
+--
+--
+--def inner_dfs_monad [FinEnum V] [DecidableEq E] [DecidableEq V]
+--    (g: WeightedDiGraph V E) (start : V) (goal : V) : StateM (dfs_state g start) (Option (Option (Path g start goal))) := by sorry
+--
+--    --WellFounded.fix (by sorry)
+--
+--
+---- Gregors (failed) approach:
+--def dfs_monad_loop [FinEnum V] [DecidableEq E] [DecidableEq V]
+--    (g: WeightedDiGraph V E) (start : V) (goal : V) (fuel : Nat × Nat): StateM (dfs_state g start) (Option (Path g start goal)) :=
+--    do
+--    --if fuel = (0,0) then pure Option.none
+--    --else
+--      let state_before ← get -- needed for the proof.
+--      let one_round_result ← inner_dfs_monad g start goal
+--      let state_after ← get
+--      match one_round_result with
+--        | none => 
+--            let h : fuel = (Fintype.card V - state_before.visited.card, state_before.stack.length) :=
+--             by sorry
+--            dfs_monad_loop g start goal
+--              (Fintype.card V - state_after.visited.card, state_after.stack.length)
+--        | some result => pure result
+--termination_by fuel
+--decreasing_by
+--
+--sorry
+--
+--
+--
+--def inner_dfs_not_really_monad [FinEnum V] [DecidableEq E] [DecidableEq V]
+--    (g: WeightedDiGraph V E) (start : V) (goal : V) 
+--    (priorState : dfs_state g start) : 
+--    (dfs_state g start) × (Option (Option (Path g start goal))) :=
+--
+--
+--
+--
+--
+---- with dependent types -> not good
+--def inner_dfs_invar [FinEnum V] [DecidableEq E] [DecidableEq V]
+--    (g: WeightedDiGraph V E) (start : V) (goal : V)
+--    (visited : Finset V)
+--    (stack : List (NodePathPair g start visited))  
+--    (invar : ∀ x ∈ visited, (∃ y ∈ stack, y.node = x) ∨ (∀ y : V, (g.Adj x y) → y ∈ visited))
+--    : Σ (path: Option (Path g start goal)),
+--    (Σ (finalVisited : Finset V),
+--    (Σ' (finalstack : List (NodePathPair g start finalVisited)),
+--    (∀ x : finalVisited, (∃ y ∈ finalstack, y.node = x) ∨ (∀ y : V, (g.Adj x y) → y ∈ finalVisited))))
+--
+--    := by sorry
+--
+--
+--
+--
+--/-- `DFS`is the algorithm depth first search, expecting a `WeightedDiGraph V E`, a start node `start : V`and a goal node `goal : V`as imput. -/
+--def dfsInvar [FinEnum V] [DecidableEq V] [DecidableEq E] (g: WeightedDiGraph V E) (start : V) (goal : V) : (Option (Path g start goal)) :=
+--    let emptyW : Walk g start start := Walk.nil
+--    let emptyP : Path g start start := Path.mk emptyW (by
+--      simp [emptyW]
+--      unfold support
+--      simp
+--    )
+--    -- initially the visited list only contains start and we have a path that goes from start to itself (a nil path)
+--    let reached_nodes_proof : (support g emptyW).toFinset ⊆ {start} := by
+--      simp [emptyW]
+--      right
+--      simp [support]
+--    let p : NodePathPair g start {start} := NodePathPair.mk start emptyP reached_nodes_proof
+--    let dfs_result := inner_dfs_invar g start {start} [p] goal
+--
+--    dfs_result
+--
+--
+--
+--
+--theorem dfs_is_complete (g: WeightedDiGraph V E) (start : V) (goal : V) :
+--    ((∃ x : (Path g start goal), x = x) → Option.isSome (dfs g start goal)) := by -- or Option.isNone (dfs g start goal) → ∄ x (Path g start goal), x = x
+--      intro walk_exists
+--      apply Exists.elim walk_exists
+--      intro theWalk
+--      intro
+--      by_contra terminates_with_none
+--      simp at terminates_with_none
+--     
+--      --unfold dfs
+--      sorry
+--
+--
+--
+---- current further ideas:
+---- possible invariants:
+----$\forall v \in $ \texttt{visited} $\setminus $  \texttt{vertices(stack) :}  \texttt{neighbors(v)} $ \subseteq $ \texttt{visited}
+---- h: $\forall $ \texttt{paths(start,goal)} $\exists v \in $ \texttt{vertices(stack) :}  \texttt{isPath(v,goal)}
+---- return (pfad, h (h= hyp), maybe the stack, but then also visited set
+---- or with mutual block mutual inner_dfs .. theorem end, and later call theorem in completeness proof
+---- rewrite algorithm?:
+---- using state monads to simulate step function, make outside a step function for a call on each step, try to use kind of a loop
+--
+--
+--
+--
+--
+---- tests
+--
+--def graph1 : WeightedDiGraph (Fin 3) (Nat) where
+--  Adj := fun f t =>
+--    match (f,t) with
+--     | (0,1) => true
+--     | (1,2) => true
+--     | (2,1) => true
+--     | (_,_) => false
+--  Payload := fun f t h => by
+--      by_cases hf0: f = 0
+--      <;> by_cases hf1: f = 1
+--      <;> by_cases hf2: f = 2
+--      <;> by_cases ht0: t = 0
+--      <;> by_cases ht1: t = 1
+--      <;> by_cases ht2: t = 2
+--      -- now we have 64 goals
+--      <;> try omega
+--      all_goals simp_all
+--      exact 3 -- 0 1 edge
+--      exact 4 -- 1 2 edge
+--      exact 5 -- 2 1 edge
+--
+--  instDecAdj := fun a b => by
+--    simp
+--    obtain ⟨ va, lta ⟩ := a
+--    obtain ⟨ vb, ltb ⟩ := b
+--    cases va
+--    case zero =>
+--      cases vb
+--      case zero => simp; exact instDecidableFalse
+--      case succ n =>
+--        cases n
+--        case zero => simp; exact instDecidableTrue
+--        case succ n' => simp; exact instDecidableFalse
+--    case succ n =>
+--      cases vb
+--      case zero => simp; exact instDecidableFalse
+--      case succ nb =>
+--        cases n
+--        case zero =>
+--          simp
+--          cases nb
+--          case zero => simp; exact instDecidableFalse
+--          case succ nb'' =>
+--            cases nb''
+--            case zero => simp; exact instDecidableTrue
+--            case succ nb3 => simp; exact instDecidableFalse
+--        case succ n' =>
+--          cases n'
+--          case succ n'' => simp; exact instDecidableFalse
+--          case zero =>
+--            simp
+--            cases nb
+--            case zero => simp; exact instDecidableTrue
+--            case succ x => simp; exact instDecidableFalse
+--
+--#eval List.dropLast [1, 2, 3, 4]  -- Output: [1, 2, 3]
+--
+----#eval graph1.Adj 1 0 -- none
+----#eval dfs graph1 1 0  -- false
+----#eval dfs graph1 0 2  -- true
+----#eval Finset.toList (neighbors graph1 1)
+----#eval neighbors graph1 1
+----#eval is_valid_path graph1 [1,2]   --true
+----#eval is_valid_path graph1 [0,1,2] --true
+----#eval is_valid_path graph1 [1,2,3] --false
+----#eval is_valid_path graph1 [1,2,1] --false
