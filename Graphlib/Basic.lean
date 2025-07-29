@@ -1,16 +1,7 @@
-import Init.Core
-import Mathlib.Data.Bool.AllAny
-import Mathlib.Data.Fintype.Basic
-import Mathlib.Data.Fintype.Defs
-import Mathlib.Data.Fintype.Card
-import Mathlib.Data.Finset.Basic
-import Mathlib.Data.Finset.Defs
-import Mathlib.Data.Finset.Insert
-import Mathlib.Data.FinEnum
+import Mathlib.Algebra.Order.Group.Nat
 import Mathlib.Combinatorics.Digraph.Basic
-import Mathlib.Tactic.FinCases
-import Mathlib.Tactic.Linarith
-import Init.Data.List.Find
+import Mathlib.Data.Bool.AllAny
+import Mathlib.Data.FinEnum
 
 set_option trace.split.failure true
 
@@ -239,9 +230,9 @@ def extend_path (p : Path G u v) (h : G.Adj v w) (proof_w_not_in_support : w ∉
   let path_nodup : List.Nodup (support G path_walk) := by
     simp [List.Nodup]
     rw [set_eq]
-    simp only [List.append_eq, path_walk]
+    simp only [List.append_eq]
     rw [List.pairwise_append_comm]
-    simp only [List.cons_append, List.nil_append, List.pairwise_cons, path_walk]
+    simp only [List.cons_append, List.nil_append, List.pairwise_cons]
     apply And.intro
     ·
       intro a ha
@@ -318,16 +309,14 @@ def inner_dfs [FinEnum V] [DecidableEq E] [DecidableEq V]
               let oldpath_proof : (support g s.path.walk).toFinset ⊆ visited := s.reached_nodes_proofs
               simp [oldpath]
               rw [← List.mem_toFinset]
-              apply Set.not_mem_subset
-              exact oldpath_proof
-              exact notVisited
+              exact Set.notMem_subset oldpath_proof notVisited
             )
             let r : NodePathPair g start new_visited := NodePathPair.mk v w (by -- proof that support(path) ⊆ new_visisted
               simp [new_visited,w,extend_path_extends_support]
-              apply Finset.union_subset_union
-              exact s.reached_nodes_proofs
-              simp_all only [decide_eq_true_eq, dite_eq_ite, Finset.singleton_subset_iff, Finset.mem_filterMap, Finset.mem_univ, Option.ite_none_right_eq_some, Option.some.injEq, true_and, exists_eq_right, oldpath, w, new_visited, newly_visited]
-              simp
+              apply Finset.union_subset_union s.reached_nodes_proofs
+              simp_all only [decide_eq_true_eq, Finset.singleton_subset_iff, Finset.mem_filterMap,
+                Finset.mem_univ, Option.ite_none_right_eq_some, Option.some.injEq, true_and,
+                exists_eq_right, not_false_eq_true, and_true, newly_visited]
               exact of_decide_eq_true d
             )
             r
@@ -372,7 +361,7 @@ decreasing_by
 
         -- helper theorem on the visited list
         have newly_not_yet_visited : visited ∩ newly_visited = ∅ := by
-          apply Finset.eq_empty_of_forall_not_mem
+          apply Finset.eq_empty_of_forall_notMem
           intro xNotInIntersect
           intro xInIntersect
           simp [newly_visited] at xInIntersect
@@ -386,7 +375,7 @@ decreasing_by
         apply Nat.sub_lt_sub_left
         apply Finset.card_lt_card
         rw [Finset.ssubset_iff_of_subset]
-        rw [Finset.eq_empty_iff_forall_not_mem] at no_new_visited
+        rw [Finset.eq_empty_iff_forall_notMem] at no_new_visited
         simp at no_new_visited
         apply Exists.elim no_new_visited
         intro b
@@ -399,30 +388,28 @@ decreasing_by
           apply Finset.mem_inter_of_mem
           exact bInVisited
           exact bInNewlyVisited
-        simp_all only [Finset.not_mem_empty]
+        simp_all only [Finset.notMem_empty]
         simp_all [Finset.subset_univ]
 
         -- second half of the Lex.left
         apply Finset.card_lt_card
         rw [Finset.ssubset_iff_of_subset]
-        rw [Finset.eq_empty_iff_forall_not_mem] at no_new_visited
-        simp at no_new_visited
-        apply Exists.elim no_new_visited
-        intro b
-        intro bInNewlyVisited
-        exists b
-        apply And.intro
-        simp
-        right
-        simp [newly_visited] at bInNewlyVisited
-        exact bInNewlyVisited
-        intro bInVisited
-        have bInIntersect : b ∈ visited ∩ newly_visited := by
-          apply Finset.mem_inter_of_mem
-          exact bInVisited
-          exact bInNewlyVisited
-        simp_all only [Finset.not_mem_empty]
-        simp_all [Finset.subset_univ]
+        · rw [Finset.eq_empty_iff_forall_notMem] at no_new_visited
+          simp at no_new_visited
+          apply Exists.elim no_new_visited
+          intro b
+          intro bInNewlyVisited
+          exists b
+          apply And.intro
+          · simp
+            right
+            simp [newly_visited] at bInNewlyVisited
+            exact bInNewlyVisited
+          · intro bInVisited
+            have bInIntersect : b ∈ visited ∩ newly_visited := by
+              apply Finset.mem_inter_of_mem bInVisited bInNewlyVisited
+            simp_all
+        · simp_all
 
 
 
@@ -458,14 +445,16 @@ theorem dfs_is_sound (g: WeightedDiGraph V E) (start : V) (goal : V) :
 -------------------------------------------------------------------------------------------------
 
 -- heute: allgemeinstes Lemma. Ein Beweis für dieses Lemma könnte reichen. einfachere typen
-lemma listFind_general 
+lemma listFind_general
   (α : Type)
   (list : List α)
   (p : α → Bool)
-  (hasElem : (list.findFinIdx? p).isSome = true):
-    p list[(list.findFinIdx? p).get hasElem] := by sorry
-
-
+  (hasElem : (list.findFinIdx? p).isSome) :
+    p list[(list.findFinIdx? p).get hasElem] := by
+  rcases Option.isSome_iff_exists.1 hasElem with ⟨i, def_some_i⟩
+  simp_rw [def_some_i] -- MG: normal "simp" did not work here, but this does!
+  rw [List.findFinIdx?_eq_some_iff] at def_some_i
+  simp_all
 
 lemma listFind.go
   (g: WeightedDiGraph V E) (start : V) (visited : Finset V)
@@ -476,7 +465,7 @@ lemma listFind.go
   (h : curlist.length = list.length)
   (hasElem : (List.findFinIdx?.go (fun elem => elem.node = x) list curlist 0 h).isSome = true):
     list[(List.findFinIdx?.go (fun elem => elem.node = x) list curlist 0 h).get hasElem].node = x
-  := by 
+  := by
       induction curlist
       · have noElemIn :
           (List.findFinIdx?.go (fun elem : NodePathPair g start visited=> decide (elem.node = x)) list [] 0 h).isSome = false := by
@@ -491,19 +480,20 @@ lemma listFind.go
           simp_all
           sorry
         · unfold List.findFinIdx?.go
-          simp [head_is_x]
+          simp
           sorry
 
-lemma listFind 
+lemma listFind
   (g: WeightedDiGraph V E) (start : V) (visited : Finset V)
   (x : V)
   (list : List (NodePathPair g start visited))
   (hasElem : (list.findFinIdx? (fun elem => elem.node = x)).isSome = true):
     list[(list.findFinIdx? (fun elem => elem.node = x)).get hasElem].node = x
-  := by 
+  := by
     unfold List.findFinIdx?
     let list' := list
     apply listFind.go
+    sorry
 
 
 -------------------------------------------------------------------------------------------------
@@ -531,11 +521,11 @@ abbrev dep_invar_for_x[FinEnum V] [DecidableEq E] [DecidableEq V]
 
 
 def inner_dfs_not_really_monad_compute_next[FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) (start : V) (goal : V) 
+    (g: WeightedDiGraph V E) (start : V) (goal : V)
     (priorState : dfs_state g start)
-    (s : NodePathPair g start priorState.visited) 
-    (xs : List (NodePathPair g start priorState.visited)): 
-    (dfs_state g start) × (Option (Option (Path g start goal))) := 
+    (s : NodePathPair g start priorState.visited)
+    (xs : List (NodePathPair g start priorState.visited)):
+    (dfs_state g start) × (Option (Option (Path g start goal))) :=
       let newly_visited : Finset V := (Finset.univ).filterMap
         (λ v => if @decide (g.Adj s.node v) (g.instDecAdj s.node v) ∧ v ∉ priorState.visited
                   then some v
@@ -557,7 +547,7 @@ def inner_dfs_not_really_monad_compute_next[FinEnum V] [DecidableEq E] [Decidabl
               let oldpath_proof : (support g s.path.walk).toFinset ⊆ priorState.visited := s.reached_nodes_proofs
               simp [oldpath]
               rw [← List.mem_toFinset]
-              apply Set.not_mem_subset
+              apply Set.notMem_subset
               exact oldpath_proof
               exact notVisited
             )
@@ -589,17 +579,17 @@ def inner_dfs_not_really_monad_compute_next[FinEnum V] [DecidableEq E] [Decidabl
       let new_stack : List (NodePathPair g start new_visited):=
         new_nodes_neighbors ++ new_stack_old_nodes -- add neighbors in front to stack
 
-      let nextState := dfs_state.mk new_visited new_stack 
+      let nextState := dfs_state.mk new_visited new_stack
       (nextState, none)
 
 
 def inner_dfs_not_really_monad [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) (start : V) (goal : V) 
-    (priorState : dfs_state g start) : 
-    (dfs_state g start) × (Option (Option (Path g start goal))) := 
+    (g: WeightedDiGraph V E) (start : V) (goal : V)
+    (priorState : dfs_state g start) :
+    (dfs_state g start) × (Option (Option (Path g start goal))) :=
   match priorState.stack with
     | [] => (priorState, some none) -- goal not found
-    | (s :: xs) => 
+    | (s :: xs) =>
     if h : s.node = goal then (priorState, some (some (h ▸ s.path)))
     else
       inner_dfs_not_really_monad_compute_next g start goal priorState s xs
@@ -613,16 +603,17 @@ lemma dfs_not_really_monad_if_goal_return_same_state
         unfold inner_dfs_not_really_monad
         aesop
 
+omit [DecidableEq E] in
 lemma nodePathPairNodeKeepsEquality
     (g: WeightedDiGraph V E) (start : V) (visited : Finset V)
-    (eq : visited = visited') (p : NodePathPair g start visited)  : 
+    (eq : visited = visited') (p : NodePathPair g start visited)  :
     p.node = (eq ▸ p).node := by
       subst eq
       simp_all only
 
 def nodePathPairNodeKeepsSubset
     (visited : Finset V)
-    (sub : visited ⊆ visited') : 
+    (sub : visited ⊆ visited') :
     (NodePathPair g start visited) → (NodePathPair g start visited') := by
       intro small
       have npp : NodePathPair g start visited' :=
@@ -653,13 +644,13 @@ lemma dfs_not_really_monad_invar_one_step_head_is_goal
         intro priorInvar
         unfold dep_invar
         intro x
-        by_cases x_is_on_stack : (∃ y ∈ priorState.stack, y.node = x) 
+        by_cases x_is_on_stack : (∃ y ∈ priorState.stack, y.node = x)
         · left
           clear priorInvar
           convert x_is_on_stack
           all_goals
             simp [inner_dfs_not_really_monad]
-            aesop 
+            aesop
         · right
           unfold dep_invar at priorInvar
           specialize priorInvar ⟨ x.1, ?_⟩
@@ -697,28 +688,28 @@ lemma dfs_not_really_monad_invar_one_step_head_is_not_goal_node_x_not_previously
             unfold inner_dfs_not_really_monad_compute_next
             simp_all
             sorry
-
-
           sorry
+          /- -- MG: commented unused/broken part here
           next stack_head rest_stack stack_composition is_goal' =>
             have contra: stack_head.node ≠ goal := by
               simp_all
             exact False.elim (contra is_goal')
           simp_all
           sorry
+          -/
 
 lemma dfs_not_really_monad_invar_one_step_head_is_not_goal_node_x_previously_visited_and_stack_head
     (g: WeightedDiGraph V E) (start : V) (goal : V) (priorState : dfs_state g start)
     (stack_not_empty: priorState.stack ≠ [])
     (stack_head_is_not_goal: (priorState.stack.head stack_not_empty).node ≠ goal)
-    (x : V) (x_in_prior_visited : x ∈ priorState.visited)
+    (x : V)
     (x_is_stack_head : (priorState.stack.head stack_not_empty).node = x):
         dep_invar_for_x g start (inner_dfs_not_really_monad g start goal priorState).1 x := by
       unfold dep_invar_for_x
       intro x_is_now_in_visited
       simp_all
       -- x was the stack of the head, so its neighbours got inserted into visited list
-      right 
+      right
       intro y
       intro x_nei_y
       unfold inner_dfs_not_really_monad
@@ -734,12 +725,11 @@ lemma dfs_not_really_monad_invar_one_step_head_is_not_goal_node_x_previously_vis
     (stack_not_empty: priorState.stack ≠ [])
     (stack_head_is_not_goal: (priorState.stack.head stack_not_empty).node ≠ goal)
     (x : V) (x_in_prior_visited : x ∈ priorState.visited)
-    (x_is_not_stack_head : (priorState.stack.head stack_not_empty).node ≠ x)
     (x_was_not_on_previous_stack : ∀ y ∈ priorState.stack, y.node ≠ x):
       dep_invar_for_x g start priorState x →
         dep_invar_for_x g start (inner_dfs_not_really_monad g start goal priorState).1 x := by
       intro priorInvar
-      unfold dep_invar_for_x 
+      unfold dep_invar_for_x
       intro x_is_in_new_visited
       right -- this was true previously, so also now
       intro y
@@ -761,10 +751,11 @@ lemma dfs_not_really_monad_invar_one_step_head_is_not_goal_node_x_previously_vis
         | inl a =>
           obtain ⟨w, w_in_stack, w_is_x⟩ := a
           exact False.elim (x_not_in_rest_stack w w_in_stack w_is_x)
-        | inr a => 
+        | inr a =>
           exact a y x_nei_y
 
-lemma nodePathPairNodeKeepsEqualityForCast 
+omit [DecidableEq E] in
+lemma nodePathPairNodeKeepsEqualityForCast
   (g: WeightedDiGraph V E) (start : V) (visited : Finset V)
     (eq : visited = visited')
     (eqq : NodePathPair g start visited = NodePathPair g start visited')
@@ -772,10 +763,6 @@ lemma nodePathPairNodeKeepsEqualityForCast
     (cast eqq p).node = p.node := by
       subst eq
       simp_all only [cast_eq]
-
-
-
-
 
 lemma dfs_not_really_monad_invar_one_step_head_is_not_goal_node_x_previously_visited_and_on_stack_but_not_head
     (g: WeightedDiGraph V E) (start : V) (goal : V) (priorState : dfs_state g start)
@@ -791,170 +778,119 @@ lemma dfs_not_really_monad_invar_one_step_head_is_not_goal_node_x_previously_vis
       split
       next stack_empty' => exact False.elim (stack_not_empty stack_empty')
       next stack_head rest_stack stack_composition =>
-      simp_all
+      simp_all only [List.head_cons, ne_eq, List.mem_cons, exists_eq_or_imp, false_or]
       --split -- Malvin: not possible here
-      let isNodeX : NodePathPair g start priorState.visited → Bool :=
-        (fun elem => elem.node = x)
-      let priorIndexOpt: Option (Fin priorState.stack.length) :=
-        priorState.stack.findFinIdx? isNodeX
-      let priorIndex : Fin priorState.stack.length := priorIndexOpt.get (by
+      -- MG: Could do `by_cases h : stack_head.node = goal` but
+      -- then rw [h] also leads to "motive not type correct" :-/
+      let isNodeX : NodePathPair g start priorState.visited → Bool := (fun elem => elem.node = x)
+      let priorIndexOpt: Option (Fin priorState.stack.length) := priorState.stack.findFinIdx? isNodeX
+      let priorIndex : Fin priorState.stack.length := priorIndexOpt.get $ by
         unfold priorIndexOpt
         convert List.isSome_findFinIdx?
         symm
         rw [List.any_iff_exists_prop]
         simp_all
-        )
-      let priourIndexNat : Nat := priorIndex.1
 
-      -- reststack as at least one element
-      have reststack_at_least_one : rest_stack.length ≥ 1 := by
-        simp
-        apply List.length_pos_of_mem
-        exact x_was_on_previous_stack.2.1
+      -- reststack has at least one element
+      have reststack_at_least_one : 1 ≤ rest_stack.length := by
+        -- MG: writing "x_was_on_previous_stack.2.1" here is dangerous because it would do exists-elim
+        obtain ⟨_,h,_⟩  := x_was_on_previous_stack
+        apply List.length_pos_of_mem h
 
-      -- stack as at least two elements
-      have priorState_stack_at_least_two : priorState.stack.length ≥ 2 := by
-        simp_all only [ne_eq, reduceCtorEq, not_false_eq_true, List.length_cons, ge_iff_le, Nat.reduceLeDiff]
-        
-      let oneAsFin : Fin priorState.stack.length := Fin.mk 1 (by omega)
+      -- stack has at least two elements
+      have priorState_stack_at_least_two : 2 ≤ priorState.stack.length := by simp_all
 
-
-      have priorIndex_at_least_one : priorIndex ≥ oneAsFin := by 
-        unfold oneAsFin
-        unfold priorIndex
-        unfold priorIndexOpt
+      have priorIndex_at_least_one : Fin.mk 1 (by omega) ≤ priorIndex := by
+        unfold priorIndex priorIndexOpt
         simp_all
         rw [Fin.le_def]
-        conv =>
-          right
-          rw [stack_composition] -- Malvin: Motive not correct ???
+        simp
+        -- rw [stack_composition] -- Malvin: Motive not correct ???
+
+        --conv =>
+        --  right
         unfold List.findFinIdx?
         unfold List.findFinIdx?.go
-
         sorry
-      let priorFromEnd : Fin priorState.stack.length := ⟨ priorState.stack.length - priorIndex - 1, by omega⟩ 
 
-      let inner_dfs_result := (inner_dfs_not_really_monad_compute_next g start goal priorState stack_head rest_stack).1
-      let outer_dfs_result := (inner_dfs_not_really_monad g start goal priorState).1
+      let priorFromEnd : Fin priorState.stack.length := ⟨ priorState.stack.length - priorIndex - 1, by omega⟩
+
+      let inner_dfs_result := (inner_dfs_not_really_monad_compute_next g start goal priorState stack_head rest_stack)
+      let outer_dfs_result := (inner_dfs_not_really_monad g start goal priorState)
       have visiteds_are_the_same :
-        inner_dfs_result.visited = outer_dfs_result.visited := by
+        inner_dfs_result.1.visited = outer_dfs_result.1.visited := by
         unfold outer_dfs_result
         unfold inner_dfs_not_really_monad
         simp_all
         rfl
       have myTypeRewrite :=
-        nodePathPairNodeKeepsEquality g start inner_dfs_result.visited visiteds_are_the_same
+        nodePathPairNodeKeepsEquality g start inner_dfs_result.1.visited visiteds_are_the_same
 
-      let result_stack_length := inner_dfs_result.stack.length
+      let result_stack_length := inner_dfs_result.1.stack.length
 
       have prior_stack_size : priorState.stack.length ≥ 1 := by simp_all
       have prior_stack_size_two : priorState.stack.length ≥ 2 := by simp_all
       have stack_size_not_too_decreasing :
         result_stack_length + 1 ≥ priorState.stack.length := by
-          unfold result_stack_length
-          unfold inner_dfs_result
-          unfold inner_dfs_not_really_monad_compute_next
-          simp_all
+          simp_all [result_stack_length, inner_dfs_result, inner_dfs_not_really_monad_compute_next]
 
-      have priorIndexNatGreaterOne : ((↑priorIndex):Nat) ≥ 1 := by
-         simp_all only [ge_iff_le, inner_dfs_result, outer_dfs_result, priorIndex, priorIndexOpt, isNodeX]
-         obtain ⟨w, h⟩ := x_was_on_previous_stack
-         obtain ⟨left, right⟩ := h
-         subst right
-         exact priorIndex_at_least_one
+      have priorIndexNatGreaterOne : priorIndex.val ≥ 1 := by
+        simp_all only [ge_iff_le, inner_dfs_result, outer_dfs_result, priorIndex, priorIndexOpt, isNodeX]
+        obtain ⟨w, h⟩ := x_was_on_previous_stack
+        obtain ⟨left, right⟩ := h
+        subst right
+        exact priorIndex_at_least_one
 
-
-      have prior_from_end_not_max :
-        priorFromEnd < priorState.stack.length - 1 := by
-          unfold priorFromEnd
-
-          simp_all only [ne_eq, reduceCtorEq, not_false_eq_true, ge_iff_le, List.length_cons, le_add_iff_nonneg_left, zero_le, Nat.reduceLeDiff, add_le_add_iff_right, add_tsub_cancel_right, inner_dfs_result, outer_dfs_result, result_stack_length, priorIndex, priorIndexOpt, isNodeX]
+      have prior_from_end_not_max : priorFromEnd < priorState.stack.length - 1 := by
           obtain ⟨w, h⟩ := x_was_on_previous_stack
           obtain ⟨left, right⟩ := h
+          simp_all only [priorFromEnd, ne_eq, reduceCtorEq, not_false_eq_true, ge_iff_le, List.length_cons, le_add_iff_nonneg_left, zero_le, Nat.reduceLeDiff, add_le_add_iff_right, add_tsub_cancel_right, inner_dfs_result, outer_dfs_result, result_stack_length, priorIndex, priorIndexOpt, isNodeX]
           subst right
           omega
 
+      let indexInResult : Fin inner_dfs_result.1.stack.length :=
+        ⟨inner_dfs_result.1.stack.length - 1 - priorFromEnd, by omega⟩
 
-      let indexInResult : Fin inner_dfs_result.stack.length :=
-        ⟨ inner_dfs_result.stack.length - 1 - priorFromEnd, by omega⟩ 
-    
-      -- neded for omega
-      have reverseSameLength : inner_dfs_result.stack.length = inner_dfs_result.stack.reverse.length := by
-        symm
-        exact List.length_reverse
-      
-      let priorFromEndOtherLimit : Fin inner_dfs_result.stack.reverse.length :=
-  ⟨ priorFromEnd, by omega⟩ 
-
-      let element_in_result := inner_dfs_result.stack.reverse.get priorFromEndOtherLimit
-
-
+      let priorFromEndOtherLimit : Fin inner_dfs_result.1.stack.reverse.length := ⟨ priorFromEnd, by
+        have : inner_dfs_result.1.stack.length = inner_dfs_result.1.stack.reverse.length := List.length_reverse.symm
+        omega⟩
 
       refine' Exists.intro ?w ?_
       · simp_all
-        exact element_in_result
+        exact inner_dfs_result.1.stack.reverse.get priorFromEndOtherLimit
       · constructor
         · simp
           sorry -- Malvin: how to get rid of cast here? split before sorry is not possible!
-        · unfold element_in_result
-          unfold inner_dfs_result
-          unfold inner_dfs_not_really_monad_compute_next
+        · unfold inner_dfs_result inner_dfs_not_really_monad_compute_next
           simp_all
           rw [List.getElem_append_left]
           · rw [List.getElem_reverse]
             · simp_all
               rw [nodePathPairNodeKeepsEqualityForCast]
-              · unfold priorFromEndOtherLimit
-                unfold priorFromEnd
-                --unfold priorIndex
-                --unfold priorIndexOpt
-                simp_all
-
-                -- needed for the next omega in arith_helper
-                have help42: ((↑priorIndex):Nat) ≤ rest_stack.length := by
-                  have help43: ((↑priorIndex):Nat) < priorState.stack.length := by 
+              · simp_all [priorFromEndOtherLimit, priorFromEnd]
+                have arith_helper : rest_stack.length - 1 - (rest_stack.length + 1 - priorIndex.val - 1) = priorIndex.val - 1 := by
+                  -- needed for the next omega in arith_helper -- MG: so we can move it here to avoid clutter hypotheses
+                  have help42: ((↑priorIndex):Nat) ≤ rest_stack.length := by
+                    have help43: ((↑priorIndex):Nat) < priorState.stack.length := by omega
+                    have help44: priorState.stack.length - 1 = rest_stack.length := by simp_all
                     omega
-                 
-                  have help44: priorState.stack.length - 1 = rest_stack.length := by
-                    simp_all only [List.length_cons, add_tsub_cancel_right, inner_dfs_result, outer_dfs_result, priorIndex, priorIndexOpt,isNodeX]
-                  
                   omega
-
-                have arith_helper : rest_stack.length - 1 - (rest_stack.length + 1 - ((↑priorIndex):Nat) - 1) = ((↑priorIndex):Nat) - 1 := by
-                  omega
-
-                simp [arith_helper]
-                
-                have goal : priorState.stack[↑ priorIndex].node = x := by
-                  unfold priorIndex
-                  unfold priorIndexOpt
-                  apply listFind
+                simp only [arith_helper]
+                have goal : priorState.stack[↑ priorIndex].node = x := by apply listFind
                 convert goal
-                simp_all
-                symm
-               
+                simp_all only [Fin.getElem_fin]
                 conv =>
-                  right
+                  left
                   rw [← List.getElem_cons_succ]
                   rfl
                   exact stack_head
-                  tactic => 
+                  tactic =>
                     simp_all
-                    omega  
+                    omega
                 congr
                 omega
-              · simp_all only [decide_eq_true_eq, ↓reduceDIte, dite_not, Finset.mem_univ, forall_const,List.flatMap_subtype, List.flatMap_singleton', inner_dfs_result, outer_dfs_result]
-            · simp
-              unfold priorFromEndOtherLimit
-              simp
-              unfold priorFromEnd
-              simp
-              --unfold priorIndex
-              have ⟨priorIndex_as_Nat, proof⟩ := priorIndex
-              simp_all
-              unfold oneAsFin at priorIndex_at_least_one
-              have hh : priorIndex_as_Nat ≥ 1 := by simp_all only [Fin.mk_le_mk, ge_iff_le, inner_dfs_result,
-                outer_dfs_result]
+              · simp_all -- MG: No need to "only ..." when using simp as last tactic
+            · simp_all [priorFromEndOtherLimit, priorFromEnd]
               omega
 
 lemma dfs_not_really_monad_invar_one_step_head_is_not_goal_node_x_previously_visited_and_not_stack_head
@@ -975,7 +911,7 @@ lemma dfs_not_really_monad_invar_one_step_head_is_not_goal_node_x_previously_vis
       · apply dfs_not_really_monad_invar_one_step_head_is_not_goal_node_x_previously_visited_and_not_on_stack
         exact stack_head_is_not_goal
         exact x_in_prior_visited
-        exact x_is_not_stack_head
+        -- exact x_is_not_stack_head -- MG: not needed in that lemma
         simp at x_was_on_previous_stack
         exact x_was_on_previous_stack
         exact priorInvar
@@ -992,7 +928,7 @@ lemma dfs_not_really_monad_invar_one_step_head_is_not_goal_node_x_previously_vis
         by_cases x_is_stack_head : (priorState.stack.head stack_not_empty).node = x
         · apply dfs_not_really_monad_invar_one_step_head_is_not_goal_node_x_previously_visited_and_stack_head
           exact stack_head_is_not_goal
-          exact x_in_prior_visited
+          -- exact x_in_prior_visited -- MG: not needed in that lemma
           exact x_is_stack_head
         · apply dfs_not_really_monad_invar_one_step_head_is_not_goal_node_x_previously_visited_and_not_stack_head
           exact stack_head_is_not_goal
@@ -1010,7 +946,7 @@ lemma dfs_not_really_monad_invar_one_step_head_is_not_goal
         ---- so we took some node from the stack, expanded it
         intro priorInvar
         intro x
-        have ⟨x_as_v, x_is_in_new_visited ⟩ := x 
+        have ⟨x_as_v, x_is_in_new_visited ⟩ := x
         simp
         by_cases x_was_previously_visited : x_as_v ∈ priorState.visited
         · apply dfs_not_really_monad_invar_one_step_head_is_not_goal_node_x_previously_visited
@@ -1033,8 +969,8 @@ lemma dfs_not_really_monad_invar_one_step
         · apply dfs_not_really_monad_invar_one_step_stack_empty
           exact stack_empty
           exact priorInvar
-        --next prior_state_stack expanded_node rest_of_stack stack_composition => 
-        · by_cases stack_head_is_goal : (priorState.stack.head stack_empty).node = goal 
+        --next prior_state_stack expanded_node rest_of_stack stack_composition =>
+        · by_cases stack_head_is_goal : (priorState.stack.head stack_empty).node = goal
           · apply dfs_not_really_monad_invar_one_step_head_is_goal
             exact stack_head_is_goal
             exact priorInvar
@@ -1049,11 +985,11 @@ lemma dfs_not_really_monad_invar_one_step
 
 def dfs_not_really_monad_loop [FinEnum V] [DecidableEq E] [DecidableEq V]
     (g: WeightedDiGraph V E) (start : V) (goal : V)
-    (priorState : dfs_state g start) : 
+    (priorState : dfs_state g start) :
       (dfs_state g start) × (Option (Path g start goal)) :=
       let (nextState, one_round_result) := inner_dfs_not_really_monad g start goal priorState
       match one_round_result with
-        | none => 
+        | none =>
             dfs_not_really_monad_loop g start goal nextState
         | some result => (nextState, result)
 termination_by (Fintype.card V - priorState.visited.card, priorState.stack.length)
@@ -1065,9 +1001,9 @@ sorry  -- to be copied from above and changed accordingly.
 -- mit hilfe von: dfs_not_really_monad_invar_one_step
 -- schritte: intro (für die linke Seite vom →); dann unfold;
 -- dann split (wegen dem match in dfs_not_really_monad_loop)
--- dann hab ich zwei Fälle; einer müsste trivial sein (der some fall), 
+-- dann hab ich zwei Fälle; einer müsste trivial sein (der some fall),
 -- für den anderen müsste ich die nötige invariante haben.
--- möglicherweise muss man auch irgendwie induktion machen? 
+-- möglicherweise muss man auch irgendwie induktion machen?
 -- Unklar worüber. Will ich hier einen zyklischen Beweis führen? ...
 lemma dfs_not_really_monad_invar_loop
     (g: WeightedDiGraph V E) (start : V) (goal : V) (priorState : dfs_state g start):
@@ -1092,7 +1028,8 @@ def dfs_not_really_monad [FinEnum V] [DecidableEq V] [DecidableEq E] (g: Weighte
     let p : NodePathPair g start {start} := NodePathPair.mk start emptyP reached_nodes_proof
 
     -- generate initial DFS state
-    dfs_not_really_monad_loop g start goal (by sorry) -- heute!
+    -- dfs_not_really_monad_loop g start goal (by sorry) -- heute!
+    sorry -- MG: was a type mismatch here
 
 
 theorem dfs_not_really_monad_is_sound (g: WeightedDiGraph V E) (start : V) (goal : V) :
@@ -1102,6 +1039,7 @@ theorem dfs_not_really_monad_is_sound (g: WeightedDiGraph V E) (start : V) (goal
   rfl
   let w := Option.get (dfs g start goal) -- Option.get extracts value of returned some and fails otherwise
   apply w
+  sorry
 
 -- heute: Korrektheit der DFS. Benutze die Lemmas über die Invariante!
 theorem dfs_not_really_monad_is_complete (g: WeightedDiGraph V E) (start : V) (goal : V) :
@@ -1112,7 +1050,6 @@ theorem dfs_not_really_monad_is_complete (g: WeightedDiGraph V E) (start : V) (g
       intro
       by_contra terminates_with_none
       simp at terminates_with_none
-     
       --unfold dfs
       sorry
 
@@ -1135,7 +1072,7 @@ theorem dfs_not_really_monad_is_complete (g: WeightedDiGraph V E) (start : V) (g
 --      let one_round_result ← inner_dfs_monad g start goal
 --      let state_after ← get
 --      match one_round_result with
---        | none => 
+--        | none =>
 --            let h : fuel = (Fintype.card V - state_before.visited.card, state_before.stack.length) :=
 --             by sorry
 --            dfs_monad_loop g start goal
@@ -1149,8 +1086,8 @@ theorem dfs_not_really_monad_is_complete (g: WeightedDiGraph V E) (start : V) (g
 --
 --
 --def inner_dfs_not_really_monad [FinEnum V] [DecidableEq E] [DecidableEq V]
---    (g: WeightedDiGraph V E) (start : V) (goal : V) 
---    (priorState : dfs_state g start) : 
+--    (g: WeightedDiGraph V E) (start : V) (goal : V)
+--    (priorState : dfs_state g start) :
 --    (dfs_state g start) × (Option (Option (Path g start goal))) :=
 --
 --
@@ -1161,7 +1098,7 @@ theorem dfs_not_really_monad_is_complete (g: WeightedDiGraph V E) (start : V) (g
 --def inner_dfs_invar [FinEnum V] [DecidableEq E] [DecidableEq V]
 --    (g: WeightedDiGraph V E) (start : V) (goal : V)
 --    (visited : Finset V)
---    (stack : List (NodePathPair g start visited))  
+--    (stack : List (NodePathPair g start visited))
 --    (invar : ∀ x ∈ visited, (∃ y ∈ stack, y.node = x) ∨ (∀ y : V, (g.Adj x y) → y ∈ visited))
 --    : Σ (path: Option (Path g start goal)),
 --    (Σ (finalVisited : Finset V),
@@ -1202,7 +1139,7 @@ theorem dfs_not_really_monad_is_complete (g: WeightedDiGraph V E) (start : V) (g
 --      intro
 --      by_contra terminates_with_none
 --      simp at terminates_with_none
---     
+--
 --      --unfold dfs
 --      sorry
 --
