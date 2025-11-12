@@ -13,6 +13,37 @@ structure StripsAction (nvar : Nat) where
   no_pre_added : pre ∩ add = ∅
   no_del_added : add ∩ del = ∅
 
+--
+
+def op : StripsAction 5 := StripsAction.mk {1} {2} {3} (by
+  apply Finset.inter_singleton_of_notMem
+  rw [← Finset.forall_mem_not_eq]
+  intro b
+  intro b_in_1
+  rw [Finset.mem_singleton] at b_in_1
+  subst b_in_1 
+  rw [← Fin.val_inj]
+  exact Nat.succ_ne_self 1
+   ) (by
+  ext a
+  apply Iff.intro
+  · intro a_in
+    have f : False := by 
+      rw [Finset.mem_inter] at a_in
+      have ⟨ a2, a3 ⟩ := a_in
+      rw [Finset.mem_singleton] at a2
+      rw [Finset.mem_singleton] at a3
+      rw [a3] at a2
+      rw [← Fin.val_inj] at a2
+      exact Nat.succ_ne_self 2 a2
+    absurd f
+    simp only [not_false_eq_true]
+  · intro a_in_empty
+    absurd (Finset.notMem_empty a) a_in_empty 
+    simp only [not_false_eq_true]
+     ) 
+
+
 abbrev StripsActionSequence (nvar : Nat) (len : Nat) := Vector (StripsAction nvar) len
 
 structure StripsDomain (nvar : Nat) (nact : Nat) where
