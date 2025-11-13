@@ -142,3 +142,23 @@ lemma listFind_general
   rw [List.findFinIdx?_eq_some_iff] at def_some_i
   simp_all
 
+
+
+def maximum_of_non_empty_list {α : Type u_1} [Max α]
+  (l : List α) (non_empty : l ≠ []) : α :=
+    let maxOption := l.max?
+    maxOption.get (by
+      unfold maxOption
+      rw [Option.isSome_iff_ne_none]
+      simp_all)
+
+theorem maximum_of_non_empty_le (l : List Nat) (non_empty : l ≠ []):
+    ∀ x ∈ l, x ≤ maximum_of_non_empty_list l non_empty := by
+    intro x x_in_l
+    unfold maximum_of_non_empty_list
+    simp_all
+    apply List.le_max?_get_of_mem
+    use x_in_l
+
+
+
