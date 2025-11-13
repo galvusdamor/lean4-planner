@@ -15,68 +15,16 @@ set_option trace.split.failure true
 variable {V : Type} {E : Type} [FinEnum V] [DecidableEq V] [DecidableEq E]
 variable (G : WeightedDiGraph V E)
 
------- DFS implementation and proof ------
 
 
+-----------------------------------------------------------------------
+------ Search state of the DFS and its invariants
 structure dfs_state [FinEnum V] [DecidableEq E] [DecidableEq V]
     (g: WeightedDiGraph V E) where
     visited : Finset V
     pathOrder : V → Nat 
     mother : visited → V
     stack : List V
-
-
-def maximum_path_order_of [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E)
-    (dfs_state : dfs_state g)
-    (states : Finset V)
-    (non_empty : states ≠ ∅): Nat :=
-  let vList : List V := (FinEnum.toList states)
-  have vListNonEmpty : vList ≠ [] := by
-    unfold vList
-    intro a
-    simp_all
-    have statesEmpty : states = ∅ := by
-      by_cases h : ∃ x, x ∈ states
-      · obtain ⟨s, s_in_states⟩ := h
-        have hh : s ∈ (FinEnum.toList { x // x ∈ states }).unattach := by
-          clear a
-          simp_all only [List.mem_unattach, FinEnum.mem_toList, exists_const]
-        simp_all 
-      · ext y
-        simp_all only [not_exists, Finset.notMem_empty]
-    contradiction
-  let opt : Option Nat := List.max? (vList.map (λ s => dfs_state.pathOrder s))
-
-  have optNotBot : opt ≠ none := by 
-    unfold opt
-    intro _
-    simp_all
-  Option.get opt (by
-    unfold Option.isSome
-    unfold opt
-    split
-    · rfl
-    · simp_all
-  )
-
-lemma maximum_path_order_is_le 
-    (g: WeightedDiGraph V E)
-    (dfs_state : dfs_state g)
-    (states : Finset V)
-    (non_empty : states ≠ ∅):
-    ∀ s ∈ states, dfs_state.pathOrder s ≤ maximum_path_order_of g dfs_state states non_empty := by
-    intro s s_in_states
-    unfold maximum_path_order_of
-    simp_all
-    apply maximum_of_non_empty_le
-    · simp_all
-      apply List.ne_nil_of_mem
-      rotate_right
-      · use s
-      · simp_all
-    · simp_all
-      use s
 
 abbrev dfs_invar_stack_is_visited [FinEnum V] [DecidableEq E] [DecidableEq V]
     (g: WeightedDiGraph V E) (s : dfs_state g):=
@@ -90,6 +38,23 @@ abbrev dfs_invar_mother_decreasing_path_order [FinEnum V] [DecidableEq E] [Decid
     (g: WeightedDiGraph V E) (start : V) (s : dfs_state g) :=
       ∀ x : s.visited, ↑x ≠ start → s.pathOrder (s.mother x) < s.pathOrder x 
 
+abbrev dfs_invar_on_stack_or_all_neighbours_visited [FinEnum V] [DecidableEq E] [DecidableEq V]
+    (g: WeightedDiGraph V E) (s : dfs_state g):=
+      ∀ x : s.visited, ↑x ∈ s.stack ∨ ∀ y : V, (g.Adj x y) → y ∈ s.visited
+
+
+def extract_path_to [FinEnum V] [DecidableEq E] [DecidableEq V]
+    (g: WeightedDiGraph V E) (start : V) (goal : V) (search_state : dfs_state g)
+    (goal_reached : goal ∈ search_state.visited)
+    (mother_invar : dfs_invar_mother_is_visited g search_state)
+    (decreasing_invar : dfs_invar_mother_decreasing_path_order g start search_state):
+      Path g start goal := by sorry
+
+
+
+
+-----------------------------------------------------------------------
+------ DFS implementation and proof ------
 
 def dfs_step_expand[FinEnum V] [DecidableEq E] [DecidableEq V]
     (g: WeightedDiGraph V E)
@@ -117,7 +82,8 @@ def dfs_step_expand[FinEnum V] [DecidableEq E] [DecidableEq V]
       let new_order : V → Nat := fun v  =>
         if h: (v ∈ priorState.visited) then priorState.pathOrder v
         else if hh : (priorState.visited.card = 0) then 0
-        else 1 + maximum_path_order_of g priorState priorState.visited (by simp_all)
+        --else 1 + maximum_path_order_of g priorState priorState.visited (by simp_all)
+        else 1 + priorState.pathOrder stackHead
         -- priorState.stack.length
       
       dfs_state.mk new_visited new_order new_mother new_stack
@@ -203,12 +169,9 @@ lemma dfs_expand_keeps_mother_ordered --[FinEnum V] [DecidableEq E] [DecidableEq
       · simp_all
       · rw [Nat.add_comm]
         apply Nat.lt_succ_of_le
-        apply maximum_path_order_is_le
-        simp_all
-
---abbrev [FinEnum V] [DecidableEq E] [DecidableEq V]
---    (g: WeightedDiGraph V E) (start : V) (s : dfs_state g start):=
---      ∀ x : s.visited, (∃ y ∈ s.stack, y.node = x) ∨ ∀ y : V, (g.Adj x y) → y ∈ s.visited
+        apply le_refl
+        --apply maximum_path_order_is_le
+        --simp_all
 
 
 ---------------------------------------------------------------------------------------
