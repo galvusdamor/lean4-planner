@@ -1,4 +1,5 @@
 import Mathlib.Data.FinEnum
+import Mathlib.Data.Multiset.Defs
 
 variable {V : Type} [FinEnum V] [DecidableEq V]
 
@@ -16,4 +17,33 @@ theorem FinEnum.empty_to_list_empty_set (states : Finset V):
     ext a : 1
     simp_all only [Finset.notMem_empty]
 
+
+
+theorem finsetLemma (a : Finset W) (b : Finset W): (b ⊆ a) → (a.card = b.card) → (x ∈ a) → x ∈ b := by 
+  intro b_sub_a
+  intro same_card
+  intro x_in_a
+  by_contra x_not_in_b
+  have b_neq_a : b ≠ a := by
+    simp_all only [ne_eq]
+    apply Aesop.BuiltinRules.not_intro
+    intro a_1
+    subst a_1
+    simp_all only [not_true_eq_false]
+  have b_subset_a : b ⊂ a := by
+    apply Finset.ssubset_iff_subset_ne.mpr
+    constructor
+    exact b_sub_a
+    simp_all
+  
+  have b_card_le_a_card : b.card < a.card := by
+    apply Finset.card_lt_card
+    exact b_subset_a
+
+
+  simp_all only [ne_eq, lt_self_iff_false]
+  --rw [Finset.mem_def]
+  --induction b
+  --next b_multiset b_nodup =>
+  --simp_all
 
