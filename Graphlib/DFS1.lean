@@ -9,6 +9,11 @@ import Graphlib.Basic
 set_option trace.split.failure true
 
 
+
+variable {V : Type} {E : Type} [FinEnum V] [DecidableEq V] [DecidableEq E]
+variable (G : WeightedDiGraph V E)
+
+
 ------ DFS implementation and proof ------
 
 
