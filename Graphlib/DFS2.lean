@@ -1178,3 +1178,11 @@ theorem dfs_is_complete (g: WeightedDiGraph V E) (start : V) (goal : V) :
       have goal_in_final := my_induction g start goal start theWalk final_state start_visited final_stack_empty on_stack_or_all_nei_visited
       contradiction
 
+
+theorem dfs_is_complete_inv (g: WeightedDiGraph V E) (start : V) (goal : V) :
+    Option.isNone (dfs g start goal) → ¬ ∃ x : (Path g start goal), x = x := by
+      intro optionIsNone
+      by_contra pathExists
+      have isSome := dfs_is_complete g start goal pathExists
+      simp_all
+
