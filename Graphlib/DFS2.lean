@@ -385,6 +385,77 @@ lemma dfs_step_keeps_all_basic_invars
         · apply dfs_step_keeps_start_in_visited
           exact invar_start_visited
 
+lemma dfs_step_keeps_goal_on_stack
+    (g: WeightedDiGraph V E)
+    (start : V) (goal : V)
+    (priorState : base_search_state g start):
+    search_prop_goal_on_stack g start goal priorState → 
+    search_prop_goal_on_stack g start goal (dfs_step g start goal priorState).fst := by
+      unfold search_prop_goal_on_stack
+      intro goal_prior_on_stack
+      unfold dfs_step
+      split
+      · simp_all
+      · simp_all
+        split
+        · simp_all
+        · simp_all
+          unfold dfs_step_expand
+          simp_all
+          right
+          cases goal_prior_on_stack
+          · next h h' =>
+            rw [h'] at h
+            contradiction 
+          · next h => exact h
+
+
+lemma dfs_step_returns_none_means_not_terminated
+  (g: WeightedDiGraph V E) (start : V) (goal : V)(priorState : base_search_state g start):
+  (dfs_step g start goal priorState).2 = none → 
+    search_state_not_terminated g start (dfs_step g start goal priorState).1 := by
+    intro step_returned_none
+    unfold search_state_not_terminated
+    unfold dfs_step at step_returned_none ⊢
+    split
+    · simp_all
+    · split
+      · simp_all
+      · unfold dfs_step_expand
+        simp [has_base_search_state.to_base_state]
+
+lemma dfs_step_goal_on_stack_if_terminated
+    (g: WeightedDiGraph V E) (start : V)(priorState : base_search_state g start):
+    ∀ goal : V, (dfs_step g start goal priorState).2 = true →
+     goal ∈ (dfs_step g start goal priorState).1.stack := by
+   intro goal terminated_with_true
+   next step_did_terminate =>
+   unfold dfs_step at terminated_with_true ⊢
+   split
+   · next l stack_empty =>
+     simp_all
+   · next l head tail stack_not_empty =>
+     simp_all
+     split
+     all_goals
+      simp_all
+
+lemma dfs_step_stack_empty_if_terminated_without_goal
+    (g: WeightedDiGraph V E) (start : V)(priorState : base_search_state g start):
+    ∀ goal : V, (dfs_step g start goal priorState).2 = false →
+     (dfs_step g start goal priorState).1.stack  = [] := by
+   intro goal terminated_with_true
+   next step_did_terminate =>
+   unfold dfs_step at terminated_with_true ⊢
+   split
+   · next l stack_empty =>
+     simp_all
+   · next l head tail stack_not_empty =>
+     simp_all
+     split
+     all_goals
+      simp_all
+
 
 --------------------------------------------------------------------------------------------------
 -- main recursion loop 
@@ -461,382 +532,56 @@ lemma termination_dfs_recurse
     · left; exact h
     · right; exact h
 
+lemma dfs_step_reduces_metric
+    (g: WeightedDiGraph V E) (start : V) (goal : V):
+    ∀ s : base_search_state g start,
+        search_state_not_terminated g start (dfs_step g start goal s).1 → 
+        Prod.Lex (fun x1 x2 => x1 < x2) (fun x1 x2 => x1 < x2)
+        (base_search_state_termination_metric g start (dfs_step g start goal s).1) (base_search_state_termination_metric g start s) := by
+    intro state
+    intro did_not_terminate
+    unfold base_search_state_termination_metric
+    apply Prod.lex_def.mpr
+    simp
+    apply termination_dfs_recurse
+    rotate_left
+    · use goal
+    · simp
+      unfold search_state_not_terminated at did_not_terminate
+      exact did_not_terminate
+
+
+lemma dfs_step_does_not_set_terminate
+    (g: WeightedDiGraph V E) (start : V) (goal : V):
+search_step_does_not_terminate g start goal (dfs_step g start) := by
+  unfold search_step_does_not_terminate
+  simp
+  intro s returned_none
+  unfold dfs_step at returned_none ⊢
+  split
+  · simp_all
+  · next _ head tail compose =>
+    simp_all
+    split
+    all_goals
+      simp_all -- one goal vanishes
+    rfl -- no idea why this works without unfolding the dfs_step
+
+
 def dfs_recurse [FinEnum V] [DecidableEq E] [DecidableEq V]
     (g: WeightedDiGraph V E) (start : V) (goal : V)
     (priorState : base_search_state g start)
     (not_terminated : priorState.terminated = false):
     (base_search_state g start) × Bool :=
-  let qq := dfs_step g start goal priorState
-  let nextState := qq.fst
-  let result := qq.snd
-  if result_is_none : result = none then 
-    let still_not_terminated : nextState.terminated = false := by
-      unfold nextState
-      unfold result at result_is_none
-      unfold qq at result_is_none ⊢
-      unfold dfs_step at result_is_none ⊢
-      split
-      · simp_all
-      · next _ head tail compose =>
-        simp_all
-        split
-        all_goals
-          simp_all -- one goal vanishes
-        unfold dfs_step_expand
-        simp_all
-    dfs_recurse g start goal nextState still_not_terminated
-  else ⟨ nextState, result.get (by apply Option.isSome_iff_ne_none.mpr ; exact result_is_none) ⟩ 
-termination_by (¬priorState.terminated, Fintype.card V - priorState.visited.card, priorState.stack.length, goal) -- must be a well-founded relation/measure
-decreasing_by
-  rw [Prod.lex_iff]
-  apply (Classical.or_iff_not_imp_left).mpr
-  simp_all
-  rw [Prod.lex_iff]
-  rw [Prod.lex_iff]
-  simp_all
-  constructor
-  · simp_all only [qq, nextState]
-  unfold nextState at still_not_terminated
-  unfold qq at still_not_terminated
-  apply termination_dfs_recurse
-  rotate_right
-  use goal
-  simp_all
+    search_recurse g start goal priorState (by unfold search_state_not_terminated; exact not_terminated) (dfs_step g start) (dfs_step_does_not_set_terminate g start goal) (base_search_state_termination_metric g start) (dfs_step_reduces_metric g start goal)
 
 
-abbrev search_invar_over_step [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E)(start : V)(goal : V)(invar : base_search_state g start → Prop) :=
-      ∀ s : base_search_state g start, invar s → invar (dfs_step g start goal s).fst
-
-lemma dfs_recurse_lift_invar
-    (g: WeightedDiGraph V E)
-    (start : V)(priorState : base_search_state g start)
-    (not_terminated : priorState.terminated = false)
-    (invar : base_search_state g start → Prop):
-    ∀ (goal : V), invar priorState ∧ (search_invar_over_step g start goal invar)
-     → invar (dfs_recurse g start goal priorState not_terminated).fst := by
-      intro goal ⟨ invar_holds_initially, dfs_step_keeps_invar ⟩ 
-      unfold dfs_recurse
-      simp
-      unfold search_invar_over_step at dfs_step_keeps_invar
-      have h := dfs_step_keeps_invar priorState invar_holds_initially 
-
-      split
-      · next step_returns_none =>
-        have still_not_terminated : (dfs_step g start goal priorState).1.terminated = false := by
-          unfold dfs_step at ⊢ step_returns_none
-          simp_all
-          split
-          · next stack_empty =>
-            rw [stack_empty] at step_returns_none
-            simp_all
-          · simp_all
-            split
-            · next head tail compose is_goal =>
-              simp_all
-            · unfold dfs_step_expand
-              simp_all
-        exact dfs_recurse_lift_invar g start (dfs_step g start goal priorState).1 still_not_terminated invar goal ⟨ h, dfs_step_keeps_invar ⟩
-      · simp
-        exact h
-termination_by (¬priorState.terminated, Fintype.card V - priorState.visited.card, priorState.stack.length) -- must be a well-founded relation/measure
-decreasing_by
-  rw [Prod.lex_iff]
-  apply (Classical.or_iff_not_imp_left).mpr
-  simp_all
-  rw [Prod.lex_iff]
-  apply termination_dfs_recurse
-  rotate_right
-  use goal
-  simp_all
-
-lemma dfs_step_returning_non_did_not_terminate(g: WeightedDiGraph V E)
-    (start : V) (goal : V) (priorState : base_search_state g start):
-    (dfs_step g start goal priorState).2 = none → 
-    (dfs_step g start goal priorState).1.terminated = false := by
-      intro gg
-      unfold dfs_step at gg ⊢
-      split
-      · simp_all
-      · simp_all
-        split
-        · simp_all
-        · simp_all
-          unfold dfs_step_expand
-          simp_all
-
-
-lemma dfs_recurse_goal_visited_if_terminated
-    (g: WeightedDiGraph V E)
-    (start : V)(priorState : base_search_state g start)
-    (not_terminated : priorState.terminated = false)
-    (invar_stack_visited : search_invar_stack_is_visited g start priorState):
-    ∀ goal : V, (dfs_recurse g start goal priorState not_terminated).2 = true →
-     goal ∈ (dfs_recurse g start goal priorState not_terminated).1.visited := by
-   intro goal terminated_with_true
-   unfold dfs_recurse at terminated_with_true ⊢ 
-   simp_all
-   split
-   · simp_all
-     apply dfs_recurse_goal_visited_if_terminated
-     · apply dfs_step_keeps_stack_in_visited
-       exact invar_stack_visited
-     · exact terminated_with_true
-   · next step_did_terminate =>
-     simp_all
-     unfold dfs_step at terminated_with_true ⊢
-     split
-     · next l stack_empty =>
-       simp_all
-     · next l head tail stack_not_empty =>
-       simp_all
-       split
-       · next head_is_goal =>
-         simp_all
-       · next head_is_not_goal =>
-         simp_all
-         unfold dfs_step_expand
-         simp_all
-         by_cases goal_was_visited : goal ∈ priorState.visited
-         · left; exact goal_was_visited
-         · right
-           constructor
-           · unfold dfs_step at step_did_terminate
-             simp_all
-           · exact goal_was_visited
-termination_by (¬priorState.terminated, Fintype.card V - priorState.visited.card, priorState.stack.length) -- must be a well-founded relation/measure
-decreasing_by
-  rw [Prod.lex_iff]
-  apply (Classical.or_iff_not_imp_left).mpr
-  simp_all
-  rw [Prod.lex_iff]
-  next a b c d e f gg =>
-  clear b c d e f
-  have did_terminate_before : (dfs_step g start goal priorState).1.terminated = false := by
-    apply dfs_step_returning_non_did_not_terminate
-    exact gg
-  constructor
-  · exact did_terminate_before
-  apply termination_dfs_recurse
-  rotate_right
-  use goal
-  simp_all
-
-lemma dfs_recurse_stack_empty_if_terminated
-    (g: WeightedDiGraph V E)
-    (start : V)
-    (priorState : base_search_state g start)
-    (not_terminated : priorState.terminated = false)
-    (invar_stack_visited : search_invar_stack_is_visited g start priorState):
-    ∀ goal : V, (dfs_recurse g start goal priorState not_terminated).2 = false →
-     (dfs_recurse g start goal priorState not_terminated).1.stack = [] := by
-   intro goal terminated_with_false 
-   unfold dfs_recurse at terminated_with_false ⊢ 
-   simp_all
-   split
-   · next step_did_not_terminate =>
-     simp_all
-     apply dfs_recurse_stack_empty_if_terminated
-     · apply dfs_step_keeps_stack_in_visited
-       exact invar_stack_visited
-     · simp_all
-   · next step_did_terminate =>
-     simp [step_did_terminate] at terminated_with_false
-     unfold dfs_step at terminated_with_false
-     by_cases prior_stack_empty : priorState.stack = []
-     · simp [prior_stack_empty] at terminated_with_false
-       simp_all
-       unfold dfs_step
-       simp_all
-     · simp_all
-       by_cases stack_composed : ∃ a : V, ∃ l : List V, priorState.stack = a :: l
-       · obtain ⟨a,l,stack_composition⟩ := stack_composed 
-         simp_all
-         split at terminated_with_false
-         · simp_all
-         · next head_not_goal =>
-           simp_all
-           unfold dfs_step at step_did_terminate
-           simp_all
-       · have stackEmpty: priorState.stack = [] := by
-           apply List.eq_nil_of_length_eq_zero
-           unfold List.length
-           split
-           · rfl
-           · next l head tail compose=>
-             simp_all
-         simp_all
-termination_by (¬priorState.terminated, Fintype.card V - priorState.visited.card, priorState.stack.length) -- must be a well-founded relation/measure
-decreasing_by
-  rw [Prod.lex_iff]
-  apply (Classical.or_iff_not_imp_left).mpr
-  simp_all
-  rw [Prod.lex_iff]
-  next a b c d e f gg =>
-  clear b c d e f
-  have did_terminate_before : (dfs_step g start goal priorState).1.terminated = false := by
-    apply dfs_step_returning_non_did_not_terminate
-    exact gg
-  constructor
-  · exact did_terminate_before
-  apply termination_dfs_recurse
-  rotate_right
-  use goal
-  simp_all
-
-lemma dfs_recurse_if_goal_on_stack_return_true
-    (g: WeightedDiGraph V E)
-    (start : V) (priorState : base_search_state g start)
-    (not_terminated : priorState.terminated = false)
-    (invar_stack_visited : search_invar_stack_is_visited g start priorState):
-    ∀ goal : V, goal ∈ priorState.stack
-      → (dfs_recurse g start goal priorState not_terminated).2 = true := by
-  intro goal goal_on_stack
-  unfold dfs_recurse
-  simp
-  split
-  · apply dfs_recurse_if_goal_on_stack_return_true
-    · apply dfs_step_keeps_stack_in_visited
-      exact invar_stack_visited
-    · next step_returned_none =>
-      unfold dfs_step at step_returned_none ⊢ 
-      split
-      · next l emptyStack =>
-        simp_all
-      · next l head tail stackCompose =>
-        simp_all
-        split
-        · simp_all
-        · next head_not_goal =>
-          simp_all
-          have goal_not_head : goal ≠ head := by
-            intro a
-            apply head_not_goal
-            exact a.symm
-          simp at goal_not_head; clear head_not_goal
-          apply (Classical.or_iff_not_imp_left).mp at goal_on_stack
-          apply goal_on_stack at goal_not_head
-          unfold dfs_step_expand
-          simp_all
-  · next h =>
-    simp_all
-    unfold dfs_step
-    by_cases prior_state_non_empty: priorState.stack ≠ []
-    · simp_all
-      apply List.length_pos_iff.mpr at prior_state_non_empty
-      apply List.length_pos_iff_exists_cons.mp at prior_state_non_empty
-      obtain ⟨head,tail,compose⟩ := prior_state_non_empty
-      simp_all
-      split
-      all_goals
-        simp_all
-    · simp_all
-termination_by (¬priorState.terminated, Fintype.card V - priorState.visited.card, priorState.stack.length) -- must be a well-founded relation/measure
-decreasing_by
-  rw [Prod.lex_iff]
-  apply (Classical.or_iff_not_imp_left).mpr
-  simp_all
-  rw [Prod.lex_iff]
-  next a b c d e f gg =>
-  clear b c d e f
-  have did_terminate_before : (dfs_step g start goal priorState).1.terminated = false := by
-    apply dfs_step_returning_non_did_not_terminate
-    exact gg
-  constructor
-  · exact did_terminate_before
-  apply termination_dfs_recurse
-  rotate_right
-  use goal
-  simp_all
-
-
-lemma dfs_recurse_goal_not_visited_if_terminated
-    (g: WeightedDiGraph V E)
-    (start : V)(priorState : base_search_state g start)
-    (not_terminated : priorState.terminated = false)
-    (invar_stack_visited : search_invar_stack_is_visited g start priorState):
-    ∀ goal : V, (dfs_recurse g start goal priorState not_terminated).2 = false 
-    ∧ goal ∉ priorState.visited
-    → goal ∉ (dfs_recurse g start goal priorState not_terminated).1.visited := by
-  intro goal
-  intro ⟨ terminated_with_false, goal_not_visited ⟩ 
-  have new_new := terminated_with_false
-  apply dfs_recurse_stack_empty_if_terminated at terminated_with_false
-  · unfold dfs_recurse at terminated_with_false
-    simp_all
-    split at terminated_with_false
-    · next step_returns_none =>
-      unfold dfs_recurse
-      simp_all
-      apply dfs_recurse_goal_not_visited_if_terminated
-      · apply dfs_step_keeps_stack_in_visited
-        exact invar_stack_visited
-      · constructor
-        · unfold dfs_recurse at new_new
-          simp_all
-        · unfold dfs_step
-          split
-          · simp_all
-          · split
-            · simp_all
-            · next l head tail composed head_not_goal =>
-              simp_all
-              unfold dfs_step_expand
-              simp_all
-              by_contra head_adj_goal
-              have goal_is_now_on_stack : goal ∈ (dfs_step g start goal priorState).1.stack := by
-                unfold dfs_step
-                simp_all
-                unfold dfs_step_expand
-                simp_all
-              apply dfs_recurse_if_goal_on_stack_return_true at goal_is_now_on_stack
-              unfold dfs_recurse at new_new
-              simp_all
-              · unfold dfs_step
-                simp_all
-                unfold dfs_step_expand
-                simp_all
-              · apply dfs_step_keeps_stack_in_visited
-                exact invar_stack_visited
-    · unfold dfs_recurse
-      simp_all
-      unfold dfs_step at terminated_with_false ⊢
-      split
-      · simp_all
-      · simp_all
-        split
-        · simp_all
-        · simp_all
-          unfold dfs_step_expand at terminated_with_false ⊢
-          simp_all
-          next l head tail step_did_not_return_none stackCompose head_not_goal =>
-          by_contra head_adj_goal
-          have ⟨ all_adj_in_visi, tail_empty ⟩ := terminated_with_false 
-          simp_all
-  · exact invar_stack_visited
-termination_by (¬priorState.terminated, Fintype.card V - priorState.visited.card, priorState.stack.length) -- must be a well-founded relation/measure
-decreasing_by
-  rw [Prod.lex_iff]
-  apply (Classical.or_iff_not_imp_left).mpr
-  simp_all
-  rw [Prod.lex_iff]
-  next a b c d e f gg =>
-  clear b c d e f
-  have did_terminate_before : (dfs_step g start goal priorState).1.terminated = false := by
-    apply dfs_step_returning_non_did_not_terminate
-    exact gg
-  constructor
-  · exact did_terminate_before
-  apply termination_dfs_recurse
-  rotate_right
-  use goal
-  simp_all
 
 
 --------------------------------------------------------------------------------------------------
 -- initial configuration of the DFS
 def dfs_initial_state [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) (start : V) (goal : V) :
+    (g: WeightedDiGraph V E) (start : V):
     base_search_state g start :=
   let initialVisited : Finset V := ⟨ {start},  by simp ⟩ 
   let initialMother : initialVisited → V := fun x => start 
@@ -855,49 +600,50 @@ def dfs_initial_state [FinEnum V] [DecidableEq E] [DecidableEq V]
 
 ----- Proofs that the initial state of the DFS satisfies the invariants
 lemma search_invar_stack_is_visited_initial 
-    (g: WeightedDiGraph V E) (start : V) (goal : V) :
-      search_invar_stack_is_visited g start (dfs_initial_state g start goal) := by 
+    (g: WeightedDiGraph V E) (start : V):
+      search_invar_stack_is_visited g start (dfs_initial_state g start) := by 
       unfold search_invar_stack_is_visited
       unfold dfs_initial_state
       simp
 
 
 lemma search_invar_mother_is_visited_initial 
-    (g: WeightedDiGraph V E) (start : V) (goal : V) :
-      search_invar_mother_is_visited g start (dfs_initial_state g start goal) := by 
+    (g: WeightedDiGraph V E) (start : V):
+      search_invar_mother_is_visited g start (dfs_initial_state g start) := by 
       unfold search_invar_mother_is_visited
       unfold dfs_initial_state
       simp
 
 lemma search_invar_mother_decreasing_path_order_initial
-    (g: WeightedDiGraph V E) (start : V) (goal : V) :
-      search_invar_mother_decreasing_path_order g start (dfs_initial_state g start goal) := by 
+    (g: WeightedDiGraph V E) (start : V):
+      search_invar_mother_decreasing_path_order g start (dfs_initial_state g start) := by 
       unfold search_invar_mother_decreasing_path_order  
       unfold dfs_initial_state
       simp
 
 lemma search_invar_on_stack_or_all_neighbours_visited_initial
-    (g: WeightedDiGraph V E) (start : V) (goal : V) :
-      search_invar_on_stack_or_all_neighbours_visited g start (dfs_initial_state g start goal) := by 
+    (g: WeightedDiGraph V E) (start : V):
+      search_invar_on_stack_or_all_neighbours_visited g start (dfs_initial_state g start) := by 
       unfold search_invar_on_stack_or_all_neighbours_visited  
       unfold dfs_initial_state
       simp
 
 lemma search_invar_start_visited_initial
-    (g: WeightedDiGraph V E) (start : V) (goal : V) :
-      search_invar_start_visited g start (dfs_initial_state g start goal) := by 
+    (g: WeightedDiGraph V E) (start : V):
+      search_invar_start_visited g start (dfs_initial_state g start) := by 
       unfold search_invar_start_visited  
       unfold dfs_initial_state
       simp
 
-lemma dfs_initial_state_is_not_termianted (g: WeightedDiGraph V E) (start : V) (goal : V) :
-  (dfs_initial_state g start goal).terminated = false := by
-    unfold dfs_initial_state
-    simp
+lemma dfs_initial_state_is_not_termianted
+    (g: WeightedDiGraph V E) (start : V):
+      (dfs_initial_state g start).terminated = false := by
+      unfold dfs_initial_state
+      simp
 
 lemma dfs_initial_state_all_basic_invars
-    (g: WeightedDiGraph V E) (start : V) (goal : V) :
-    search_invar_all_basic g start (dfs_initial_state g start goal) := by
+    (g: WeightedDiGraph V E) (start : V):
+    search_invar_all_basic g start (dfs_initial_state g start) := by
       unfold search_invar_all_basic 
       rw [← and_assoc]
       rw [← and_assoc]
@@ -914,64 +660,230 @@ lemma dfs_initial_state_all_basic_invars
 
 def dfs_internal[ FinEnum V] [DecidableEq E] [DecidableEq V]
     (g: WeightedDiGraph V E) (start : V) (goal : V): (base_search_state g start) × Bool :=
-  (dfs_recurse g start goal (dfs_initial_state g start goal) (dfs_initial_state_is_not_termianted g start goal))
+  (dfs_recurse g start goal (dfs_initial_state g start) (dfs_initial_state_is_not_termianted g start))
 
 
-
-lemma dfs_returns_correct_results 
-    (g: WeightedDiGraph V E) (start : V) (goal : V) (final : base_search_state g start):
-    final = (dfs_internal g start goal).1 →
-      search_invar_all_basic g start final
-    ∧ ((dfs_internal g start goal).2 = true → goal ∈ final.visited)
-    ∧ ((dfs_internal g start goal).2 = false → goal ∉ final.visited ∧ final.stack = []) := by
-    
-    intro s_is_final
-
-    let startState : base_search_state g start := dfs_initial_state g start goal
-    let proof : startState.terminated = false := dfs_initial_state_is_not_termianted g start goal
-    rw [s_is_final]
-    clear s_is_final final
-    let final := (dfs_internal g start goal).1
-
+lemma dfs_returns_with_invariants
+    (g: WeightedDiGraph V E) (start : V) (goal : V):
+    search_invar_all_basic g start (dfs_internal g start goal).1 := by
+    unfold dfs_internal
+    apply search_recurse_lift_invariant 
     constructor
-    · unfold dfs_internal
-      apply dfs_recurse_lift_invar g start startState proof (search_invar_all_basic g start)
+    · unfold dfs_initial_state
+      simp_all
+      apply dfs_initial_state_all_basic_invars
+    · unfold invar_carries_over_step
+      intro s
+      intro cond
+      apply dfs_step_keeps_all_basic_invars
+      exact cond
+ 
+lemma dfs_returns_with_stack_visited
+    (g: WeightedDiGraph V E) (start : V) (goal : V):
+    search_invar_stack_is_visited g start (dfs_internal g start goal).1 := by
+    have all_invars := dfs_returns_with_invariants g start goal
+    unfold search_invar_all_basic at all_invars
+    exact all_invars.1
+
+lemma dfs_returns_with_mother_decreasing
+    (g: WeightedDiGraph V E) (start : V) (goal : V):
+    search_invar_mother_decreasing_path_order g start (dfs_internal g start goal).1 := by
+    have all_invars := dfs_returns_with_invariants g start goal
+    unfold search_invar_all_basic at all_invars
+    exact all_invars.2.2.1
+
+lemma dfs_returns_with_mother_visited
+    (g: WeightedDiGraph V E) (start : V) (goal : V):
+    search_invar_mother_is_visited g start (dfs_internal g start goal).1 := by
+    have all_invars := dfs_returns_with_invariants g start goal
+    unfold search_invar_all_basic at all_invars
+    exact all_invars.2.1
+
+lemma dfs_returns_with_start_visited
+    (g: WeightedDiGraph V E) (start : V) (goal : V):
+    search_invar_start_visited g start (dfs_internal g start goal).1 := by
+    have all_invars := dfs_returns_with_invariants g start goal
+    unfold search_invar_all_basic at all_invars
+    exact all_invars.2.2.2.2
+
+lemma dfs_returns_with_node_on_stack_or_all_neighbours_visited
+    (g: WeightedDiGraph V E) (start : V) (goal : V):
+    search_invar_on_stack_or_all_neighbours_visited g start (dfs_internal g start goal).1 := by
+    have all_invars := dfs_returns_with_invariants g start goal
+    unfold search_invar_all_basic at all_invars
+    exact all_invars.2.2.2.1
+
+
+lemma dfs_goal_on_stack_if_returned_true
+    (g: WeightedDiGraph V E) (start : V) (goal : V): 
+    (dfs_internal g start goal).2 = true → goal ∈ (dfs_internal g start goal).1.stack := by 
+    intro terminated_with_goal_found 
+    unfold dfs_internal
+    unfold dfs_recurse
+    apply search_recurse_obtain_termination_property g start goal (dfs_initial_state g start) (property_after_termination := search_prop_goal_on_stack g start goal) (terminated_with := true) 
+    · intro s
+      apply dfs_step_goal_on_stack_if_terminated
+    · exact terminated_with_goal_found
+
+lemma dfs_visited_goal_if_returned_true 
+    (g: WeightedDiGraph V E) (start : V) (goal : V):
+    (dfs_internal g start goal).2 = true → goal ∈ (dfs_internal g start goal).1.visited := by 
+    intro terminated_with_goal_found 
+    apply dfs_returns_with_stack_visited g start goal
+    apply dfs_goal_on_stack_if_returned_true
+    exact terminated_with_goal_found 
+
+
+
+lemma dfs_empty_stack_if_returned_false_recurse
+    (g: WeightedDiGraph V E) (start : V) (goal : V)
+    (priorState : base_search_state g start)
+    (not_terminated : priorState.terminated = false):
+    (dfs_recurse g start goal priorState not_terminated).2 = false → (dfs_recurse g start goal priorState not_terminated).1.stack = [] := by
+    intro terminated_with_goal_not_found
+    unfold dfs_recurse
+    apply search_recurse_obtain_termination_property g start goal priorState (property_after_termination := search_prop_stack_empty g start) (terminated_with := false) 
+    · intro s
+      apply dfs_step_stack_empty_if_terminated_without_goal 
+    · exact terminated_with_goal_not_found
+
+lemma dfs_empty_stack_if_returned_false
+    (g: WeightedDiGraph V E) (start : V) (goal : V):
+    (dfs_internal g start goal).2 = false → (dfs_internal g start goal).1.stack = [] := by
+    intro terminated_with_goal_not_found
+    unfold dfs_internal at terminated_with_goal_not_found ⊢ 
+    apply dfs_empty_stack_if_returned_false_recurse
+    exact terminated_with_goal_not_found
+
+lemma dfs_recurse_if_goal_on_stack_it_remains
+    (g: WeightedDiGraph V E)
+    (start : V) (priorState : base_search_state g start)
+    (not_terminated : priorState.terminated = false):
+    ∀ goal : V, search_prop_goal_on_stack g start goal priorState
+      → search_prop_goal_on_stack g start goal (dfs_recurse g start goal priorState not_terminated).1:= by
+      intro goal invar_initial
+      unfold dfs_recurse
+      apply search_recurse_lift_invariant 
       constructor
-      · unfold startState
-        apply dfs_initial_state_all_basic_invars
-      · unfold search_invar_over_step
-        intro s
-        intro cond
-        apply dfs_step_keeps_all_basic_invars
-        exact cond
-    -- prove the the properties for the two termination cases
-    constructor
-    · intro terminated_with_goal_found
-      apply dfs_recurse_goal_visited_if_terminated
-      apply search_invar_stack_is_visited_initial
-      unfold dfs_internal at terminated_with_goal_found
-      exact terminated_with_goal_found
-    · intro terminated_with_goal_not_found
-      repeat constructor
-      · apply dfs_recurse_goal_not_visited_if_terminated
-        apply search_invar_stack_is_visited_initial
-        constructor
-        · unfold dfs_internal at terminated_with_goal_not_found
+      · exact invar_initial
+      · unfold invar_carries_over_step
+        apply dfs_step_keeps_goal_on_stack
+        
+
+lemma dfs_recurse_goal_not_visited_if_terminated
+    (g: WeightedDiGraph V E)
+    (start : V)(priorState : base_search_state g start)
+    (not_terminated : priorState.terminated = false)
+    (invar_stack_visited : search_invar_stack_is_visited g start priorState):
+    ∀ goal : V, (dfs_recurse g start goal priorState not_terminated).2 = false 
+    ∧ goal ∉ priorState.visited
+    → goal ∉ (dfs_recurse g start goal priorState not_terminated).1.visited := by
+  intro goal
+  intro ⟨ terminated_with_false, goal_not_visited ⟩ 
+  have new_new := terminated_with_false
+
+  apply dfs_empty_stack_if_returned_false_recurse at terminated_with_false
+  · --unfold dfs_internal at terminated_with_false
+    unfold dfs_recurse at terminated_with_false
+    unfold search_recurse at terminated_with_false
+    simp_all
+    split at terminated_with_false
+    · next step_returns_none =>
+      unfold dfs_recurse
+      unfold search_recurse
+      simp_all
+      apply dfs_recurse_goal_not_visited_if_terminated
+      · apply dfs_step_keeps_stack_in_visited
+        exact invar_stack_visited
+      · constructor
+        · unfold dfs_recurse at new_new
+          unfold search_recurse at new_new
           simp_all
-        · unfold dfs_initial_state
+          exact new_new 
+        · unfold dfs_step
+          split
+          · simp_all
+          · split
+            · simp_all
+            · next l head tail composed head_not_goal =>
+              simp_all
+              unfold dfs_step_expand
+              simp_all
+              by_contra head_adj_goal
+              have goal_is_now_on_stack : goal ∈ (dfs_step g start goal priorState).1.stack := by
+                unfold dfs_step
+                simp_all
+                unfold dfs_step_expand
+                simp_all
+              apply dfs_recurse_if_goal_on_stack_it_remains at goal_is_now_on_stack
+              · unfold dfs_recurse at goal_is_now_on_stack
+                unfold search_prop_goal_on_stack at goal_is_now_on_stack              
+                rw [terminated_with_false] at goal_is_now_on_stack
+                simp_all only [List.not_mem_nil]
+              · unfold dfs_step at step_returns_none ⊢ 
+                simp_all
+                unfold dfs_step_expand
+                simp
+      · unfold dfs_step at step_returns_none ⊢
+        split
+        · next prior_stack_empty => 
+          rw [prior_stack_empty] at step_returns_none
+          simp at step_returns_none
+        · next head tail compose =>
+          rw [compose] at step_returns_none
           simp_all
-          by_contra goal_is_start
-          unfold dfs_internal at terminated_with_goal_not_found
+          split
+          · simp_all
+          · simp_all
+            unfold dfs_step_expand
+            simp
+    · next step_returns_not_none =>
+      unfold dfs_recurse
+      unfold search_recurse
+      simp_all
+      unfold dfs_step at terminated_with_false ⊢
+      by_cases stack_empty : priorState.stack = []
+      · simp_all
+      · apply List.length_pos_iff.mpr at stack_empty
+        apply List.exists_cons_of_length_pos at stack_empty
+        obtain ⟨head, tail, compose⟩ := stack_empty 
+        simp_all
+        split
+        · simp_all
+        · next head_not_goal =>
           simp_all
-          unfold dfs_recurse at terminated_with_goal_not_found
+          unfold dfs_step_expand at terminated_with_false ⊢
           simp_all
-          unfold dfs_initial_state at terminated_with_goal_not_found
-          unfold dfs_step at terminated_with_goal_not_found
+          by_contra head_adj_goal
+          have ⟨ all_adj_in_visi, tail_empty ⟩ := terminated_with_false 
           simp_all
-      · apply dfs_recurse_stack_empty_if_terminated
-        apply search_invar_stack_is_visited_initial
-        unfold dfs_internal at terminated_with_goal_not_found
-        exact terminated_with_goal_not_found
+termination_by base_search_state_termination_metric g start priorState
+decreasing_by
+  apply dfs_step_reduces_metric g start goal
+  next h =>
+  apply dfs_step_returns_none_means_not_terminated
+  exact h
+
+
+
+lemma dfs_not_visited_goal_if_returned_false
+    (g: WeightedDiGraph V E) (start : V) (goal : V):
+    (dfs_internal g start goal).2 = false → goal ∉ (dfs_internal g start goal).1.visited := by
+     intro terminated_with_not_goal_found
+     unfold dfs_internal at terminated_with_not_goal_found ⊢ 
+     apply dfs_recurse_goal_not_visited_if_terminated
+     · apply search_invar_stack_is_visited_initial 
+     · constructor
+       · exact terminated_with_not_goal_found 
+       · unfold dfs_initial_state
+         simp
+         by_contra goal_is_start
+         unfold dfs_recurse at terminated_with_not_goal_found
+         unfold search_recurse at terminated_with_not_goal_found
+         unfold dfs_step at terminated_with_not_goal_found
+         unfold dfs_initial_state at terminated_with_not_goal_found
+         simp_all
+
 
 def dfs [FinEnum V] [DecidableEq E] [DecidableEq V]
     (g: WeightedDiGraph V E) (start : V) (goal : V): Option (Path g start goal) :=
@@ -981,21 +893,10 @@ def dfs [FinEnum V] [DecidableEq E] [DecidableEq V]
   let found_goal := dfs_ret.2
 
   if found_goal_true : found_goal = true then
-    have correct_result := dfs_returns_correct_results g start goal final_state (by
-      unfold final_state 
-      unfold dfs_ret
-      rfl)
-
-    have mother_invar : search_invar_mother_is_visited g start final_state := by
-      have inv := correct_result.1
-      unfold search_invar_all_basic at inv
-      exact inv.2.1
-    have decreasing_invar : search_invar_mother_decreasing_path_order g start final_state := by
-      have inv := correct_result.1
-      unfold search_invar_all_basic at inv
-      exact inv.2.2.1
-
-    some (extract_path_to g start goal final_state (correct_result.2.1 found_goal_true) mother_invar decreasing_invar).1
+    some (extract_path_to g start goal final_state
+      (dfs_visited_goal_if_returned_true g start goal found_goal_true)
+      (dfs_returns_with_mother_visited g start goal)
+      (dfs_returns_with_mother_decreasing g start goal)).1
   else
     none
 
@@ -1010,21 +911,6 @@ theorem dfs_is_sound (g: WeightedDiGraph V E) (start : V) (goal : V) :
   simp_all
 
 
-lemma my_induction (g: WeightedDiGraph V E) (start : V) (goal : V) (f : V) 
-  (theWalk : Walk g f goal)
-  (final_state : base_search_state g start)
-  (f_visited : f ∈ final_state.visited)
-  (final_stack_empty : final_state.stack = [])
-  (on_stack_or_all_nei_visited : ∀ a ∈ final_state.visited, ∀ (y : V), g.Adj a y → y ∈ final_state.visited): goal ∈ final_state.visited := by
-    cases theWalk
-    · exact f_visited
-    · next nextNode adj rest_walk =>
-      apply my_induction g start goal nextNode rest_walk
-      · apply on_stack_or_all_nei_visited f
-        · exact f_visited
-        · exact adj
-      · exact final_stack_empty
-      · exact on_stack_or_all_nei_visited
 
 
 theorem dfs_is_complete (g: WeightedDiGraph V E) (start : V) (goal : V) :
@@ -1040,27 +926,25 @@ theorem dfs_is_complete (g: WeightedDiGraph V E) (start : V) (goal : V) :
 
       let final := dfs_internal g start goal
       let final_state := final.1
+      
+      have start_visited : search_invar_start_visited g start final_state :=
+        dfs_returns_with_start_visited g start goal 
+      have on_stack_or_all_nei_visited : search_invar_on_stack_or_all_neighbours_visited g start final_state:=
+        dfs_returns_with_node_on_stack_or_all_neighbours_visited g start goal
 
-      have xx := dfs_returns_correct_results g start goal final_state (by
-        unfold final_state 
-        unfold final
-        rfl)
+      have dfs_returned_false : (dfs_internal g start goal).2 = false := by
+        unfold dfs at terminates_with_none
+        simp at terminates_with_none
+        exact terminates_with_none
 
-      have h := xx.2.2
-      unfold search_invar_all_basic at xx
-      have start_visited := xx.1.2.2.2.2
-      unfold search_invar_start_visited at start_visited
-      have on_stack_or_all_nei_visited := xx.1.2.2.2.1
-      clear xx
-      unfold dfs at terminates_with_none
-      simp at terminates_with_none
-      apply h at terminates_with_none
-      clear h
-      simp_all
-      obtain ⟨goal_not_visited, final_stack_empty⟩ := terminates_with_none
+      have final_stack_empty : final_state.stack = [] :=
+        dfs_empty_stack_if_returned_false g start goal dfs_returned_false
+
+      have goal_not_visited : goal ∉ final_state.visited :=
+        dfs_not_visited_goal_if_returned_false g start goal dfs_returned_false
 
       obtain ⟨theWalk, nodupe ⟩ := thePath
-      have goal_in_final := my_induction g start goal start theWalk final_state start_visited final_stack_empty on_stack_or_all_nei_visited
+      have goal_in_final := search_termination_with_empty_stack_implies_goal_visited g start goal start theWalk final_state start_visited final_stack_empty on_stack_or_all_nei_visited
       contradiction
 
 
@@ -1071,59 +955,4 @@ theorem dfs_is_complete_inv (g: WeightedDiGraph V E) (start : V) (goal : V) :
       have isSome := dfs_is_complete g start goal pathExists
       simp_all
 
-
-
-
-def dfs_step_does_not_terminate [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) (start : V) (goal : V) : 
-      search_step_does_not_terminate g start goal (state_type := base_search_state g start) (dfs_step g start) := by
-      unfold search_step_does_not_terminate
-      simp_all
-      intro prior_state
-      intro result_is_none 
-      unfold dfs_step at result_is_none ⊢
-      split
-      · simp_all
-      · next _ head tail compose =>
-        simp_all
-        split
-        all_goals
-          simp_all -- one goal vanishes
-        simp [has_base_search_state.to_base_state]
-        unfold dfs_step_expand
-        simp_all
-
-
-def dfs_termination_metric[FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) (start : V) (goal : V) (state : base_search_state g start) : ℕ × ℕ := 
-    (Fintype.card V - state.visited.card, state.stack.length)
-
-
-def dfs_decreasing_metric_proof[FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) (start : V) (goal : V):
-      ∀ s : base_search_state g start,
-      search_state_not_terminated g start (dfs_step g start goal s).1 → 
-      Prod.Lex (fun x1 x2 => x1 < x2) (fun x1 x2 => x1 < x2) (dfs_termination_metric g start goal (dfs_step g start goal s).1) (dfs_termination_metric g start goal s)
-      :=
-  by
-    intro prior_state not_terminated
-    unfold dfs_termination_metric
-    apply Prod.lex_def.mpr
-    simp_all
-    apply termination_dfs_recurse g start goal
-    constructor
-    · rfl
-    · apply not_terminated 
-
-
-def def_rec[FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) (start : V) (goal : V)
-    (priorState : base_search_state g start)
-    (not_terminated : priorState.terminated = false):
-    (base_search_state g start) × Bool :=
-      search_recurse  g start goal priorState (by
-        unfold search_state_not_terminated; apply not_terminated) (dfs_step g start) (by
-          unfold search_step_does_not_terminate
-          apply dfs_step_does_not_terminate
-        ) (dfs_termination_metric g start goal) (dfs_decreasing_metric_proof g start goal)
 

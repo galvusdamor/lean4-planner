@@ -36,6 +36,17 @@ instance [FinEnum V] [DecidableEq E] [DecidableEq V](g: WeightedDiGraph V E) (st
     has_base_search_state g start (base_search_state g start) where
   to_base_state := fun x => x 
 
+abbrev search_prop_goal_on_stack[FinEnum V] [DecidableEq E] [DecidableEq V]
+    (g: WeightedDiGraph V E) (start : V) (goal : V) (s : base_search_state g start):=
+      goal ∈ s.stack
+
+abbrev search_prop_goal_visited[FinEnum V] [DecidableEq E] [DecidableEq V]
+    (g: WeightedDiGraph V E) (start : V) (goal : V) (s : base_search_state g start):=
+      goal ∈ s.visited
+
+abbrev search_prop_stack_empty[FinEnum V] [DecidableEq E] [DecidableEq V]
+    (g: WeightedDiGraph V E) (start : V) (s : base_search_state g start):=
+      s.stack = []
 
 abbrev search_invar_stack_is_visited [FinEnum V] [DecidableEq E] [DecidableEq V]
     (g: WeightedDiGraph V E) (start : V) (s : base_search_state g start):=
@@ -134,6 +145,22 @@ decreasing_by
   simp_all only [Subtype.forall, ne_eq, not_false_eq_true]
 
 
+theorem search_termination_with_empty_stack_implies_goal_visited [FinEnum V] [DecidableEq E] [DecidableEq V](g: WeightedDiGraph V E) (start : V) (goal : V) (f : V) 
+  (theWalk : Walk g f goal)
+  (final_state : base_search_state g start)
+  (f_visited : f ∈ final_state.visited)
+  (final_stack_empty : final_state.stack = [])
+  (on_stack_or_all_nei_visited : search_invar_on_stack_or_all_neighbours_visited g start final_state): goal ∈ final_state.visited := by
+    cases theWalk
+    · exact f_visited
+    · next nextNode adj rest_walk =>
+      apply search_termination_with_empty_stack_implies_goal_visited  g start goal nextNode rest_walk
+      · unfold search_invar_on_stack_or_all_neighbours_visited at on_stack_or_all_nei_visited
+        rw [final_stack_empty] at on_stack_or_all_nei_visited
+        simp_all
+        apply on_stack_or_all_nei_visited f f_visited nextNode adj
+      · exact final_stack_empty
+      · exact on_stack_or_all_nei_visited
 
 
 abbrev search_step_function [FinEnum V] [DecidableEq E] [DecidableEq V]
@@ -159,6 +186,10 @@ abbrev search_step_does_not_terminate [FinEnum V] [DecidableEq E] [DecidableEq V
         let res : state_type × (Option Bool) := search_step goal s
         let res_state : base_search_state g start := (has_base_search_state.to_base_state res.fst)
         res.snd = none → res_state.terminated = false
+
+def base_search_state_termination_metric [FinEnum V] [DecidableEq E] [DecidableEq V]
+    (g: WeightedDiGraph V E) (start : V) (s : base_search_state g start): ℕ × ℕ :=
+    (Fintype.card V - s.visited.card, s.stack.length)
 
 
 ------------------------------------------------------------------------------------------
@@ -313,6 +344,57 @@ decreasing_by
   apply still_not_terminated
 
 
+lemma search_recurse_lift_invariant_under_return_assumption [FinEnum V] [DecidableEq E] [DecidableEq V]
+    (g: WeightedDiGraph V E) (start : V)
+    {state_type : Type} [has_base_search_state g start state_type]
+    (goal : V)
+    (priorState : state_type)
+    (not_terminated : search_state_not_terminated g start (state_type := state_type) priorState)
+    (search_step : search_step_function g start)
+    (does_not_set_teriminate: search_step_does_not_terminate g start goal (state_type := state_type) search_step)
+    (termination_metric : state_type → ℕ × ℕ)
+    (decreasing_proof : ∀ s : state_type,
+        search_state_not_terminated g start (search_step goal s).1 → 
+        Prod.Lex (fun x1 x2 => x1 < x2) (fun x1 x2 => x1 < x2)
+        (termination_metric (search_step goal s).1) (termination_metric s))
+    -- until here all necessary for calling the search_recurse
+    (invar : state_type → Prop)
+    (return_value : Bool):
+      invar priorState ∧ (invar_carries_over_step g start goal search_step invar)
+      ∧ (search_recurse g start goal priorState not_terminated search_step does_not_set_teriminate termination_metric decreasing_proof).snd = return_value
+         → invar (search_recurse g start goal priorState not_terminated search_step does_not_set_teriminate termination_metric decreasing_proof).fst:= by
+      intro ⟨ prior_invar, invar_carries, returned_value⟩ 
+      unfold search_recurse 
+      simp_all
+      split
+      · next search_step_returned_none =>
+        -- recursive case
+        apply search_recurse_lift_invariant_under_return_assumption g start goal
+        rw [← and_assoc]
+        repeat constructor
+        rotate_right
+        · use return_value
+        · unfold invar_carries_over_step at invar_carries
+          apply invar_carries
+          exact prior_invar
+        · exact invar_carries
+        · unfold search_recurse at returned_value
+          simp_all
+      · next h =>
+        simp_all
+termination_by termination_metric priorState
+decreasing_by
+  next step_returned_none =>
+  apply decreasing_proof
+
+  let nextState : state_type := (search_step goal priorState).1
+  let still_not_terminated : (has_base_search_state.to_base_state nextState).terminated = false := by
+      apply does_not_set_teriminate
+      apply step_returned_none
+
+  apply still_not_terminated
+
+
 lemma search_recurse_lift_base_invariant [FinEnum V] [DecidableEq E] [DecidableEq V]
     (g: WeightedDiGraph V E) (start : V)
     {state_type : Type} [has_base_search_state g start state_type]
@@ -336,19 +418,3 @@ lemma search_recurse_lift_base_invariant [FinEnum V] [DecidableEq E] [DecidableE
       constructor
       · use invar_holds_on_base
       · use invar_carries
-
-
---∀ goal : V, 
---
---    (dfs_recurse g start goal priorState not_terminated).2 = true →
---     goal ∈ (dfs_recurse g start goal priorState not_terminated).1.visited := by
---
---    (dfs_recurse g start goal priorState not_terminated).2 = false
---    → goal ∉ priorState.stack
---
---    (dfs_recurse g start goal priorState not_terminated).2 = false →
---     (dfs_recurse g start goal priorState not_terminated).1.stack = [] := by
---
---    (dfs_recurse g start goal priorState not_terminated).2 = false 
---    ∧ goal ∉ priorState.visited
---    → goal ∉ (dfs_recurse g start goal priorState not_terminated).1.visited := by
