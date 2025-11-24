@@ -9,7 +9,6 @@ structure base_search_state [FinEnum V] [DecidableEq E] [DecidableEq V]
     pathOrder : V → Nat 
     mother : visited → V
     stack : List V
-    terminated : Bool
 
 
 -- type class for possible expansions later on
@@ -69,7 +68,7 @@ def base_search_state_initial (start : V): base_search_state g :=
   let initialMother : initialVisited → V := fun x => start 
   let initialPathOrder : V → Nat := fun x => 0 
   let initialStack : List V := [start]
-  base_search_state.mk initialVisited initialPathOrder initialMother initialStack false
+  base_search_state.mk initialVisited initialPathOrder initialMother initialStack
 
 
 ----- Proofs that the initial state of the DFS satisfies the invariants
@@ -106,11 +105,6 @@ lemma search_invar_on_stack_or_all_neighbours_visited_initial (start : V):
 lemma search_invar_start_visited_initial (start : V):
       search_invar_start_visited (g:=g) start (base_search_state_initial start) := by 
       unfold search_invar_start_visited  
-      unfold base_search_state_initial
-      simp
-
-lemma base_search_state_initial_is_not_termianted (start : V):
-      (base_search_state_initial (g:=g) start).terminated = false := by
       unfold base_search_state_initial
       simp
 

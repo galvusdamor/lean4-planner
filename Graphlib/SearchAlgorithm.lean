@@ -107,27 +107,19 @@ abbrev search_step_function (g : WeightedDiGraph V E)
     {state_type : Type} [has_base_search_state g state_type] :=
       V → state_type → state_type × (Option Bool)
 
-
-abbrev search_state_not_terminated (g: WeightedDiGraph V E)
-    {state_type : Type} [has_base_search_state g state_type]
-    (state : state_type):=
-    let base_state : base_search_state g := (has_base_search_state.to_base_state state)
-    base_state.terminated = false
-
-
-abbrev search_step_does_not_terminate 
-    (g: WeightedDiGraph V E) (goal : V)
-    {state_type : Type} [has_base_search_state g state_type]
-    (search_step : search_step_function (state_type := state_type) (g:=g)) :=
-    ∀ s :
-      state_type,
-        let res : state_type × (Option Bool) := search_step goal s
-        let res_state : base_search_state g := (has_base_search_state.to_base_state res.fst)
-        res.snd = none → res_state.terminated = false
-
 def base_search_state_termination_metric 
     (s : base_search_state g): ℕ × ℕ :=
     (Fintype.card V - s.visited.card, s.stack.length)
+
+abbrev termination_metric_decreasing_proof
+   {state_type : Type} [has_base_search_state g state_type]
+  (goal : V)
+  (search_step : search_step_function (state_type := state_type) (g:=g))
+  (termination_metric : state_type → ℕ × ℕ) :=
+    ∀ s : state_type, (search_step goal s).2 = none → 
+        Prod.Lex (fun x1 x2 => x1 < x2) (fun x1 x2 => x1 < x2)
+        (termination_metric (search_step goal s).1) (termination_metric s)
+
 
 
 ------------------------------------------------------------------------------------------
@@ -136,52 +128,38 @@ def base_search_state_termination_metric
 def search_recurse {state_type : Type} [has_base_search_state g state_type]
     (goal : V)
     (priorState : state_type)
-    (not_terminated : search_state_not_terminated g (state_type := state_type) priorState)
     (search_step : search_step_function g)
-    (does_not_set_teriminate: search_step_does_not_terminate g goal (state_type := state_type) search_step)
     (termination_metric : state_type → ℕ × ℕ)
-    (decreasing_proof : ∀ s : state_type,
-        search_state_not_terminated g (search_step goal s).1 → 
-        Prod.Lex (fun x1 x2 => x1 < x2) (fun x1 x2 => x1 < x2)
-        (termination_metric (search_step goal s).1) (termination_metric s)):
+    (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric):
     state_type × Bool :=
   let qq := search_step goal priorState
   let nextState := qq.fst
   let result : Option Bool := qq.snd
   if result_is_none : result = none then 
-    let still_not_terminated : (has_base_search_state.to_base_state nextState).terminated = false := by
-      apply does_not_set_teriminate
-      apply result_is_none
-
+    
     --let still_not_terminated : nextState.terminated = false := by
-    search_recurse goal nextState
-      still_not_terminated search_step does_not_set_teriminate termination_metric decreasing_proof
+    search_recurse goal nextState search_step termination_metric decreasing_proof
   else ⟨ nextState, result.get (by apply Option.isSome_iff_ne_none.mpr ; exact result_is_none) ⟩ 
 termination_by termination_metric priorState
 decreasing_by
   apply decreasing_proof
-  apply still_not_terminated
+  apply result_is_none
 
 
 
 lemma search_recurse_obtain_termination_property {state_type : Type} [has_base_search_state g state_type]
     (goal : V)
     (priorState : state_type)
-    (not_terminated : search_state_not_terminated g (state_type := state_type) priorState)
     (search_step : search_step_function g)
-    (does_not_set_teriminate: search_step_does_not_terminate g goal (state_type := state_type) search_step)
     (termination_metric : state_type → ℕ × ℕ)
-    (decreasing_proof : ∀ s : state_type,
-        search_state_not_terminated g (search_step goal s).1 → 
-        Prod.Lex (fun x1 x2 => x1 < x2) (fun x1 x2 => x1 < x2)
-        (termination_metric (search_step goal s).1) (termination_metric s))
-    -- until here all necessary for calling the search_recurse
+    (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
+        -- until here all necessary for calling the search_recurse
     (terminated_with : Bool) -- recursion terminated with
     (property_after_termination : state_type → Prop):
       (∀ s : state_type, (search_step goal s).2 = some terminated_with → property_after_termination (search_step goal s).1)
     → 
-      ((search_recurse goal priorState not_terminated search_step does_not_set_teriminate termination_metric decreasing_proof).2 = terminated_with → 
-      property_after_termination (search_recurse goal priorState not_terminated search_step does_not_set_teriminate termination_metric decreasing_proof).1):= by
+      ((search_recurse goal priorState search_step termination_metric decreasing_proof).2 = terminated_with → 
+      property_after_termination (search_recurse goal priorState search_step termination_metric decreasing_proof).1):= by
       intro step_termination_property recursion_terminated_with
       unfold search_recurse at recursion_terminated_with ⊢
       simp_all
@@ -205,13 +183,7 @@ termination_by termination_metric priorState
 decreasing_by
   next step_returned_none =>
   apply decreasing_proof
-
-  let nextState : state_type := (search_step goal priorState).1
-  let still_not_terminated : (has_base_search_state.to_base_state nextState).terminated = false := by
-      apply does_not_set_teriminate
-      apply step_returned_none
-
-  apply still_not_terminated
+  apply step_returned_none
 
 
 abbrev invar_carries_over_step 
@@ -234,18 +206,13 @@ abbrev base_invar_carries_over_step
 lemma search_recurse_lift_invariant {state_type : Type} [has_base_search_state g state_type]
     (goal : V)
     (priorState : state_type)
-    (not_terminated : search_state_not_terminated g (state_type := state_type) priorState)
     (search_step : search_step_function (g:=g))
-    (does_not_set_teriminate: search_step_does_not_terminate g goal (state_type := state_type) search_step)
     (termination_metric : state_type → ℕ × ℕ)
-    (decreasing_proof : ∀ s : state_type,
-        search_state_not_terminated g (search_step goal s).1 → 
-        Prod.Lex (fun x1 x2 => x1 < x2) (fun x1 x2 => x1 < x2)
-        (termination_metric (search_step goal s).1) (termination_metric s))
-    -- until here all necessary for calling the search_recurse
+    (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
+        -- until here all necessary for calling the search_recurse
     (invar : state_type → Prop):
       invar priorState ∧ (invar_carries_over_step goal search_step invar)
-         → invar (search_recurse goal priorState not_terminated search_step does_not_set_teriminate termination_metric decreasing_proof).fst:= by
+         → invar (search_recurse goal priorState search_step termination_metric decreasing_proof).fst:= by
       intro ⟨ prior_invar, invar_carries ⟩ 
       unfold search_recurse 
       simp_all
@@ -264,33 +231,23 @@ termination_by termination_metric priorState
 decreasing_by
   next step_returned_none =>
   apply decreasing_proof
+  apply step_returned_none
 
-  let nextState : state_type := (search_step goal priorState).1
-  let still_not_terminated : (has_base_search_state.to_base_state nextState).terminated = false := by
-      apply does_not_set_teriminate
-      apply step_returned_none
-
-  apply still_not_terminated
 
 
 lemma search_recurse_lift_invariant_under_return_assumption 
     {state_type : Type} [has_base_search_state g state_type]
     (goal : V)
     (priorState : state_type)
-    (not_terminated : search_state_not_terminated g (state_type := state_type) priorState)
     (search_step : search_step_function g)
-    (does_not_set_teriminate: search_step_does_not_terminate g goal (state_type := state_type) search_step)
     (termination_metric : state_type → ℕ × ℕ)
-    (decreasing_proof : ∀ s : state_type,
-        search_state_not_terminated g (search_step goal s).1 → 
-        Prod.Lex (fun x1 x2 => x1 < x2) (fun x1 x2 => x1 < x2)
-        (termination_metric (search_step goal s).1) (termination_metric s))
-    -- until here all necessary for calling the search_recurse
+    (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
+        -- until here all necessary for calling the search_recurse
     (invar : state_type → Prop)
     (return_value : Bool):
       invar priorState ∧ (invar_carries_over_step goal search_step invar)
-      ∧ (search_recurse goal priorState not_terminated search_step does_not_set_teriminate termination_metric decreasing_proof).snd = return_value
-         → invar (search_recurse goal priorState not_terminated search_step does_not_set_teriminate termination_metric decreasing_proof).fst:= by
+      ∧ (search_recurse goal priorState search_step termination_metric decreasing_proof).snd = return_value
+         → invar (search_recurse goal priorState search_step termination_metric decreasing_proof).fst:= by
       intro ⟨ prior_invar, invar_carries, returned_value⟩ 
       unfold search_recurse 
       simp_all
@@ -314,34 +271,23 @@ termination_by termination_metric priorState
 decreasing_by
   next step_returned_none =>
   apply decreasing_proof
-
-  let nextState : state_type := (search_step goal priorState).1
-  let still_not_terminated : (has_base_search_state.to_base_state nextState).terminated = false := by
-      apply does_not_set_teriminate
-      apply step_returned_none
-
-  apply still_not_terminated
+  apply step_returned_none
 
 
 lemma search_recurse_lift_base_invariant  
     {state_type : Type} [has_base_search_state g state_type]
     (goal : V)
     (priorState : state_type)
-    (not_terminated : search_state_not_terminated g (state_type := state_type) priorState)
     (search_step : search_step_function g)
-    (does_not_set_teriminate: search_step_does_not_terminate g goal (state_type := state_type) search_step)
     (termination_metric : state_type → ℕ × ℕ)
-    (decreasing_proof : ∀ s : state_type,
-        search_state_not_terminated g (search_step goal s).1 → 
-        Prod.Lex (fun x1 x2 => x1 < x2) (fun x1 x2 => x1 < x2)
-        (termination_metric (search_step goal s).1) (termination_metric s))
-    -- until here all necessary for calling the search_recurse
+    (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
+        -- until here all necessary for calling the search_recurse
     (invar : base_search_state g → Prop):
       invar (has_base_search_state.to_base_state priorState)
       ∧ (base_invar_carries_over_step goal search_step invar)
-         → invar (has_base_search_state.to_base_state (search_recurse goal priorState not_terminated search_step does_not_set_teriminate termination_metric decreasing_proof).fst) := by
+         → invar (has_base_search_state.to_base_state (search_recurse goal priorState search_step termination_metric decreasing_proof).fst) := by
       intro ⟨invar_holds_on_base, invar_carries⟩
-      apply search_recurse_lift_invariant goal priorState not_terminated search_step does_not_set_teriminate termination_metric decreasing_proof (fun x => invar (has_base_search_state.to_base_state x)) -- fun needed to tell lean what the "invariant" is it should apply
+      apply search_recurse_lift_invariant goal priorState search_step termination_metric decreasing_proof (fun x => invar (has_base_search_state.to_base_state x)) -- fun needed to tell lean what the "invariant" is it should apply
       constructor
       · use invar_holds_on_base
       · use invar_carries
