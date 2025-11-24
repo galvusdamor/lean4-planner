@@ -20,9 +20,7 @@ theorem FinEnum.empty_to_list_empty_set (states : Finset V):
 
 
 theorem finsetLemma (a : Finset W) (b : Finset W): (b ⊆ a) → (a.card = b.card) → (x ∈ a) → x ∈ b := by 
-  intro b_sub_a
-  intro same_card
-  intro x_in_a
+  intro b_sub_a same_card x_in_a
   by_contra x_not_in_b
   have b_neq_a : b ≠ a := by
     simp_all only [ne_eq]
