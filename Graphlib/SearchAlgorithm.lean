@@ -6,87 +6,21 @@ import Mathlib.Data.List.MinMax
 import Graphlib.Lists
 import Graphlib.FinEnum
 import Graphlib.Basic
+import Graphlib.SearchState
 
 set_option trace.split.failure true
 --set_option diagnostics true
 
 -- def local global variable for a graph
---variable {V : Type} {E : Type} [FinEnum V] [DecidableEq V] [DecidableEq E]
---variable (G : WeightedDiGraph V E)
+variable {V : Type} {E : Type} [FinEnum V] [DecidableEq V] [DecidableEq E]
+variable {g : WeightedDiGraph V E}
 
 
-
------------------------------------------------------------------------
------- Search state of the DFS and its invariants
-structure base_search_state [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) where
-    visited : Finset V
-    pathOrder : V → Nat 
-    mother : visited → V
-    stack : List V
-    terminated : Bool
-
-class has_base_search_state [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) (B : Type) where
-  to_base_state : B → base_search_state g
-
-
-instance [FinEnum V] [DecidableEq E] [DecidableEq V](g: WeightedDiGraph V E):
-    has_base_search_state g (base_search_state g) where
-  to_base_state := fun x => x 
-
-abbrev search_prop_goal_on_stack[FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) (goal : V) (s : base_search_state g):=
-      goal ∈ s.stack
-
-abbrev search_prop_goal_visited[FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) (goal : V) (s : base_search_state g):=
-      goal ∈ s.visited
-
-abbrev search_prop_stack_empty[FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) (s : base_search_state g):=
-      s.stack = []
-
-abbrev search_invar_stack_is_visited [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) (s : base_search_state g):=
-      ∀ x : V, x ∈ s.stack → x ∈ s.visited
-
-abbrev search_invar_mother_is_visited [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) (s : base_search_state g):=
-      ∀ x : s.visited, s.mother x ∈ s.visited
-
-abbrev search_invar_mother_is_adjacent [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) (start : V) (s : base_search_state g):=
-      ∀ x : s.visited, ↑x ≠ start → g.Adj (s.mother x) x
-
-abbrev search_invar_mother_decreasing_path_order [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) (start : V) (s : base_search_state g) :=
-      ∀ x : s.visited, ↑x ≠ start → s.pathOrder (s.mother x) < s.pathOrder x 
-
-abbrev search_invar_on_stack_or_all_neighbours_visited [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) (s : base_search_state g):=
-      ∀ x : s.visited, ↑x ∈ s.stack ∨ ∀ y : V, (g.Adj x y) → y ∈ s.visited
-
-abbrev search_invar_start_visited [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) (start : V) (s : base_search_state g) :=
-      start ∈ s.visited
-
-abbrev search_invar_all_basic[FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) (start : V) (s : base_search_state g) :=
-      search_invar_stack_is_visited g s
-      ∧ search_invar_mother_is_visited g s
-      ∧ search_invar_mother_is_adjacent g start s
-      ∧ search_invar_mother_decreasing_path_order g start s
-      ∧ search_invar_on_stack_or_all_neighbours_visited g s
-      ∧ search_invar_start_visited g start s
-
-
-def extract_path_to [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) (start : V) (goal : V) (search_state : base_search_state g)
+def extract_path_to (start : V) (goal : V) (search_state : base_search_state g)
     (goal_reached : goal ∈ search_state.visited)
-    (mother_invar : search_invar_mother_is_visited g search_state)
-    (mother_invar_adj : search_invar_mother_is_adjacent g start search_state)
-    (decreasing_invar : search_invar_mother_decreasing_path_order g start search_state):
+    (mother_invar : search_invar_mother_is_visited search_state)
+    (mother_invar_adj : search_invar_mother_is_adjacent start search_state)
+    (decreasing_invar : search_invar_mother_decreasing_path_order start search_state):
       Σ' (p : Path g start goal), (∀ v ∈ support g p.walk, search_state.pathOrder v ≤ search_state.pathOrder goal):= 
       if start_is_goal : goal = start then
         let emptyW : Walk g start goal := start_is_goal ▸ Walk.nil
@@ -114,7 +48,7 @@ def extract_path_to [FinEnum V] [DecidableEq E] [DecidableEq V]
       else
         let goal_predecessor : V := search_state.mother ⟨ goal, goal_reached ⟩
         let ⟨ path_start_pre, order_proof ⟩ := -- : Path g start goal_predecessor :=
-          extract_path_to g start goal_predecessor search_state (by apply mother_invar) mother_invar mother_invar_adj decreasing_invar 
+          extract_path_to start goal_predecessor search_state (by apply mother_invar) mother_invar mother_invar_adj decreasing_invar 
         let pre_adj_goal : g.Adj goal_predecessor goal := mother_invar_adj ⟨ goal , goal_reached ⟩ start_is_goal
         let goal_not_visited : goal ∉ support g path_start_pre.walk := by
           by_contra goal_is_in_support
@@ -150,16 +84,16 @@ decreasing_by
   simp_all only [Subtype.forall, ne_eq, not_false_eq_true]
 
 
-theorem search_termination_with_empty_stack_implies_goal_visited [FinEnum V] [DecidableEq E] [DecidableEq V](g: WeightedDiGraph V E) (start : V) (goal : V) (f : V) 
+theorem search_termination_with_empty_stack_implies_goal_visited (start : V) (goal : V) (f : V) 
   (theWalk : Walk g f goal)
   (final_state : base_search_state g)
   (f_visited : f ∈ final_state.visited)
   (final_stack_empty : final_state.stack = [])
-  (on_stack_or_all_nei_visited : search_invar_on_stack_or_all_neighbours_visited g final_state): goal ∈ final_state.visited := by
+  (on_stack_or_all_nei_visited : search_invar_on_stack_or_all_neighbours_visited final_state): goal ∈ final_state.visited := by
     cases theWalk
     · exact f_visited
     · next nextNode adj rest_walk =>
-      apply search_termination_with_empty_stack_implies_goal_visited  g start goal nextNode rest_walk
+      apply search_termination_with_empty_stack_implies_goal_visited start goal nextNode rest_walk
       · unfold search_invar_on_stack_or_all_neighbours_visited at on_stack_or_all_nei_visited
         rw [final_stack_empty] at on_stack_or_all_nei_visited
         simp at on_stack_or_all_nei_visited
@@ -168,41 +102,38 @@ theorem search_termination_with_empty_stack_implies_goal_visited [FinEnum V] [De
       · exact on_stack_or_all_nei_visited
 
 
-abbrev search_step_function [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) 
+-- the graph should be an explicit parameter here
+abbrev search_step_function (g : WeightedDiGraph V E)
     {state_type : Type} [has_base_search_state g state_type] :=
       V → state_type → state_type × (Option Bool)
 
 
-abbrev search_state_not_terminated [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) 
+abbrev search_state_not_terminated (g: WeightedDiGraph V E)
     {state_type : Type} [has_base_search_state g state_type]
     (state : state_type):=
     let base_state : base_search_state g := (has_base_search_state.to_base_state state)
     base_state.terminated = false
 
 
-abbrev search_step_does_not_terminate [FinEnum V] [DecidableEq E] [DecidableEq V]
+abbrev search_step_does_not_terminate 
     (g: WeightedDiGraph V E) (goal : V)
     {state_type : Type} [has_base_search_state g state_type]
-    (search_step : search_step_function (state_type := state_type) g) :=
+    (search_step : search_step_function (state_type := state_type) (g:=g)) :=
     ∀ s :
       state_type,
         let res : state_type × (Option Bool) := search_step goal s
         let res_state : base_search_state g := (has_base_search_state.to_base_state res.fst)
         res.snd = none → res_state.terminated = false
 
-def base_search_state_termination_metric [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) (s : base_search_state g): ℕ × ℕ :=
+def base_search_state_termination_metric 
+    (s : base_search_state g): ℕ × ℕ :=
     (Fintype.card V - s.visited.card, s.stack.length)
 
 
 ------------------------------------------------------------------------------------------
 -- Search Recurse
 ------------------
-def search_recurse [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) 
-    {state_type : Type} [has_base_search_state g state_type]
+def search_recurse {state_type : Type} [has_base_search_state g state_type]
     (goal : V)
     (priorState : state_type)
     (not_terminated : search_state_not_terminated g (state_type := state_type) priorState)
@@ -223,7 +154,7 @@ def search_recurse [FinEnum V] [DecidableEq E] [DecidableEq V]
       apply result_is_none
 
     --let still_not_terminated : nextState.terminated = false := by
-    search_recurse g goal nextState
+    search_recurse goal nextState
       still_not_terminated search_step does_not_set_teriminate termination_metric decreasing_proof
   else ⟨ nextState, result.get (by apply Option.isSome_iff_ne_none.mpr ; exact result_is_none) ⟩ 
 termination_by termination_metric priorState
@@ -233,9 +164,7 @@ decreasing_by
 
 
 
-lemma search_recurse_obtain_termination_property [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E)
-    {state_type : Type} [has_base_search_state g state_type]
+lemma search_recurse_obtain_termination_property {state_type : Type} [has_base_search_state g state_type]
     (goal : V)
     (priorState : state_type)
     (not_terminated : search_state_not_terminated g (state_type := state_type) priorState)
@@ -251,8 +180,8 @@ lemma search_recurse_obtain_termination_property [FinEnum V] [DecidableEq E] [De
     (property_after_termination : state_type → Prop):
       (∀ s : state_type, (search_step goal s).2 = some terminated_with → property_after_termination (search_step goal s).1)
     → 
-      ((search_recurse g goal priorState not_terminated search_step does_not_set_teriminate termination_metric decreasing_proof).2 = terminated_with → 
-      property_after_termination (search_recurse g goal priorState not_terminated search_step does_not_set_teriminate termination_metric decreasing_proof).1):= by
+      ((search_recurse goal priorState not_terminated search_step does_not_set_teriminate termination_metric decreasing_proof).2 = terminated_with → 
+      property_after_termination (search_recurse goal priorState not_terminated search_step does_not_set_teriminate termination_metric decreasing_proof).1):= by
       intro step_termination_property recursion_terminated_with
       unfold search_recurse at recursion_terminated_with ⊢
       simp_all
@@ -260,7 +189,7 @@ lemma search_recurse_obtain_termination_property [FinEnum V] [DecidableEq E] [De
       · next search_step_returned_none =>
         -- recursive case
         simp_all
-        apply search_recurse_obtain_termination_property g goal
+        apply search_recurse_obtain_termination_property goal
         rotate_right
         · use terminated_with -- recursion termiantes with same result
         · apply step_termination_property
@@ -285,32 +214,28 @@ decreasing_by
   apply still_not_terminated
 
 
-abbrev invar_carries_over_step [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E)
+abbrev invar_carries_over_step 
     {state_type : Type} [has_base_search_state g state_type]
     (goal : V)
-    (search_step : search_step_function g (state_type := state_type))
+    (search_step : search_step_function (g:=g) (state_type := state_type))
     (invar : state_type → Prop) :=
       ∀ s : state_type, invar s → invar (search_step goal s).fst
 
 
-abbrev base_invar_carries_over_step [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E)
+abbrev base_invar_carries_over_step 
     {state_type : Type} [has_base_search_state g state_type]
     (goal : V)
-    (search_step : search_step_function g (state_type := state_type))
+    (search_step : search_step_function (g:=g) (state_type := state_type))
     (invar : base_search_state g → Prop) :=
       ∀ s : state_type, invar (has_base_search_state.to_base_state s) → invar (has_base_search_state.to_base_state (search_step goal s).fst)
 
 
 
-lemma search_recurse_lift_invariant [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E)
-    {state_type : Type} [has_base_search_state g state_type]
+lemma search_recurse_lift_invariant {state_type : Type} [has_base_search_state g state_type]
     (goal : V)
     (priorState : state_type)
     (not_terminated : search_state_not_terminated g (state_type := state_type) priorState)
-    (search_step : search_step_function g)
+    (search_step : search_step_function (g:=g))
     (does_not_set_teriminate: search_step_does_not_terminate g goal (state_type := state_type) search_step)
     (termination_metric : state_type → ℕ × ℕ)
     (decreasing_proof : ∀ s : state_type,
@@ -319,15 +244,15 @@ lemma search_recurse_lift_invariant [FinEnum V] [DecidableEq E] [DecidableEq V]
         (termination_metric (search_step goal s).1) (termination_metric s))
     -- until here all necessary for calling the search_recurse
     (invar : state_type → Prop):
-      invar priorState ∧ (invar_carries_over_step g goal search_step invar)
-         → invar (search_recurse g goal priorState not_terminated search_step does_not_set_teriminate termination_metric decreasing_proof).fst:= by
+      invar priorState ∧ (invar_carries_over_step goal search_step invar)
+         → invar (search_recurse goal priorState not_terminated search_step does_not_set_teriminate termination_metric decreasing_proof).fst:= by
       intro ⟨ prior_invar, invar_carries ⟩ 
       unfold search_recurse 
       simp_all
       split
       · next search_step_returned_none =>
         -- recursive case
-        apply search_recurse_lift_invariant g goal
+        apply search_recurse_lift_invariant goal
         constructor
         · unfold invar_carries_over_step at invar_carries
           apply invar_carries
@@ -348,8 +273,7 @@ decreasing_by
   apply still_not_terminated
 
 
-lemma search_recurse_lift_invariant_under_return_assumption [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E)
+lemma search_recurse_lift_invariant_under_return_assumption 
     {state_type : Type} [has_base_search_state g state_type]
     (goal : V)
     (priorState : state_type)
@@ -364,16 +288,16 @@ lemma search_recurse_lift_invariant_under_return_assumption [FinEnum V] [Decidab
     -- until here all necessary for calling the search_recurse
     (invar : state_type → Prop)
     (return_value : Bool):
-      invar priorState ∧ (invar_carries_over_step g goal search_step invar)
-      ∧ (search_recurse g goal priorState not_terminated search_step does_not_set_teriminate termination_metric decreasing_proof).snd = return_value
-         → invar (search_recurse g goal priorState not_terminated search_step does_not_set_teriminate termination_metric decreasing_proof).fst:= by
+      invar priorState ∧ (invar_carries_over_step goal search_step invar)
+      ∧ (search_recurse goal priorState not_terminated search_step does_not_set_teriminate termination_metric decreasing_proof).snd = return_value
+         → invar (search_recurse goal priorState not_terminated search_step does_not_set_teriminate termination_metric decreasing_proof).fst:= by
       intro ⟨ prior_invar, invar_carries, returned_value⟩ 
       unfold search_recurse 
       simp_all
       split
       · next search_step_returned_none =>
         -- recursive case
-        apply search_recurse_lift_invariant_under_return_assumption g goal
+        apply search_recurse_lift_invariant_under_return_assumption goal
         rw [← and_assoc]
         repeat constructor
         rotate_right
@@ -399,8 +323,7 @@ decreasing_by
   apply still_not_terminated
 
 
-lemma search_recurse_lift_base_invariant [FinEnum V] [DecidableEq E] [DecidableEq V]
-    (g: WeightedDiGraph V E) 
+lemma search_recurse_lift_base_invariant  
     {state_type : Type} [has_base_search_state g state_type]
     (goal : V)
     (priorState : state_type)
@@ -415,10 +338,10 @@ lemma search_recurse_lift_base_invariant [FinEnum V] [DecidableEq E] [DecidableE
     -- until here all necessary for calling the search_recurse
     (invar : base_search_state g → Prop):
       invar (has_base_search_state.to_base_state priorState)
-      ∧ (base_invar_carries_over_step g goal search_step invar)
-         → invar (has_base_search_state.to_base_state (search_recurse g goal priorState not_terminated search_step does_not_set_teriminate termination_metric decreasing_proof).fst) := by
+      ∧ (base_invar_carries_over_step goal search_step invar)
+         → invar (has_base_search_state.to_base_state (search_recurse goal priorState not_terminated search_step does_not_set_teriminate termination_metric decreasing_proof).fst) := by
       intro ⟨invar_holds_on_base, invar_carries⟩
-      apply search_recurse_lift_invariant g goal priorState not_terminated search_step does_not_set_teriminate termination_metric decreasing_proof (fun x => invar (has_base_search_state.to_base_state x)) -- fun needed to tell lean what the "invariant" is it should apply
+      apply search_recurse_lift_invariant goal priorState not_terminated search_step does_not_set_teriminate termination_metric decreasing_proof (fun x => invar (has_base_search_state.to_base_state x)) -- fun needed to tell lean what the "invariant" is it should apply
       constructor
       · use invar_holds_on_base
       · use invar_carries
