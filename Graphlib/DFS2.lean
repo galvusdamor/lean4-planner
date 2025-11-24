@@ -711,7 +711,7 @@ lemma dfs_not_visited_goal_if_returned_false
 
 
 def dfs(g: WeightedDiGraph V E) (start : V) (goal : V): Option (Path g start goal) :=
-  search_exe start goal (base_search_state_initial (g:=g)) (dfs_step g)  base_search_state_termination_metric (dfs_step_reduces_metric goal) (by apply dfs_visited_goal_if_returned_true) (by apply dfs_returns_with_mother_visited) (by apply dfs_returns_with_mother_adjacent) (by apply dfs_returns_with_mother_decreasing)
+  search_exe start goal (base_search_state_initial start) (dfs_step g)  base_search_state_termination_metric (dfs_step_reduces_metric goal) (by apply dfs_visited_goal_if_returned_true) (by apply dfs_returns_with_mother_visited) (by apply dfs_returns_with_mother_adjacent) (by apply dfs_returns_with_mother_decreasing)
 
 
 theorem dfs_is_sound (g: WeightedDiGraph V E) (start : V) (goal : V) :
