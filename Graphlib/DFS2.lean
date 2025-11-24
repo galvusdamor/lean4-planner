@@ -711,68 +711,18 @@ lemma dfs_not_visited_goal_if_returned_false
 
 
 def dfs(g: WeightedDiGraph V E) (start : V) (goal : V): Option (Path g start goal) :=
-  let dfs_ret := dfs_internal g start goal
-  let final_state :=dfs_ret.1
-  let found_goal := dfs_ret.2
-
-  if found_goal_true : found_goal = true then
-    some (extract_path_to start goal final_state
-      (dfs_visited_goal_if_returned_true start goal found_goal_true)
-      (dfs_returns_with_mother_visited start goal)
-      (dfs_returns_with_mother_adjacent start goal)
-      (dfs_returns_with_mother_decreasing start goal)).1
-  else
-    none
+  search_exe start goal (base_search_state_initial (g:=g)) (dfs_step g)  base_search_state_termination_metric (dfs_step_reduces_metric goal) (by apply dfs_visited_goal_if_returned_true) (by apply dfs_returns_with_mother_visited) (by apply dfs_returns_with_mother_adjacent) (by apply dfs_returns_with_mother_decreasing)
 
 
 theorem dfs_is_sound (g: WeightedDiGraph V E) (start : V) (goal : V) :
     (Option.isSome (dfs g start goal) → (∃ x : (Path g start goal), x = x)) := by
-  intro h -- Option.isSome true on some and false on none, x = x since we need a formula
-  constructor -- since goal is existence
-  rfl
-  let w := Option.get (dfs g start goal) -- Option.get extracts value of returned some and fails otherwise
-  apply w
-  simp_all
+  apply search_is_sound
 
 
-theorem dfs_is_complete (g: WeightedDiGraph V E) (start : V) (goal : V) :
+theorem dfs_is_complete (g: WeightedDiGraph V E) (start : V) (goal : V):
     ((∃ x : (Path g start goal), x = x) → Option.isSome (dfs g start goal)) := by
-    -- or Option.isNone (dfs g start goal) → ∄ x (Path g start goal), x = x
-      intro path_exists
-      apply Exists.elim path_exists
-      intro thePath a; clear a-- uninformativ x=X
-
-      let final := dfs_internal g start goal
-      let final_state := final.1
-      
-      have start_visited : search_invar_start_visited start final_state :=
-        dfs_returns_with_start_visited start goal 
-      have on_stack_or_all_nei_visited : search_invar_on_stack_or_all_neighbours_visited final_state:=
-        dfs_returns_with_node_on_stack_or_all_neighbours_visited start goal
-
-
-      by_contra terminates_with_none
-      simp at terminates_with_none
-
-      have dfs_returned_false : (dfs_internal g start goal).2 = false := by
-        unfold dfs at terminates_with_none
-        simp at terminates_with_none
-        exact terminates_with_none
-
-      have final_stack_empty : final_state.stack = [] :=
-        dfs_empty_stack_if_returned_false start goal dfs_returned_false
-
-      have goal_not_visited : goal ∉ final_state.visited :=
-        dfs_not_visited_goal_if_returned_false start goal dfs_returned_false
-
-      obtain ⟨theWalk, nodupe ⟩ := thePath
-      have goal_in_final := search_termination_with_empty_stack_implies_goal_visited start goal start theWalk final_state start_visited final_stack_empty on_stack_or_all_nei_visited
-      contradiction
-
-
-theorem dfs_is_complete_inv (g: WeightedDiGraph V E) (start : V) (goal : V) :
-    Option.isNone (dfs g start goal) → ¬ ∃ x : (Path g start goal), x = x := by
-      intro optionIsNone
-      by_contra pathExists
-      have isSome := dfs_is_complete g start goal pathExists
-      simp_all
+  apply search_is_complete
+  · apply dfs_returns_with_start_visited
+  · apply dfs_returns_with_node_on_stack_or_all_neighbours_visited
+  · apply dfs_empty_stack_if_returned_false
+  · apply dfs_not_visited_goal_if_returned_false
