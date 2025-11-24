@@ -23,7 +23,6 @@ structure base_search_state [FinEnum V] [DecidableEq E] [DecidableEq V]
     visited : Finset V
     pathOrder : V → Nat 
     mother : visited → V
-    mother_proof (v : visited): ↑v ≠ start → g.Adj (mother v) v
     stack : List V
     terminated : Bool
 
@@ -56,6 +55,10 @@ abbrev search_invar_mother_is_visited [FinEnum V] [DecidableEq E] [DecidableEq V
     (g: WeightedDiGraph V E) (start : V) (s : base_search_state g start):=
       ∀ x : s.visited, s.mother x ∈ s.visited
 
+abbrev search_invar_mother_is_adjacent [FinEnum V] [DecidableEq E] [DecidableEq V]
+    (g: WeightedDiGraph V E) (start : V) (s : base_search_state g start):=
+      ∀ x : s.visited, ↑x ≠ start → g.Adj (s.mother x) x
+
 abbrev search_invar_mother_decreasing_path_order [FinEnum V] [DecidableEq E] [DecidableEq V]
     (g: WeightedDiGraph V E) (start : V) (s : base_search_state g start) :=
       ∀ x : s.visited, ↑x ≠ start → s.pathOrder (s.mother x) < s.pathOrder x 
@@ -72,6 +75,7 @@ abbrev search_invar_all_basic[FinEnum V] [DecidableEq E] [DecidableEq V]
     (g: WeightedDiGraph V E) (start : V) (s : base_search_state g start) :=
       search_invar_stack_is_visited g start s
       ∧ search_invar_mother_is_visited g start s
+      ∧ search_invar_mother_is_adjacent g start s
       ∧ search_invar_mother_decreasing_path_order g start s
       ∧ search_invar_on_stack_or_all_neighbours_visited g start s
       ∧ search_invar_start_visited g start s
@@ -81,6 +85,7 @@ def extract_path_to [FinEnum V] [DecidableEq E] [DecidableEq V]
     (g: WeightedDiGraph V E) (start : V) (goal : V) (search_state : base_search_state g start)
     (goal_reached : goal ∈ search_state.visited)
     (mother_invar : search_invar_mother_is_visited g start search_state)
+    (mother_invar_adj : search_invar_mother_is_adjacent g start search_state)
     (decreasing_invar : search_invar_mother_decreasing_path_order g start search_state):
       Σ' (p : Path g start goal), (∀ v ∈ support g p.walk, search_state.pathOrder v ≤ search_state.pathOrder goal):= 
       if start_is_goal : goal = start then
@@ -109,8 +114,8 @@ def extract_path_to [FinEnum V] [DecidableEq E] [DecidableEq V]
       else
         let goal_predecessor : V := search_state.mother ⟨ goal, goal_reached ⟩
         let ⟨ path_start_pre, order_proof ⟩ := -- : Path g start goal_predecessor :=
-          extract_path_to g start goal_predecessor search_state (by apply mother_invar) mother_invar decreasing_invar 
-        let pre_adj_goal : g.Adj goal_predecessor goal := search_state.mother_proof ⟨ goal , goal_reached ⟩ start_is_goal
+          extract_path_to g start goal_predecessor search_state (by apply mother_invar) mother_invar mother_invar_adj decreasing_invar 
+        let pre_adj_goal : g.Adj goal_predecessor goal := mother_invar_adj ⟨ goal , goal_reached ⟩ start_is_goal
         let goal_not_visited : goal ∉ support g path_start_pre.walk := by
           by_contra goal_is_in_support
           have h := order_proof goal goal_is_in_support
@@ -157,7 +162,7 @@ theorem search_termination_with_empty_stack_implies_goal_visited [FinEnum V] [De
       apply search_termination_with_empty_stack_implies_goal_visited  g start goal nextNode rest_walk
       · unfold search_invar_on_stack_or_all_neighbours_visited at on_stack_or_all_nei_visited
         rw [final_stack_empty] at on_stack_or_all_nei_visited
-        simp_all
+        simp at on_stack_or_all_nei_visited
         apply on_stack_or_all_nei_visited f f_visited nextNode adj
       · exact final_stack_empty
       · exact on_stack_or_all_nei_visited
@@ -211,7 +216,7 @@ def search_recurse [FinEnum V] [DecidableEq E] [DecidableEq V]
     state_type × Bool :=
   let qq := search_step goal priorState
   let nextState := qq.fst
-  let result := qq.snd
+  let result : Option Bool := qq.snd
   if result_is_none : result = none then 
     let still_not_terminated : (has_base_search_state.to_base_state nextState).terminated = false := by
       apply does_not_set_teriminate
@@ -248,8 +253,7 @@ lemma search_recurse_obtain_termination_property [FinEnum V] [DecidableEq E] [De
     → 
       ((search_recurse g start goal priorState not_terminated search_step does_not_set_teriminate termination_metric decreasing_proof).2 = terminated_with → 
       property_after_termination (search_recurse g start goal priorState not_terminated search_step does_not_set_teriminate termination_metric decreasing_proof).1):= by
-      intro step_termination_property
-      intro recursion_terminated_with
+      intro step_termination_property recursion_terminated_with
       unfold search_recurse at recursion_terminated_with ⊢
       simp_all
       split
