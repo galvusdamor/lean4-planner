@@ -18,8 +18,7 @@ structure StripsAction (nvar : Nat) where
 def op : StripsAction 5 := StripsAction.mk {1} {2} {3} (by
   apply Finset.inter_singleton_of_notMem
   rw [← Finset.forall_mem_not_eq]
-  intro b
-  intro b_in_1
+  intro b b_in_1
   rw [Finset.mem_singleton] at b_in_1
   subst b_in_1 
   rw [← Fin.val_inj]
@@ -87,8 +86,7 @@ def stripsIsDeleteRelaxed (a: StripsAction nvar) := a.del = ∅
 lemma delete_relaxed_larger_state_is_better {a : StripsAction nvar} {s : StripsState nvar} {s' : StripsState nvar} : s ⊆ s' → (stripsApplicable a s) → stripsApplicable a s' := by
   unfold stripsApplicable
   simp
-  intro s_less_s'
-  intro a_appli
+  intro s_less_s' a_appli
   apply Finset.Subset.trans
   exact a_appli
   exact s_less_s'

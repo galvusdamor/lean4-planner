@@ -16,8 +16,7 @@ theorem pairwise_add_anywhere {α: Type} {pr: α → α → Prop} {l1 l2 : List 
       simp at rest_of_list
       constructor
       case left =>
-        intro a'
-        intro inl2
+        intro a' inl2
         apply allhold
         right
         exact inl2
@@ -26,8 +25,7 @@ theorem pairwise_add_anywhere {α: Type} {pr: α → α → Prop} {l1 l2 : List 
       simp
       constructor
       case left =>
-        intro a'
-        intro cond
+        intro a' cond
         by_cases isa : a' = a
         case pos =>
           apply symm
@@ -52,8 +50,7 @@ theorem pairwise_add_anywhere {α: Type} {pr: α → α → Prop} {l1 l2 : List 
             exact apinl2
       case right =>
         apply IH
-        · intro a'
-          intro stuff
+        · intro a' stuff
           apply allhold
           cases stuff
           case inl ainls =>
@@ -79,8 +76,7 @@ theorem pairwise_additional_does_not_matter {α: Type} {pr: α → α → Prop} 
       simp
       constructor
       case left =>
-        intro b
-        intro condition
+        intro b condition
         simp at longList
         cases condition
         case inl binl1s =>

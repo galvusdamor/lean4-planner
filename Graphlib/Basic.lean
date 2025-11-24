@@ -114,15 +114,12 @@ def extend_path (p : Path G u v) (h : G.Adj v w) (proof_w_not_in_support : w ∉
     simp only [List.pairwise_cons]
     apply And.intro
     ·
-      intro a ha
-      intro wa
+      intro a ha wa
       subst wa
       simp_all only [not_true_eq_false]
     exact p.support_nodup
     -- we need to prove that the ≠ function that occurs in nodup is symmetric (otherwise one of our helper theorems does not hold any more)
-    intro x y
-    intro notEq
-    intro h
+    intro x y notEq h
     apply notEq
     rw  [h]
   Path.mk path_walk path_nodup -- constructor new path
