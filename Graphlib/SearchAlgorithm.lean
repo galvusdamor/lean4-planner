@@ -390,74 +390,62 @@ lemma search_visited_goal_if_returned_true
       · exact terminated_with_goal_found 
 
 
---lemma dfs_returns_with_mother_visited (start : V) (goal : V):
---    search_invar_mother_is_visited (dfs_internal g start goal).1 := by
---    have all_invars := dfs_returns_with_invariants g start goal
---    unfold search_invar_all_basic at all_invars
---    exact all_invars.2.1
---
---lemma dfs_returns_with_mother_adjacent (start : V) (goal : V):
---    search_invar_mother_is_adjacent start (dfs_internal g start goal).1 := by
---    have all_invars := dfs_returns_with_invariants g start goal
---    unfold search_invar_all_basic at all_invars
---    exact all_invars.2.2.1
---
---lemma dfs_returns_with_mother_decreasing (start : V) (goal : V):
---    search_invar_mother_decreasing_path_order start (dfs_internal g start goal).1 := by
---    have all_invars := dfs_returns_with_invariants g start goal
---    unfold search_invar_all_basic at all_invars
---    exact all_invars.2.2.2.1
---
---lemma dfs_returns_with_start_visited (start : V) (goal : V):
---    search_invar_start_visited start (dfs_internal g start goal).1 := by
---    have all_invars := dfs_returns_with_invariants g start goal
---    unfold search_invar_all_basic at all_invars
---    exact all_invars.2.2.2.2.2
---
---lemma dfs_returns_with_node_on_stack_or_all_neighbours_visited (start : V) (goal : V):
---    search_invar_on_stack_or_all_neighbours_visited (dfs_internal g start goal).1 := by
---    have all_invars := dfs_returns_with_invariants g start goal
---    unfold search_invar_all_basic at all_invars
---    exact all_invars.2.2.2.2.1
+
+lemma search_returns_with_mother_visited
+  (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
+  (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
+  (invar_carries_over_step : base_invar_carries_over_step goal search_step (search_invar_all_basic start)):
+    search_invar_mother_is_visited (has_base_search_state.to_base_state (g:=g) (search_internal (start_state:=start_state) decreasing_proof).1) := by
+    have all_invars := search_returns_with_invariants (g:=g) decreasing_proof start_is_base_init invar_carries_over_step
+    unfold search_invar_all_basic at all_invars
+    exact all_invars.2.1
+
+lemma search_returns_with_mother_adjacent
+  (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
+  (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
+  (invar_carries_over_step : base_invar_carries_over_step goal search_step (search_invar_all_basic start)):
+    search_invar_mother_is_adjacent start (has_base_search_state.to_base_state (g:=g) (search_internal (start_state:=start_state) decreasing_proof).1) := by
+    have all_invars := search_returns_with_invariants (g:=g) decreasing_proof start_is_base_init invar_carries_over_step
+    unfold search_invar_all_basic at all_invars
+    exact all_invars.2.2.1
+
+lemma search_returns_with_mother_decreasing
+  (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
+  (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
+  (invar_carries_over_step : base_invar_carries_over_step goal search_step (search_invar_all_basic start)):
+    search_invar_mother_decreasing_path_order start (has_base_search_state.to_base_state (g:=g) (search_internal (start_state:=start_state) decreasing_proof).1) := by
+    have all_invars := search_returns_with_invariants (g:=g) decreasing_proof start_is_base_init invar_carries_over_step
+    unfold search_invar_all_basic at all_invars
+    exact all_invars.2.2.2.1
+
+lemma search_returns_with_start_visited
+  (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
+  (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
+  (invar_carries_over_step : base_invar_carries_over_step goal search_step (search_invar_all_basic start)):
+    search_invar_start_visited start (has_base_search_state.to_base_state (g:=g) (search_internal (start_state:=start_state) decreasing_proof).1) := by
+    have all_invars := search_returns_with_invariants (g:=g) decreasing_proof start_is_base_init invar_carries_over_step
+    unfold search_invar_all_basic at all_invars
+    exact all_invars.2.2.2.2.2
+
+lemma search_returns_with_node_on_stack_or_all_neighbours_visited 
+  (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
+  (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
+  (invar_carries_over_step : base_invar_carries_over_step goal search_step (search_invar_all_basic start)):
+    search_invar_on_stack_or_all_neighbours_visited (has_base_search_state.to_base_state (g:=g) (search_internal (start_state:=start_state) decreasing_proof).1) := by
+    have all_invars := search_returns_with_invariants (g:=g) decreasing_proof start_is_base_init invar_carries_over_step
+    unfold search_invar_all_basic at all_invars
+    exact all_invars.2.2.2.2.1
 
 
-abbrev search_returns_with_mother_visited {state_type : Type} [has_base_search_state g state_type]
-    (goal : V)
-    (start_state : state_type)
-    (search_step : search_step_function g)
-    (termination_metric : state_type → ℕ × ℕ)
-    (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric):=
-    search_invar_mother_is_visited (has_base_search_state.to_base_state (g:=g) (search_internal (start_state:=start_state) decreasing_proof).1)
 
-abbrev search_returns_with_mother_adjacent {state_type : Type} [has_base_search_state g state_type]
-    (start : V)
-    (goal : V)
-    (start_state : state_type)
-    (search_step : search_step_function g)
-    (termination_metric : state_type → ℕ × ℕ)
-    (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric):=
-    search_invar_mother_is_adjacent start (has_base_search_state.to_base_state (g:=g) (search_internal (start_state:=start_state) decreasing_proof).1)
-
-abbrev search_returns_with_mother_decreasing {state_type : Type} [has_base_search_state g state_type]
-    (start : V)
-    (goal : V)
-    (start_state : state_type)
-    (search_step : search_step_function g)
-    (termination_metric : state_type → ℕ × ℕ)
-    (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric):= 
-    search_invar_mother_decreasing_path_order start (has_base_search_state.to_base_state (g:=g) (search_internal (start_state:=start_state) decreasing_proof).1)
-
+------------------------------------------------------------------------------
+-- Execution of search
 
 def search_exe
     (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
     (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
     (invar_carries_over_step : base_invar_carries_over_step goal search_step (search_invar_all_basic start))
-    (goal_on_stack_if_terminated : search_step_goal_on_stack_if_terminated (search_step:=search_step))
-
------
-    (mother_visited : search_returns_with_mother_visited goal start_state search_step termination_metric decreasing_proof)
-    (mother_adjacent : search_returns_with_mother_adjacent start goal start_state search_step termination_metric decreasing_proof)
-    (mother_decreasing : search_returns_with_mother_decreasing start goal start_state search_step termination_metric decreasing_proof):
+    (goal_on_stack_if_terminated : search_step_goal_on_stack_if_terminated (search_step:=search_step)):
     Option (Path g start goal) :=
   let ret := search_internal decreasing_proof
   let final_state:= ret.1
@@ -465,109 +453,73 @@ def search_exe
 
   if found_goal_true : found_goal = true then
 
-    have goal_in_final_visited : goal ∈ (has_base_search_state.to_base_state (g:=g) (search_internal (start_state:=start_state) decreasing_proof).1).visited := by
-      apply search_visited_goal_if_returned_true 
-      · use start_is_base_init
-      · use invar_carries_over_step
-      · use goal_on_stack_if_terminated
-      · use found_goal_true
+    have goal_in_final_visited :=
+      search_visited_goal_if_returned_true decreasing_proof start_is_base_init invar_carries_over_step goal_on_stack_if_terminated found_goal_true
+
+    have mother_visited := search_returns_with_mother_visited decreasing_proof start_is_base_init invar_carries_over_step
+
+    have mother_adjacent := search_returns_with_mother_adjacent decreasing_proof start_is_base_init invar_carries_over_step
+
+    have mother_decreasing := search_returns_with_mother_decreasing decreasing_proof start_is_base_init invar_carries_over_step
 
     some (extract_path_to start goal (has_base_search_state.to_base_state final_state)
       goal_in_final_visited mother_visited mother_adjacent mother_decreasing).1
   else
     none
 
-theorem search_is_sound {state_type : Type} [has_base_search_state g state_type]
-    (start : V)
-    (goal : V)
-    (start_state : state_type)
-    (search_step : search_step_function g)
-    (termination_metric : state_type → ℕ × ℕ)
+theorem search_is_sound
     (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
-    (goal_if_return_true : search_visited_goal_if_returned_true goal start_state search_step termination_metric decreasing_proof)
-    (mother_visited : search_returns_with_mother_visited goal start_state search_step termination_metric decreasing_proof)
-    (mother_adjacent : search_returns_with_mother_adjacent start goal start_state search_step termination_metric decreasing_proof)
-    (mother_decreasing : search_returns_with_mother_decreasing start goal start_state search_step termination_metric decreasing_proof):
-    (Option.isSome (search_exe start goal start_state search_step termination_metric decreasing_proof goal_if_return_true mother_visited mother_adjacent mother_decreasing) → (∃ x : (Path g start goal), x = x)) := by
+    (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
+    (invar_carries_over_step : base_invar_carries_over_step goal search_step (search_invar_all_basic start))
+    (goal_on_stack_if_terminated : search_step_goal_on_stack_if_terminated (search_step:=search_step)):
+    (Option.isSome (search_exe decreasing_proof start_is_base_init invar_carries_over_step goal_on_stack_if_terminated) → (∃ x : (Path g start goal), x = x)) := by
   intro h -- Option.isSome true on some and false on none, x = x since we need a formula
   constructor -- since goal is existence
   rfl
-  let w := Option.get (search_exe start goal start_state search_step termination_metric decreasing_proof goal_if_return_true mother_visited mother_adjacent mother_decreasing) -- Option.get extracts value of returned some and fails otherwise
+  let w := Option.get (search_exe decreasing_proof start_is_base_init invar_carries_over_step goal_on_stack_if_terminated) -- Option.get extracts value of returned some and fails otherwise
   apply w
   simp_all
 
 
-abbrev search_returns_with_start_visited {state_type : Type} [has_base_search_state g state_type]
-    (start : V)
-    (goal : V)
-    (start_state : state_type)
-    (search_step : search_step_function g)
-    (termination_metric : state_type → ℕ × ℕ)
-    (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric):=
-    search_invar_start_visited start (has_base_search_state.to_base_state (g:=g) (search_internal goal start_state search_step termination_metric decreasing_proof).1)
 
-abbrev search_returns_with_node_on_stack_or_all_neighbours_visited {state_type : Type} [has_base_search_state g state_type]
-    (goal : V)
-    (start_state : state_type)
-    (search_step : search_step_function g)
-    (termination_metric : state_type → ℕ × ℕ)
-    (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric):=
-    search_invar_on_stack_or_all_neighbours_visited (has_base_search_state.to_base_state (g:=g) (search_internal goal start_state search_step termination_metric decreasing_proof).1)
-
-abbrev search_empty_stack_if_returned_false{state_type : Type} [has_base_search_state g state_type]
-    (goal : V)
-    (start_state : state_type)
-    (search_step : search_step_function g)
-    (termination_metric : state_type → ℕ × ℕ)
-    (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
+abbrev search_empty_stack_if_returned_false
+  (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
 :=
-    (search_internal goal start_state search_step termination_metric decreasing_proof).2 = false → (has_base_search_state.to_base_state (g:=g) (search_internal goal start_state search_step termination_metric decreasing_proof).1).stack = [] 
+    (search_internal (start_state := start_state) decreasing_proof).2 = false → (has_base_search_state.to_base_state (g:=g) (search_internal (start_state := start_state) decreasing_proof).1).stack = [] 
 
 
-abbrev search_not_visited_goal_if_returned_false{state_type : Type} [has_base_search_state g state_type]
-    (goal : V)
-    (start_state : state_type)
-    (search_step : search_step_function g)
-    (termination_metric : state_type → ℕ × ℕ)
+abbrev search_not_visited_goal_if_returned_false
     (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
     :=
-    (search_internal goal start_state search_step termination_metric decreasing_proof).2 = false → goal ∉ (has_base_search_state.to_base_state (g:=g) (search_internal goal start_state search_step termination_metric decreasing_proof).1).visited
+    (search_internal (start_state := start_state) decreasing_proof).2 = false → goal ∉ (has_base_search_state.to_base_state (g:=g) (search_internal (start_state := start_state) decreasing_proof).1).visited
 
 
-theorem search_is_complete {state_type : Type} [has_base_search_state g state_type]
-    (start : V)
-    (goal : V)
-    (start_state : state_type)
-    (search_step : search_step_function g)
-    (termination_metric : state_type → ℕ × ℕ)
+theorem search_is_complete 
     (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
-    (goal_if_return_true : search_visited_goal_if_returned_true goal start_state search_step termination_metric decreasing_proof)
-    (mother_visited : search_returns_with_mother_visited goal start_state search_step termination_metric decreasing_proof)
-    (mother_adjacent : search_returns_with_mother_adjacent start goal start_state search_step termination_metric decreasing_proof)
-    (mother_decreasing : search_returns_with_mother_decreasing start goal start_state search_step termination_metric decreasing_proof)
-    (start_visited : search_returns_with_start_visited start goal start_state search_step termination_metric decreasing_proof)
-    (on_stack_or_all_nei_visited : search_returns_with_node_on_stack_or_all_neighbours_visited goal start_state search_step termination_metric decreasing_proof)
-    (stack_empty_if_returned_false : search_empty_stack_if_returned_false goal start_state search_step termination_metric decreasing_proof)
-    (goal_not_visited_if_returned_false : search_not_visited_goal_if_returned_false goal start_state search_step termination_metric decreasing_proof):
-    ((∃ x : (Path g start goal), x = x) → Option.isSome (search_exe start goal start_state search_step termination_metric decreasing_proof goal_if_return_true mother_visited mother_adjacent mother_decreasing)) := by
+    (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
+    (invar_carries_over_step : base_invar_carries_over_step goal search_step (search_invar_all_basic start))
+    (goal_on_stack_if_terminated : search_step_goal_on_stack_if_terminated (search_step:=search_step))
+----
+    (stack_empty_if_returned_false : search_empty_stack_if_returned_false (start_state:=start_state) decreasing_proof)
+    (goal_not_visited_if_returned_false : search_not_visited_goal_if_returned_false (start_state:=start_state) decreasing_proof):
+    ((∃ x : (Path g start goal), x = x) → Option.isSome (search_exe decreasing_proof start_is_base_init invar_carries_over_step goal_on_stack_if_terminated)) := by
     -- or Option.isNone (dfs g start goal) → ∄ x (Path g start goal), x = x
       intro path_exists
       apply Exists.elim path_exists
       intro thePath a; clear a-- uninformativ x=X
 
-      let final := search_internal goal start_state search_step termination_metric decreasing_proof
+      let final := search_internal (start_state:=start_state) decreasing_proof
       let final_state : base_search_state g := has_base_search_state.to_base_state final.1
       
-      --have start_visited : search_invar_start_visited start final_state :=
-      --  search_returns_with_start_visited start goal start_state search_step termination_metric decreasing_proof goal_if_return_true mother_visited mother_adjacent mother_decreasing
-      --have on_stack_or_all_nei_visited : search_invar_on_stack_or_all_neighbours_visited final_state:=
-      --  dfs_returns_with_node_on_stack_or_all_neighbours_visited start goal
-
+      have start_visited : search_invar_start_visited start final_state :=
+        search_returns_with_start_visited decreasing_proof start_is_base_init invar_carries_over_step
+      have on_stack_or_all_nei_visited : search_invar_on_stack_or_all_neighbours_visited final_state:=
+        search_returns_with_node_on_stack_or_all_neighbours_visited decreasing_proof start_is_base_init invar_carries_over_step 
 
       by_contra terminates_with_none
       simp at terminates_with_none
 
-      have dfs_returned_false : (search_internal goal start_state search_step termination_metric decreasing_proof).2 = false := by
+      have dfs_returned_false : (search_internal (start_state:=start_state) decreasing_proof).2 = false := by
         unfold search_exe at terminates_with_none
         simp at terminates_with_none
         exact terminates_with_none
@@ -581,25 +533,18 @@ theorem search_is_complete {state_type : Type} [has_base_search_state g state_ty
       contradiction
 
 
-theorem search_is_complete_inv  {state_type : Type} [has_base_search_state g state_type]
-    (start : V)
-    (goal : V)
-    (start_state : state_type)
-    (search_step : search_step_function g)
-    (termination_metric : state_type → ℕ × ℕ)
+theorem search_is_complete_inv
     (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
-    (goal_if_return_true : search_visited_goal_if_returned_true goal start_state search_step termination_metric decreasing_proof)
-    (mother_visited : search_returns_with_mother_visited goal start_state search_step termination_metric decreasing_proof)
-    (mother_adjacent : search_returns_with_mother_adjacent start goal start_state search_step termination_metric decreasing_proof)
-    (mother_decreasing : search_returns_with_mother_decreasing start goal start_state search_step termination_metric decreasing_proof)
-    (start_visited : search_returns_with_start_visited start goal start_state search_step termination_metric decreasing_proof)
-    (on_stack_or_all_nei_visited : search_returns_with_node_on_stack_or_all_neighbours_visited goal start_state search_step termination_metric decreasing_proof)
-    (stack_empty_if_returned_false : search_empty_stack_if_returned_false goal start_state search_step termination_metric decreasing_proof)
-    (goal_not_visited_if_returned_false : search_not_visited_goal_if_returned_false goal start_state search_step termination_metric decreasing_proof):
-    Option.isNone (search_exe start goal start_state search_step termination_metric decreasing_proof goal_if_return_true mother_visited mother_adjacent mother_decreasing) → ¬ ∃ x : (Path g start goal), x = x := by
+    (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
+    (invar_carries_over_step : base_invar_carries_over_step goal search_step (search_invar_all_basic start))
+    (goal_on_stack_if_terminated : search_step_goal_on_stack_if_terminated (search_step:=search_step))
+----
+    (stack_empty_if_returned_false : search_empty_stack_if_returned_false (start_state:=start_state) decreasing_proof)
+    (goal_not_visited_if_returned_false : search_not_visited_goal_if_returned_false (start_state:=start_state) decreasing_proof):
+    Option.isNone (search_exe decreasing_proof start_is_base_init invar_carries_over_step goal_on_stack_if_terminated) → ¬ ∃ x : (Path g start goal), x = x := by
       intro optionIsNone
       by_contra pathExists
-      have isSome := search_is_complete start goal start_state search_step termination_metric decreasing_proof goal_if_return_true mother_visited mother_adjacent mother_decreasing start_visited on_stack_or_all_nei_visited stack_empty_if_returned_false goal_not_visited_if_returned_false
+      have isSome := search_is_complete decreasing_proof start_is_base_init invar_carries_over_step goal_on_stack_if_terminated stack_empty_if_returned_false goal_not_visited_if_returned_false
       simp_all
 
 end
