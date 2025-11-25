@@ -376,17 +376,11 @@ lemma dfs_step_keeps_goal_on_stack
       · simp_all
         split
         · simp_all
-        · simp_all
-          unfold dfs_step_expand
+        · unfold dfs_step_expand
           simp_all
-          right
           cases goal_prior_on_stack
-          · next h h' =>
-            rw [← h'] at h
-            contradiction 
-          · next h => exact h
-
-
+          all_goals
+            simp_all
 
 lemma dfs_step_goal_on_stack_if_terminated (priorState : base_search_state g):
     ∀ goal : V, (dfs_step g goal priorState).2 = true →
@@ -544,7 +538,23 @@ lemma dfs_recurse_if_goal_on_stack_it_remains
       · exact invar_initial
       · unfold invar_carries_over_step
         apply dfs_step_keeps_goal_on_stack
-        
+
+
+lemma dfs_step_goal_becomes_visited_it_is_on_stack:
+  goal ∉ priorState.visited ∧ goal ∈ (dfs_step g goal priorState).1.visited 
+  → goal ∈ (dfs_step g goal priorState).1.stack
+    := by 
+  intro ⟨ goal_was_not_visited, goal_now_visited ⟩  
+  unfold dfs_step at goal_now_visited ⊢
+  split
+  · simp_all
+  · simp_all
+    split
+    · simp_all
+    · simp_all
+      unfold dfs_step_expand at goal_now_visited ⊢
+      simp_all
+
 
 lemma dfs_recurse_goal_not_visited_if_terminated
     (priorState : base_search_state g)
@@ -556,8 +566,7 @@ lemma dfs_recurse_goal_not_visited_if_terminated
   have new_new := terminated_with_false
 
   apply dfs_empty_stack_if_returned_false_recurse at terminated_with_false
-  · --unfold dfs_internal at terminated_with_false
-    unfold dfs_recurse at terminated_with_false
+  · unfold dfs_recurse at terminated_with_false
     unfold search_recurse at terminated_with_false
     simp_all
     split at terminated_with_false
@@ -573,45 +582,23 @@ lemma dfs_recurse_goal_not_visited_if_terminated
           unfold search_recurse at new_new
           simp_all
           exact new_new 
-        · unfold dfs_step
-          split
-          · simp_all
-          · split
-            · simp_all
-            · next l head tail composed head_not_goal =>
-              simp_all
-              unfold dfs_step_expand
-              simp_all
-              by_contra head_adj_goal
-              have goal_is_now_on_stack : goal ∈ (dfs_step g goal priorState).1.stack := by
-                unfold dfs_step
-                simp_all
-                unfold dfs_step_expand
-                simp_all
-              apply dfs_recurse_if_goal_on_stack_it_remains at goal_is_now_on_stack
-              · unfold dfs_recurse at goal_is_now_on_stack
-                unfold search_prop_goal_on_stack at goal_is_now_on_stack              
-                rw [terminated_with_false] at goal_is_now_on_stack
-                simp_all only [List.not_mem_nil]
+        · by_contra goal_is_visited_after_step
+
+          have goal_now_on_stack : goal ∈ (dfs_step g goal priorState).1.stack:= by
+            apply dfs_step_goal_becomes_visited_it_is_on_stack
+            exact ⟨ goal_not_visited, goal_is_visited_after_step ⟩ 
+          
+          have goal_in_final_stack := dfs_recurse_if_goal_on_stack_it_remains (dfs_step g goal priorState).1 goal goal_now_on_stack
+          unfold search_prop_goal_on_stack at goal_in_final_stack
+          unfold dfs_recurse at goal_in_final_stack
+          simp_all only [List.not_mem_nil]
     · next step_returns_not_none =>
       unfold dfs_recurse
       unfold search_recurse
       simp_all
-      unfold dfs_step at terminated_with_false ⊢
-      by_cases stack_empty : priorState.stack = []
-      · simp_all
-      · apply List.length_pos_iff.mpr at stack_empty
-        apply List.exists_cons_of_length_pos at stack_empty
-        obtain ⟨head, tail, compose⟩ := stack_empty 
-        simp_all
-        split
-        · simp_all
-        · next head_not_goal =>
-          simp_all
-          unfold dfs_step_expand at terminated_with_false ⊢
-          simp_all
-          by_contra head_adj_goal
-          simp_all
+      by_contra goal_visited_after
+      have h := dfs_step_goal_becomes_visited_it_is_on_stack ⟨ goal_not_visited, goal_visited_after ⟩
+      simp_all only [List.not_mem_nil] 
 termination_by base_search_state_termination_metric priorState
 decreasing_by
   apply dfs_step_reduces_metric goal
