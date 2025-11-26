@@ -293,6 +293,7 @@ decreasing_by
   apply step_returned_none
 
 
+
 lemma search_recurse_lift_base_invariant  
     {state_type : Type} [has_base_search_state g state_type]
     (goal : V)
@@ -310,6 +311,67 @@ lemma search_recurse_lift_base_invariant
       constructor
       · use invar_holds_on_base
       · use invar_carries
+
+
+
+abbrev invar_becoming_true_causes_other_invar 
+    {state_type : Type} [has_base_search_state g state_type]
+    (goal : V)
+    (search_step : search_step_function (g:=g) (state_type := state_type))
+    (invar_1 : state_type → Prop) (invar_2 : state_type → Prop) :=
+      ∀ s : state_type, ¬ invar_1 s ∧ invar_1 (search_step goal s).fst → invar_2 (search_step goal s).fst
+
+
+lemma search_recurse_lift_invariant_under_trigger
+    {state_type : Type} [has_base_search_state g state_type]
+    (goal : V)
+    (priorState : state_type)
+    (search_step : search_step_function g)
+    (termination_metric : state_type → ℕ × ℕ)
+    (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
+        -- until here all necessary for calling the search_recurse
+    (invar_end : state_type → Prop)
+    (invar_middle : state_type → Prop):
+      (¬ invar_middle (search_recurse goal priorState search_step termination_metric decreasing_proof).fst)
+      ∧ (¬ invar_end priorState)
+      ∧ (invar_carries_over_step goal search_step invar_middle)
+      ∧ (invar_becoming_true_causes_other_invar goal search_step invar_end invar_middle)
+      → ¬ invar_end (search_recurse goal priorState search_step termination_metric decreasing_proof).fst:= by
+      intro ⟨ terminated_with_invar_middle_false, not_invar_end_prior, invar_middle_carries, invar_end_triggers_middle⟩ 
+
+      unfold search_recurse at terminated_with_invar_middle_false ⊢
+      simp_all
+      split
+      · simp_all
+        let next_state := (search_step goal priorState).1
+        by_cases invar_end next_state
+        · next invar_end_becomes_true =>
+          have invar_middle_becomes_true := invar_end_triggers_middle priorState ⟨not_invar_end_prior, invar_end_becomes_true ⟩
+          have invar_middle_stays_true : invar_middle (search_recurse goal (search_step goal priorState).1 search_step termination_metric decreasing_proof).1 := by
+            apply search_recurse_lift_invariant
+            exact ⟨ invar_middle_becomes_true, invar_middle_carries⟩ 
+          contradiction
+        · next invar_end_not_true =>
+          apply search_recurse_lift_invariant_under_trigger
+          rotate_left
+          · use invar_middle 
+          · repeat rw [← and_assoc]
+            repeat constructor
+            · use terminated_with_invar_middle_false
+            · use invar_end_not_true
+            · use invar_middle_carries 
+            · use invar_end_triggers_middle 
+      · -- search step showed termination
+        simp_all
+        by_contra invar_end_becomes_true
+        have invar_middle_becomes_true := invar_end_triggers_middle priorState ⟨not_invar_end_prior, invar_end_becomes_true ⟩
+        contradiction
+termination_by termination_metric priorState
+decreasing_by
+  next step_returned_none invar_holds =>
+  apply decreasing_proof
+  apply step_returned_none
+
 
 section
 
