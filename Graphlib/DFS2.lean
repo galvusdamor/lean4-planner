@@ -413,6 +413,28 @@ lemma dfs_step_stack_empty_if_terminated_without_goal (priorState : base_search_
       simp_all
 
 
+lemma dfs_step_goal_becomes_visited_it_is_on_stack:
+  goal ∉ priorState.visited ∧ goal ∈ (dfs_step g goal priorState).1.visited 
+  → search_prop_goal_on_stack goal (dfs_step g goal priorState).1
+    := by 
+  intro ⟨ goal_was_not_visited, goal_now_visited ⟩  
+  unfold dfs_step at goal_now_visited ⊢
+  split
+  · simp_all
+  · simp_all
+    split
+    · simp_all
+    · unfold search_prop_goal_on_stack
+      simp_all
+      unfold dfs_step_expand at goal_now_visited ⊢
+      simp_all
+
+lemma dfs_step_terminates_when_goal_stack_head:
+  (∃ tail : List V, priorState.stack = goal :: tail) → (dfs_step g goal priorState).2 = some true := by
+  intro ⟨ tail, goal_head ⟩ 
+  unfold dfs_step
+  simp_all
+
 --------------------------------------------------------------------------------------------------
 -- main recursion loop 
 
@@ -528,24 +550,6 @@ lemma dfs_empty_stack_if_returned_false (start : V) (goal : V):
     exact terminated_with_goal_not_found
 
 
-lemma dfs_step_goal_becomes_visited_it_is_on_stack:
-  goal ∉ priorState.visited ∧ goal ∈ (dfs_step g goal priorState).1.visited 
-  → search_prop_goal_on_stack goal (dfs_step g goal priorState).1
-    := by 
-  intro ⟨ goal_was_not_visited, goal_now_visited ⟩  
-  unfold dfs_step at goal_now_visited ⊢
-  split
-  · simp_all
-  · simp_all
-    split
-    · simp_all
-    · unfold search_prop_goal_on_stack
-      simp_all
-      unfold dfs_step_expand at goal_now_visited ⊢
-      simp_all
-
-
-
 
 lemma dfs_recurse_goal_not_visited_if_terminated
     (priorState : base_search_state g):
@@ -608,5 +612,8 @@ theorem dfs_is_complete (g: WeightedDiGraph V E) (start : V) (goal : V):
   · rfl
   · apply dfs_step_keeps_all_basic_invars
   · apply dfs_step_goal_on_stack_if_terminated
-  · apply dfs_empty_stack_if_returned_false
-  · apply dfs_not_visited_goal_if_returned_false
+  · intro s
+    apply dfs_step_stack_empty_if_terminated_without_goal
+  · apply dfs_step_keeps_goal_on_stack
+  · apply dfs_step_goal_becomes_visited_it_is_on_stack 
+  · apply dfs_step_terminates_when_goal_stack_head 
