@@ -532,66 +532,6 @@ def dfs_recurse (goal : V) (priorState : base_search_state g):
 def dfs_internal(g: WeightedDiGraph V E) (start : V) (goal : V):
     (base_search_state g) × Bool := dfs_recurse goal (base_search_state_initial start)
 
-lemma dfs_empty_stack_if_returned_false_recurse
-    (goal : V) (priorState : base_search_state g):
-    (dfs_recurse goal priorState).2 = false → search_prop_stack_empty (dfs_recurse goal priorState).1 := by
-    intro terminated_with_goal_not_found
-    unfold dfs_recurse
-    apply search_recurse_obtain_termination_property goal priorState (property_after_termination := search_prop_stack_empty (g:=g)) (terminated_with := false) 
-    · intro s
-      apply dfs_step_stack_empty_if_terminated_without_goal 
-    · exact terminated_with_goal_not_found
-
-lemma dfs_empty_stack_if_returned_false (start : V) (goal : V):
-    (dfs_internal g start goal).2 = false → (dfs_internal g start goal).1.stack = [] := by
-    intro terminated_with_goal_not_found
-    unfold dfs_internal at terminated_with_goal_not_found ⊢ 
-    apply dfs_empty_stack_if_returned_false_recurse
-    exact terminated_with_goal_not_found
-
-
-
-lemma dfs_recurse_goal_not_visited_if_terminated
-    (priorState : base_search_state g):
-    ∀ goal : V, (dfs_recurse goal priorState).2 = false 
-    ∧ ¬ search_prop_goal_visited goal priorState
-    → ¬ search_prop_goal_visited goal (dfs_recurse goal priorState).1 := by
-    intro goal ⟨ terminated_with_false, goal_not_visited_before ⟩ 
-    unfold dfs_recurse
-    apply search_recurse_lift_invariant_under_trigger goal priorState (dfs_step g) 
-    repeat rw [← and_assoc]
-    repeat constructor
-    rotate_right
-    · use search_prop_goal_on_stack goal
-    · apply dfs_empty_stack_if_returned_false_recurse at terminated_with_false
-      unfold search_prop_goal_on_stack at ⊢  
-      unfold search_prop_stack_empty at terminated_with_false
-      unfold dfs_recurse at terminated_with_false
-      simp_all
-    · apply goal_not_visited_before
-    · apply dfs_step_keeps_goal_on_stack
-    · apply dfs_step_goal_becomes_visited_it_is_on_stack
-
-
-lemma dfs_not_visited_goal_if_returned_false
-    (start : V) (goal : V):
-    (dfs_internal g start goal).2 = false → goal ∉ (dfs_internal g start goal).1.visited := by
-     intro terminated_with_not_goal_found
-     unfold dfs_internal at terminated_with_not_goal_found ⊢ 
-     apply dfs_recurse_goal_not_visited_if_terminated
-     constructor
-     · exact terminated_with_not_goal_found 
-     · unfold base_search_state_initial
-       unfold search_prop_goal_visited
-       simp
-       by_contra goal_is_start
-       unfold dfs_recurse at terminated_with_not_goal_found
-       unfold search_recurse at terminated_with_not_goal_found
-       unfold dfs_step at terminated_with_not_goal_found
-       unfold base_search_state_initial at terminated_with_not_goal_found
-       simp_all
-
-
 def dfs(g: WeightedDiGraph V E) (start : V) (goal : V): Option (Path g start goal) :=
   let start_state := base_search_state_initial start
   have h : has_base_search_state.to_base_state start_state = base_search_state_initial start:= by simp_all only [start_state]; rfl
