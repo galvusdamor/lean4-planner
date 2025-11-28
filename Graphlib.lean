@@ -2,4 +2,5 @@
 -- Import modules here that should be built as part of the library.
 import Graphlib.Basic
 import Graphlib.DFS2
+import Graphlib.BFS
 import Graphlib.Planning
