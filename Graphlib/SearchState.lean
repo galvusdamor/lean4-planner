@@ -34,6 +34,9 @@ abbrev search_prop_goal_visited (goal : V) (s : base_search_state g):=
 abbrev search_prop_stack_empty (s : base_search_state g):=
       s.stack = []
 
+abbrev search_prop_stack_head_not_goal (goal : V) (s : base_search_state g) (non_empty : ¬ search_prop_stack_empty s):=
+      s.stack.head non_empty ≠ goal
+
 abbrev search_invar_stack_is_visited (s : base_search_state g):=
       ∀ x : V, x ∈ s.stack → x ∈ s.visited
 

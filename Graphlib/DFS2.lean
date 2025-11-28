@@ -8,6 +8,7 @@ import Graphlib.FinEnum
 import Graphlib.Basic
 import Graphlib.SearchState
 import Graphlib.SearchAlgorithm
+import Graphlib.SearchStep
 
 set_option trace.split.failure true
 --set_option diagnostics true
@@ -200,6 +201,14 @@ lemma dfs_expand_keeps_start_visited
       unfold search_invar_start_visited 
       simp_all
 
+lemma dfs_expand_visited_subset (priorState : base_search_state g)
+    (stackHead : V)
+    (stackTail : List V):
+    priorState.visited ⊆ (dfs_step_expand g priorState stackHead stackTail).visited := by
+    unfold dfs_step_expand
+    simp_all
+
+
 
 ---------------------------------------------------------------------------------------
 -- run one step of the DFS. Mostly case distinction and running expansion if necessary
@@ -228,6 +237,9 @@ lemma dfs_step_visited_is_smaller_than_V
     (goal : V) (priorState : base_search_state g):
     (dfs_step g goal priorState).1.visited.card ≤ Fintype.card V := by
     apply Finset.card_le_univ
+
+lemma visited_is_smaller_than_V (state : base_search_state g): state.visited.card ≤ Fintype.card V := by
+    apply Finset.card_le_univ
   
 lemma dfs_step_visited_increases
     (goal : V) (priorState : base_search_state g):
@@ -235,6 +247,60 @@ lemma dfs_step_visited_increases
     change priorState.visited.card ≤ (dfs_step g goal priorState).1.visited.card
     apply Finset.card_le_card
     apply dfs_step_visited_subset
+
+
+lemma dfs_expand_visited_increases
+    (priorState : base_search_state g)
+    (head : V)
+    (tail : List V):
+      (dfs_step_expand g priorState head tail).visited.card ≥ priorState.visited.card := by
+    change priorState.visited.card ≤ (dfs_step_expand g priorState head tail).visited.card
+    apply Finset.card_le_card
+    apply dfs_expand_visited_subset
+
+
+lemma dfs_expand_keeps_base_invars:
+  base_invar_carries_over_expand goal (dfs_step_expand g) (search_invar_all_basic (g:=g) start) := by
+  unfold base_invar_carries_over_expand
+  unfold search_invar_all_basic
+  intro s head tail ⟨ ⟨ i1,i2,i3,i4,i5,i6⟩ , head_not_goal, compose⟩ 
+  have head_is_visited : head ∈ s.visited := by
+    apply i1
+    rw [compose]
+    simp
+  repeat rw [← and_assoc]
+  repeat constructor
+  · apply dfs_expand_keeps_stack_in_visited
+    constructor
+    · exact i1
+    · constructor
+      · exact head_is_visited 
+      · intro x x_not_visited
+        by_contra x_in_tail
+        have x_on_stack : x ∈ (has_base_search_state.to_base_state (g:=g) s).stack := by
+          rw [compose]
+          simp_all
+        apply i1 at x_on_stack
+        contradiction 
+  · apply dfs_expand_keeps_mother_in_visited
+    constructor
+    · exact i2
+    · exact head_is_visited
+  · apply dfs_expand_keeps_mother_is_adjacent
+    exact i3
+  · apply dfs_expand_keeps_mother_ordered
+    constructor
+    · exact i2
+    · constructor
+      · exact head_is_visited
+      · exact i4
+  · apply dfs_expand_keeps_on_stack_or_all_neighbours_visited
+    constructor
+    · exact i5 
+    · exact compose 
+  · apply dfs_expand_keeps_start_visited
+    exact i6
+
 
 ----------
 -- the step also keeps the invariants
@@ -435,8 +501,51 @@ lemma dfs_step_terminates_when_goal_stack_head:
   unfold dfs_step
   simp_all
 
+
 --------------------------------------------------------------------------------------------------
 -- main recursion loop 
+
+lemma termination_dfs_recurse2
+    (priorState : base_search_state g)
+    (nextState : base_search_state g)
+    (head : V)
+    (tail : List V)
+    (compose : priorState.stack = head :: tail):
+    (nextState = (dfs_step_expand g priorState head tail))
+    → ((Fintype.card V - nextState.visited.card < Fintype.card V - priorState.visited.card
+        ∨ (Fintype.card V - nextState.visited.card = Fintype.card V - priorState.visited.card ∧ nextState.stack.length < priorState.stack.length)) ):= by
+  intro nextStateDef
+  apply (Classical.or_iff_not_imp_left).mpr
+  intro visited_not_decreasing
+  simp_all
+  have same_visited : (dfs_step_expand g priorState head tail).visited.card = priorState.visited.card := by
+    have k2 : (dfs_step_expand g priorState head tail).visited.card ≤ Fintype.card V := by
+      apply visited_is_smaller_than_V 
+    have k3 : (dfs_step_expand g priorState head tail).visited.card ≥ priorState.visited.card := by
+      apply dfs_expand_visited_increases 
+    omega
+  have visited_eq : priorState.visited = (dfs_step_expand g priorState head tail).visited := by
+    ext a
+    constructor
+    · apply Finset.mem_of_subset
+      apply dfs_expand_visited_subset 
+    apply finsetLemma
+    · apply dfs_expand_visited_subset 
+    exact same_visited
+
+  constructor
+  · omega
+  · unfold dfs_step_expand
+    simp_all
+    simp [Nat.add_comm]
+    intro a head_adj_a
+    rw [visited_eq]
+    unfold dfs_step_expand
+    simp_all
+    classical
+    by_cases h : a ∈ (dfs_step_expand g priorState head tail).visited
+    · left; exact h
+    · right; exact h
 
 
 lemma termination_dfs_recurse 
@@ -523,14 +632,7 @@ lemma dfs_step_reduces_metric (goal : V):
         · simp_all
         · simp_all
 
-def dfs_recurse (goal : V) (priorState : base_search_state g):
-    (base_search_state g) × Bool :=
-    search_recurse (g:=g) goal priorState (dfs_step g)  base_search_state_termination_metric (dfs_step_reduces_metric goal)
-
-
 ----------------- the actual DFS: create the initial search state and then recurse
-def dfs_internal(g: WeightedDiGraph V E) (start : V) (goal : V):
-    (base_search_state g) × Bool := dfs_recurse goal (base_search_state_initial start)
 
 def dfs(g: WeightedDiGraph V E) (start : V) (goal : V): Option (Path g start goal) :=
   let start_state := base_search_state_initial start
@@ -557,3 +659,23 @@ theorem dfs_is_complete (g: WeightedDiGraph V E) (start : V) (goal : V):
   · apply dfs_step_keeps_goal_on_stack
   · apply dfs_step_goal_becomes_visited_it_is_on_stack 
   · apply dfs_step_terminates_when_goal_stack_head 
+
+
+--------
+
+def dfs2(g: WeightedDiGraph V E) (start : V) (goal : V): Option (Path g start goal) :=
+  let start_state := base_search_state_initial start
+  have h : has_base_search_state.to_base_state (g:=g) start_state = base_search_state_initial start:= by simp_all only [start_state]; rfl
+
+  have reduces : termination_proof_for_expand goal (dfs_step_expand g) base_search_state_termination_metric := by
+    unfold termination_proof_for_expand
+    unfold base_search_state_termination_metric
+    simp
+    intro s head tail head_not_goal stack_not_empty 
+    apply termination_dfs_recurse2
+    · exact stack_not_empty
+    · rfl 
+
+  search_exe_with_stack_step (g:=g) (start := start) (goal:=goal) (start_state:=start_state) (termination_metric := base_search_state_termination_metric) (dfs_step_expand g) reduces dfs_expand_keeps_base_invars h 
+
+
