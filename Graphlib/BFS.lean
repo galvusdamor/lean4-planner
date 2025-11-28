@@ -234,7 +234,7 @@ lemma bfs_expand_goal_becomes_visited_puts_it_on_stack
     simp_all
     cases bb
     · contradiction
-    · next h => left; exact h
+    · next h => right; exact h
 
 
 lemma visited_is_smaller_than_V (state : base_search_state g): state.visited.card ≤ Fintype.card V := by
@@ -328,9 +328,7 @@ lemma termination_bfs_recurse
   · omega
   · unfold bfs_step_expand
     simp_all
-    simp [Nat.add_comm]
     intro a head_adj_a
-    rw [visited_eq]
     unfold bfs_step_expand
     simp_all
     classical
