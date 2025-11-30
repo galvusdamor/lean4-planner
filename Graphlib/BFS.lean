@@ -355,6 +355,9 @@ def bfs(g: WeightedDiGraph V E) (start : V) (goal : V): Option (Path g start goa
   search_exe_with_stack_step (g:=g) (start := start) (goal:=goal) (start_state:=start_state) (termination_metric := base_search_state_termination_metric) (bfs_step_expand g) bfs_expand_metric_reduction bfs_expand_keeps_base_invars h 
 
 
+def bfs_last_state (g: WeightedDiGraph V E) (start : V) (goal : V): base_search_state g × Bool :=
+  search_with_stack_step (goal:=goal) (start_state := base_search_state_initial start) (bfs_step_expand g) bfs_expand_metric_reduction
+
 
 theorem bfs_is_sound (g: WeightedDiGraph V E) (start : V) (goal : V) :
     (Option.isSome (bfs g start goal) → (∃ x : (Path g start goal), x = x)) := by
@@ -373,4 +376,114 @@ theorem bfs_is_complete (g: WeightedDiGraph V E) (start : V) (goal : V):
   · rfl
   · apply bfs_expand_keeps_goal_on_stack
   · apply bfs_expand_goal_becomes_visited_puts_it_on_stack
+
+
+
+-------------
+
+
+abbrev bfs_path_exists (start : V) (s : base_search_state g) :=
+  ∀ u ∈ s.visited, ∃ p : Path g start u, p=p
+
+abbrev bfs_path_as_long_as_sort_index (start : V) (s : base_search_state g) :=
+  ∀ u ∈ s.visited, ∃ p : Path g start u, path_length g p = s.pathOrder u
+
+abbrev bfs_path_as_extracted_as_long_as_sort_index (start : V) (s : base_search_state g)
+    (mother_invar : search_invar_mother_is_visited s)
+    (mother_invar_adj : search_invar_mother_is_adjacent start s)
+    (decreasing_invar : search_invar_mother_decreasing_path_order start s):=
+  ∀ u : V, if h : u ∈ s.visited then
+    path_length g (extract_path_to start u s h mother_invar mother_invar_adj decreasing_invar).1 = s.pathOrder u
+    else true
+
+-- stack is sorted by the path_order (i.e. distance) value
+abbrev bfs_stack_sorted (s : base_search_state g) :=
+  List.Sorted (fun u v => s.pathOrder u ≤ s.pathOrder v) s.stack
+
+-- for BFS we don't sort the stack, we just append
+-- this is allowed as the maximum difference of values in the stack is one (from head to tail)
+abbrev bfs_stack_max_diff (s : base_search_state g) :=
+  if stack_not_empty : s.stack ≠ [] then
+    s.pathOrder (s.stack.head stack_not_empty) + 1 ≥ s.pathOrder (s.stack.getLast stack_not_empty)
+  else true
+
+
+-- this invariant is only true for BFS and Dijkstra
+-- for A*, we might have to re-open
+abbrev bfs_stack_shortest_path (start : V) (s : base_search_state g) :=
+  ∀ u ∈ s.visited, u ∉ s.stack → graph_distance_is g start u (s.pathOrder u)
+
+
+-- for A*, a node that is not on the stack might have a shortert path that goes through some node that is actually still on the stack
+-- this is due to inconsistent heuristics requiring re-opening
+-- TODO here we need a "splicing lemma" for paths that states that in these cases the 
+abbrev astar_stack_shortest_path (start : V) (s : base_search_state g) :=
+  ∀ u ∈ s.visited, u ∉ s.stack → (graph_distance_is g start u (s.pathOrder u) ∨ (
+    ∀ p : Path g start u, path_is_shortest g p → support g p.walk ∩ s.stack ≠ ∅
+  ))
+
+abbrev bfs_expansion_in_order (start : V) (s : base_search_state g) :=
+  if stack_not_empty : s.stack ≠ [] then
+    let head_dist := s.pathOrder (s.stack.head stack_not_empty)
+    
+    ∀ u ∈ s.stack, graph_distance_ge g start u head_dist
+  else true
+
+
+
+theorem bfs_is_optimal(g: WeightedDiGraph V E) (start : V) (goal : V)
+    (returned_path : Option.isSome (bfs g start goal)):
+    path_is_shortest g ((bfs g start goal).get returned_path) := by
+
+    let final := search_with_stack_step (goal:=goal) (start_state := base_search_state_initial start) (bfs_step_expand g) bfs_expand_metric_reduction
+    let final_state := final.1
+
+    -- general properties
+    have h_3 : search_prop_goal_visited goal final_state := by sorry
+    have h_4 : ¬ search_prop_goal_on_stack goal final_state := by sorry
+    have t_1 : search_invar_mother_is_visited final_state := by sorry
+    have t_2 : search_invar_mother_is_adjacent start final_state := by sorry
+    have t_3 : search_invar_mother_decreasing_path_order start final_state := by sorry
+
+    -- BFS specific ones
+    have i_1 : bfs_stack_shortest_path start final_state := by sorry
+
+    have h_2 : bfs_path_as_extracted_as_long_as_sort_index start final_state t_1 t_2 t_3 := by sorry
+
+
+    have h : graph_distance_is g start goal (final_state.pathOrder goal) := by
+      unfold graph_distance_is
+      unfold bfs_stack_shortest_path at i_1
+      have i_1' := i_1 goal h_3 h_4
+      unfold graph_distance_is at i_1'
+      exact i_1'
+
+
+    unfold bfs
+    unfold search_exe_with_stack_step
+    unfold search_exe
+    unfold path_is_shortest
+    intro p'
+    unfold graph_distance_is at h 
+    obtain ⟨p, ⟨ p_path_length, p_is_shortest ⟩ ⟩  := h
+
+    unfold bfs_path_as_extracted_as_long_as_sort_index at h_2
+    have prop := h_2 goal
+    clear h_2
+    simp_all
+    unfold final_state at prop
+    unfold final at prop
+    unfold search_with_stack_step at prop
+    simp_all
+    unfold has_base_search_state.to_base_state
+    unfold instHas_base_search_stateBase_search_state
+    rw [prop]
+    clear prop t_1 t_2 t_3
+    unfold final_state at p_path_length
+    unfold final at p_path_length
+    unfold search_with_stack_step at p_path_length
+    simp_all
+    rw [← p_path_length]
+    unfold path_is_shortest at p_is_shortest
+    simp_all
 

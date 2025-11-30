@@ -271,6 +271,19 @@ def search_exe_with_stack_step
     search_exe (start := start) (goal:=goal) (start_state:=start_state) (search_step:=step) (termination_metric := termination_metric) (termination_proof) start_is_base_init base_invars_carry goal_on_stack_if_terminated
 
 
+-- function needed for proofs
+def search_with_stack_step
+    (expand : search_expand g (state_type := state_type))
+    (metric_for_expand_proof : termination_proof_for_expand goal expand termination_metric)
+    :
+    state_type × Bool:=
+    
+    let step : search_step_function g := search_stack_step expand
+    let termination_proof : termination_metric_decreasing_proof goal step termination_metric :=
+      search_stack_step_reduces_metric goal expand termination_metric metric_for_expand_proof
+
+    search_internal (goal:=goal) (start_state:=start_state) (search_step:=step) (termination_metric := termination_metric) (termination_proof) 
+
 
 
 theorem search_with_stack_step_is_sound

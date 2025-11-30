@@ -57,12 +57,75 @@ def support {u v : V} : (Walk G u v) → List V
   | @Walk.cons _ _ _ _ u _ _ _ rest => u :: support rest
   | Walk.nil => [v]
 
+/-- `Length` of a walk is the number of edges in it-/
+def walk_length {u v : V} : (Walk G u v) → ℕ
+  | @Walk.cons _ _ _ _ _ _ _ _ rest => 1 + walk_length rest
+  | Walk.nil => 0
+
+
 /-- A `path` is a walk with no repeating vertices. -/
 structure Path (u : V) (v : V) where
   walk : Walk G u v
   support_nodup : List.Nodup (support G walk)
   deriving DecidableEq
 
+def path_length {u v : V} (p : Path G u v) : ℕ := walk_length G p.walk
+
+lemma paths_length_le_V_card_min_1 {u v : V} (p : Path G u v) : path_length G p ≤ Fintype.card V - 1 := by 
+  
+  sorry
+
+
+/-- Definition of `Shortest Path` -/
+def path_is_shortest {u v : V} (p : Path G u v) : Prop :=
+  ∀ p' : Path G u v, path_length G p ≤ path_length G p'
+
+
+
+def is_sub_walk_head {u v w : V} (p : Walk G u v) (p' : Walk G w v) : Bool :=
+  if u = w then true
+  else match p with
+  | Walk.nil => false
+  | Walk.cons _ p_sub => is_sub_walk_head p_sub p'
+
+def is_sub_walk_tail {u v w : V} (p : Walk G u v) (p' : Walk G u w) : Bool :=
+  match p' with 
+  | Walk.nil => true -- p' is the empty path already.
+  | Walk.cons (w:= p'_u') _ p_sub' =>
+    match p with
+    | Walk.nil => false -- p' is longer than p
+    | Walk.cons (w := p_u') _ p_sub =>
+      if h : p_u' = p'_u' then is_sub_walk_tail p_sub (h ▸ p_sub')
+      else false
+
+def is_sub_path_tail {u v w : V} (p : Path G u v) (p' : Path G u w) : Bool :=
+  is_sub_walk_tail G p.walk p'.walk
+
+
+lemma subpath_of_shortest_path_are_shortest {u v w : V} (p : Path G u v) (p_shortest : path_is_shortest G p) (p' : Path G u w) (sub_path : is_sub_path_tail G p p') : path_is_shortest G p' := by
+  by_contra not_shortest
+  unfold path_is_shortest at p_shortest not_shortest
+  simp_all
+  obtain ⟨ shorter_path', is_shorter'⟩ := not_shortest
+  sorry
+
+
+
+def graph_distance_is (u v : V) (dist: ℕ) : Prop :=
+  (∃ p : Path G u v, path_length G p = dist ∧ path_is_shortest G p)
+
+def graph_distance_ge (u v : V) (dist: ℕ) : Prop :=
+  ∀ p : Path G u v, path_length G p ≥ dist
+
+lemma shortest_path_shorter_than_example_path (u v : V) (p : Path G u v):
+    ∃ d : ℕ, d ≤ path_length G p ∧ graph_distance_is G u v d := by
+  by_contra distance_is_longer
+  simp_all
+  sorry
+
+
+-----------------------------------------
+-- Operations that modify paths and walks
 /-- `append` takes two walks `w1 : Walk G u v` and `w2 : Walk G v w` and returns the
 appended walk `Walk G u w` -/
 def append (w1 : Walk G u v) (w2 : Walk G v w) : Walk G u w :=
