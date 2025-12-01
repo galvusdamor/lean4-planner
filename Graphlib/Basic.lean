@@ -117,11 +117,29 @@ def graph_distance_is (u v : V) (dist: ℕ) : Prop :=
 def graph_distance_ge (u v : V) (dist: ℕ) : Prop :=
   ∀ p : Path G u v, path_length G p ≥ dist
 
+def graph_distance_gt (u v : V) (dist: ℕ) : Prop :=
+  ∀ p : Path G u v, path_length G p > dist
+
+def graph_distance_lt (u v : V) (dist: ℕ) : Prop :=
+  ∃ p : Path G u v, path_length G p < dist
+
 lemma shortest_path_shorter_than_example_path (u v : V) (p : Path G u v):
     ∃ d : ℕ, d ≤ path_length G p ∧ graph_distance_is G u v d := by
   by_contra distance_is_longer
   simp_all
   sorry
+
+omit [DecidableEq V] [DecidableEq E] in
+lemma graph_distance_ge_lt (u v : V) (d1 d2: ℕ) :
+    graph_distance_ge G u v d1 ∧ d2 ≤ d1 → graph_distance_ge G u v d2
+    := by
+    unfold graph_distance_ge
+    simp_all
+    intro ge_d1 d2_le_d1 p
+    apply le_trans
+    · exact d2_le_d1
+    · exact ge_d1 p
+
 
 
 -----------------------------------------
@@ -187,6 +205,22 @@ def extend_path (p : Path G u v) (h : G.Adj v w) (proof_w_not_in_support : w ∉
     rw  [h]
   Path.mk path_walk path_nodup -- constructor new path
 
+
+theorem extend_path_inc_length_by_one (p : Path G u v) (h : G.Adj v w) (proof_w_not_in_support : w ∉ support G p.walk) : path_length G (extend_path G p h proof_w_not_in_support) = 1 + path_length G p := by
+  sorry
+
+
+theorem extend_walk_inc_length_by_one (p : Walk G u v) (h : G.Adj v w) : walk_length G (extend_walk G p h) = 1 + walk_length G p := by
+  sorry
+
+theorem split_path_at_end (p : Path G u v) (not_nil : u ≠ v):
+    ∃ w : V, ∃ p' : Path G u w, ∃ w_adj_v : G.Adj w v, ∃ not_in_supp : v ∉ support G p'.walk,
+      p = extend_path G p' w_adj_v not_in_supp := by
+    sorry
+
+
+
+
 omit [DecidableEq V] [DecidableEq E] in
 theorem extend_walk_extends_support (ww: Walk G u v) (h: G.Adj v w):
     support G (extend_walk G ww h) = (support G ww) ++ [w] := by
@@ -198,6 +232,9 @@ theorem extend_path_extends_support (p: Path G u v) (h: G.Adj v w)(proof_w_not_i
       unfold extend_path
       simp
       apply extend_walk_extends_support
+
+theorem path_goal_in_support (p: Path G u v): v ∈ support G p.walk := by sorry
+
 
 -- tests
 example : WeightedDiGraph (Fin 3) (Nat) where

@@ -44,8 +44,29 @@ lemma search_stack_step_goal_on_stack_if_terminated
   (priorState : state_type)
   (expand : search_expand g (state_type := state_type))
   :
-    (search_stack_step expand goal priorState).2 = true →
+    (search_stack_step expand goal priorState).2 = some true →
      goal ∈ (has_base_search_state.to_base_state (g:=g) (search_stack_step expand goal priorState).1).stack := by
+   intro terminated_with_true
+   next step_did_terminate =>
+   unfold search_stack_step at terminated_with_true ⊢
+   simp
+   split
+   · next l stack_empty =>
+     simp_all
+   · next l head tail stack_not_empty =>
+     simp_all
+     split
+     all_goals
+      simp_all
+
+
+lemma search_stack_step_goal_stack_head_if_terminated
+  (goal : V)
+  (priorState : state_type)
+  (expand : search_expand g (state_type := state_type))
+  :
+    (search_stack_step expand goal priorState).2 = some true →
+  (has_base_search_state.to_base_state (g:=g) (search_stack_step expand goal priorState).1).stack.head? = some goal := by
    intro terminated_with_true
    next step_did_terminate =>
    unfold search_stack_step at terminated_with_true ⊢
