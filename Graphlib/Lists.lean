@@ -157,4 +157,14 @@ theorem maximum_of_non_empty_le (l : List Nat) (non_empty : l ≠ []):
     use x_in_l
 
 
+theorem Option.eq_some_if_get_eq {α : Type u_1} {o : Option α} {a : α} :
+      ∀ (h : o.isSome = true), o.get h = a → o = some a := by 
+        intro h get_is_a
+        apply Option.eq_some_iff_get_eq.mpr
+        use h
+
+theorem head_iff {α : Type u_1} {l tail : List α} {head : α} (compose : l = head :: tail) (ne_nil : l ≠ []):
+    l.head ne_nil = head := by
+    simp_all
+
 

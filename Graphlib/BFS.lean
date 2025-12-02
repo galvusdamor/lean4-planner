@@ -39,7 +39,7 @@ def bfs_step_expand[FinEnum V] [DecidableEq E] [DecidableEq V]
       let new_stack : List V := stackTail ++ newly_visited_list -- add neighbors at end of stack
      
       let new_mother : new_visited → V := fun ⟨v, hv⟩  =>
-        if h: (v ∈ priorState.visited) then priorState.mother ⟨ v, by exact h⟩
+    if h: (v ∈ priorState.visited) then priorState.mother ⟨ v, by exact h⟩
         else stackHead
 
       let new_order : V → Nat := fun v  =>
@@ -385,11 +385,6 @@ theorem bfs_is_complete (g: WeightedDiGraph V E) (start : V) (goal : V):
 abbrev bfs_invar_on_stack_or_all_neighbours_max_order (s : base_search_state g):=
   ∀ x : s.visited, ↑x ∉ s.stack → ∀ y : V, (g.Adj x y) → s.pathOrder y ≤ 1 + s.pathOrder x
 
-abbrev bfs_path_exists (start : V) (s : base_search_state g) :=
-  ∀ u ∈ s.visited, ∃ p : Path g start u, p=p
-
-abbrev bfs_path_as_long_as_sort_index (start : V) (s : base_search_state g) :=
-  ∀ u ∈ s.visited, ∃ p : Path g start u, path_length g p = s.pathOrder u
 
 abbrev bfs_path_as_extracted_as_long_as_sort_index (start : V) (s : base_search_state g)
     (mother_invar : search_invar_mother_is_visited s)
@@ -406,7 +401,7 @@ abbrev bfs_stack_sorted (s : base_search_state g) :=
 -- this is allowed as the maximum difference of values in the stack is one (from head to tail)
 abbrev bfs_stack_max_diff (s : base_search_state g) :=
   if stack_not_empty : s.stack ≠ [] then
-    s.pathOrder (s.stack.head stack_not_empty) + 1 ≥ s.pathOrder (s.stack.getLast stack_not_empty)
+    ∀ x ∈ s.stack, s.pathOrder (s.stack.head stack_not_empty) + 1 ≥ s.pathOrder x
   else true
 
 
@@ -423,14 +418,6 @@ abbrev astar_stack_shortest_path (start : V) (s : base_search_state g) :=
   ∀ u ∈ s.visited, u ∉ s.stack ∨ (if ne : s.stack ≠ [] then s.stack.head ne = u else false) → (graph_distance_is g start u (s.pathOrder u) ∨ (
     ∀ p : Path g start u, path_is_shortest g p → support g p.walk ∩ s.stack ≠ ∅
   ))
-
-abbrev bfs_expansion_in_order (start : V) (s : base_search_state g) :=
-  if stack_not_empty : s.stack ≠ [] then
-    let head_dist := s.pathOrder (s.stack.head stack_not_empty)
-    
-    ∀ u ∈ s.stack, graph_distance_ge g start u head_dist
-  else true
-
 
 
 lemma support_of_path_visited (u v : V) (w : Walk g u v)
@@ -452,358 +439,262 @@ lemma support_of_path_visited (u v : V) (w : Walk g u v)
   --  · sorry
   --  · sorry
 
-theorem head_iff {α : Type u_1} {l tail : List α} {head : α} (compose : l = head :: tail) (ne_nil : l ≠ []):
-    l.head ne_nil = head := by
-    simp_all
-
-
-lemma triangle_in_eq {start u v : V}
-  (start_u_v_walk : Walk g start v) (u_in_walk : u ∈ support g start_u_v_walk)
-  (u_not_v : u ≠ v)
-  : graph_distance_lt g start u (walk_length g start_u_v_walk) := by
-  sorry
-
-
-
-
-lemma bar {start u head v : V}
-  (dhead : ℕ) 
-  (du_ge_dhead : graph_distance_ge g start u dhead)
-  (u_ne_v : u ≠ v)
-  (start_u_v_walk : Walk g start v) (u_in_walk : u ∈ support g start_u_v_walk)
-  (shortest_start_head_walk : Walk g start head) (head_walk_shortest : walk_length g shortest_start_head_walk = dhead)
-  (head_adj_v : g.Adj head v)
-  (u_walk_shorter : walk_length g start_u_v_walk < walk_length g (extend_walk g shortest_start_head_walk head_adj_v))
-  : ⊥ := by
-  let start_head_v_walk : Walk g start v := extend_walk g shortest_start_head_walk head_adj_v
-
-  have length_start_head_v_walk : walk_length g start_head_v_walk = 1 + dhead := by
-    unfold start_head_v_walk
-    rw [← head_walk_shortest]
-    apply extend_walk_inc_length_by_one
-
-  have shortest_u_lt_length_start_u_w_walk : graph_distance_lt g start u (walk_length g start_u_v_walk) := by
-    apply triangle_in_eq
-    · exact u_in_walk
-    · exact u_ne_v 
-
-  rw [length_start_head_v_walk] at u_walk_shorter
-  unfold graph_distance_lt at shortest_u_lt_length_start_u_w_walk
-  obtain ⟨ start_u_path, start_u_path_shorter_than_start_u_v_walk⟩ := shortest_u_lt_length_start_u_w_walk 
-  --let start_u_walk : Walk g start u := start_u_path.walk
-  unfold path_length at start_u_path_shorter_than_start_u_v_walk
-  
-  have length_start_u_le_dhead : walk_length g start_u_path.walk < 1 + dhead := by
-    apply lt_trans (b:=walk_length g start_u_v_walk) 
-    · exact start_u_path_shorter_than_start_u_v_walk
-    · exact u_walk_shorter
-
-
-  unfold graph_distance_ge at du_ge_dhead
-  apply du_ge_dhead at start_u_path
-  unfold path_length at start_u_path
-
-  --(du : ℕ) (du_proof : graph_distance_is g start u du)
-  --(dhead_le_du : dhead ≤ du)
-  
-  --have length_start_u_path_gt_du : walk_length g start_u_path.walk > du := by sorry
-
-  omega
-
-
-lemma extract_path_to_compose(start : V) (goal : V) (state : base_search_state g)
-    (goal_reached : goal ∈ state.visited)
-    (mother_invar : search_invar_mother_is_visited state)
-    (mother_invar_adj : search_invar_mother_is_adjacent start state)
-    (decreasing_invar : search_invar_mother_decreasing_path_order start state)
-    (goal_ne_start : goal ≠ start)
-  :
-    (extract_path_to start goal state goal_reached mother_invar mother_invar_adj decreasing_invar).1.walk =
-    extend_walk g (extract_path_to start (state.mother ⟨goal,goal_reached⟩) state (mother_invar ⟨goal,goal_reached⟩) mother_invar mother_invar_adj decreasing_invar).1.walk (mother_invar_adj ⟨goal,goal_reached⟩ goal_ne_start) 
-    :=  by sorry
-
-
-
 
 
 
 lemma foo (start : V) (goal : V):
       base_invar_carries_over_expand goal (bfs_step_expand g) (bfs_stack_shortest_path (g:=g) start) := by
-        unfold base_invar_carries_over_expand
-        intro state head tail ⟨prior_invar,head_is_not_goal,compose⟩ 
-        unfold bfs_stack_shortest_path --at prior_invar ⊢
-        intro v v_visited not_on_stack_or_head
+    unfold base_invar_carries_over_expand
+    intro state head tail ⟨prior_invar,head_is_not_goal,compose⟩ 
+    unfold bfs_stack_shortest_path --at prior_invar ⊢
+    intro v v_visited not_on_stack_or_head
+    
+    
+    
+    ----- co-invariants needed for path extraction
+    have mother_invar : search_invar_mother_is_visited state := by sorry
+    have mother_invar_adj : search_invar_mother_is_adjacent start state := by sorry
+    have decreasing_invar : search_invar_mother_decreasing_path_order start state := by sorry
+    have t_0 : search_invar_stack_is_visited state := by sorry
+    
+    -- new bfs_ specific invars
+    have extract_length_invar : bfs_path_as_extracted_as_long_as_sort_index start state mother_invar mother_invar_adj decreasing_invar := by sorry
+    have update_invar : bfs_invar_on_stack_or_all_neighbours_max_order state := by sorry
+    have stack_sorted : bfs_stack_sorted state := by sorry
+    have max_diff_invar : bfs_stack_max_diff state := by sorry
+    
+    unfold has_base_search_state.to_base_state at prior_invar compose not_on_stack_or_head v_visited ⊢ 
+    unfold instHas_base_search_stateBase_search_state at prior_invar compose not_on_stack_or_head v_visited ⊢
+    
+    
+    have v_not_start : v ≠ start := by sorry
+    
+    
+    cases not_on_stack_or_head
+    · next v_not_on_stack =>
+      have h := prior_invar v 
+      clear prior_invar
+      unfold bfs_step_expand at v_not_on_stack v_visited ⊢
+      simp at v_visited
+      cases v_visited
+      · next v_was_visited =>
+        simp_all 
+        apply h 
+        by_cases hh : head = v
+        · right; exact hh 
+        · left ; intro hhh ; symm at hhh ; contradiction
+      · next both =>
+        obtain ⟨ head_adj_v, v_was_not_visited ⟩ := both
+        simp_all -- contractiction. This case is impossible
+    · next v_now_stack_head =>
+      simp at v_now_stack_head
+      obtain ⟨ stack_not_empty_after, head_after_is_v ⟩ := v_now_stack_head
+      unfold bfs_step_expand at stack_not_empty_after head_after_is_v v_visited ⊢
+      simp at v_visited
+      
+      cases v_visited
+      · next v_was_visited_before=>
+        -- v is *now* the head of the stack, but it was already visited before.
+        -- this means it had to already have been on the stack before
+       
 
-
-
-        ----- co-invariants needed for path extraction
-        have mother_invar : search_invar_mother_is_visited state := by sorry
-        have mother_invar_adj : search_invar_mother_is_adjacent start state := by sorry
-        have decreasing_invar : search_invar_mother_decreasing_path_order start state := by sorry
-        have t_0 : search_invar_stack_is_visited state := by sorry
-        have extract_length_invar : bfs_path_as_extracted_as_long_as_sort_index start state mother_invar mother_invar_adj decreasing_invar := by sorry
-
-        unfold has_base_search_state.to_base_state at prior_invar compose not_on_stack_or_head v_visited ⊢ 
-        unfold instHas_base_search_stateBase_search_state at prior_invar compose not_on_stack_or_head v_visited ⊢
-
-
-        have v_not_start : v ≠ start := by sorry
-        
-
-        cases not_on_stack_or_head
-        · next v_not_on_stack =>
-          have h := prior_invar v 
-          clear prior_invar
-          unfold bfs_step_expand at v_not_on_stack v_visited ⊢
-          simp at v_visited
-          cases v_visited
-          · next v_was_visited =>
-            simp_all 
-            apply h 
-            by_cases hh : head = v
-            · right; exact hh 
-            · left ; intro hhh ; symm at hhh ; contradiction
-          · next both =>
-            obtain ⟨ head_adj_v, v_was_not_visited ⟩ := both
-            simp_all -- contractiction. This case is impossible
-        · next v_now_stack_head =>
-          simp at v_now_stack_head
-          obtain ⟨ stack_not_empty_after, head_after_is_v ⟩ := v_now_stack_head
-          unfold bfs_step_expand at stack_not_empty_after head_after_is_v v_visited ⊢
-          simp at v_visited
+        have t_c : ∃ tail_tail : List V, tail = v :: tail_tail := by
+          by_cases tail_ne_empty : tail ≠ []
+          · apply List.ne_nil_iff_exists_cons.mp at tail_ne_empty
+            obtain ⟨ b, tail_tail, cons ⟩ := tail_ne_empty
+            use tail_tail
+            rw [cons]
+            simp_all
+          · simp_all
+            apply Option.eq_some_if_get_eq at head_after_is_v
+            apply List.findSome?_eq_some_iff.mp at head_after_is_v
+            obtain ⟨l_1, a, l_2, ⟨ p,q,r⟩ ⟩ := head_after_is_v 
+            simp_all
+            obtain ⟨ ⟨ x1,x_2⟩ ,y⟩ := q 
+            rw [y] at x_2
+            contradiction
+        unfold graph_distance_is
+   
+        -- this will be the same path as after the bfs_expand
+        -- for Dijkstra, this might be a different path, as it could be that head and v are adjacent and the path gets updated. But for BFS, this update is simply ignored as we "know" that that path can only be at most as long as the one that we have
+        let path_to_v : Path g start v :=
+          (extract_path_to start v state v_was_visited_before mother_invar mother_invar_adj decreasing_invar).1
+    
+        use path_to_v
+        constructor
+        · simp_all
+          apply extract_length_invar v
+        · unfold path_is_shortest
+          intro p'
+          by_contra p'_is_shorter
+          simp_all
           
-          cases v_visited
-          · next v_was_visited_before=>
-            -- v is *now* the head of the stack, but it was already visited before.
-            -- this means it had to already have been on the stack before
-            
+          have p'_elem_on_stack_or_v_visited :
+            (∃ u ∈ support g p'.walk, u ∈ state.stack ∧ u ≠ v) ∨
+              (v ∈ state.visited ∧ ∀ u ∈ support g p'.walk, u ≠ v → u ∉ state.stack ∧ u ∈ state.visited) := by sorry
+          
+          cases p'_elem_on_stack_or_v_visited
+          · next u_in_support_on_stack =>
+            obtain ⟨u, ⟨u_in_support, ⟨ u_on_stack, u_ne_v ⟩ ⟩ ⟩ := u_in_support_on_stack
+            have path_length_is_pathOrder : path_length g path_to_v = state.pathOrder v := by
+              apply extract_length_invar 
+            have order_u_le_path_length_p' : state.pathOrder u < path_length g p' := by
+              -- by inudction and using the expansion invar
+              -- must be strictly smaller as u is not the last node on the path!
+              sorry 
+           
+            by_cases u_ne_head : u ≠ head
+            · have v_before_u_on_stack : state.pathOrder v ≤ state.pathOrder u := by
+                unfold bfs_stack_sorted at stack_sorted
+                rw [compose] at stack_sorted
+                simp at stack_sorted
+                obtain ⟨ _ignore, tail_sorted⟩ := stack_sorted
+                obtain ⟨ tail_tail, tail_compose ⟩ := t_c
+                rw [tail_compose] at tail_sorted
+                simp at tail_sorted
+                apply tail_sorted.left u
+                rw [compose] at u_on_stack
+                rw [tail_compose] at u_on_stack
+                simp at u_on_stack
+                simp_all
+              omega
+            · simp_all
+              
+              -- stack criterion for BFS, they differ by at most one
+              -- in Dijkstra this will be replaced by the update performed by the expansion (then with cost instead of 1), but only if adjacent
+              have v_at_most_one_larger_than_head : state.pathOrder v ≤ state.pathOrder head + 1 := by
+                apply GE.ge.le
+                apply max_diff_invar
+                obtain ⟨ tail_tail, tail_compose⟩ := t_c
+                rw [tail_compose]
+                simp
+
+              omega
+          · next both =>
+            obtain ⟨v_visited, support_not_on_stack⟩ := both 
+            obtain ⟨ w,path_start_w,w_adj_v,v_not_earlier_in_path,p'_compose⟩ := split_path_at_end g p' (Ne.symm v_not_start)
+            have path_start_w_length : path_length g path_start_w + 1 = path_length g p' := by
+              rw [p'_compose]
+              apply Eq.symm
+              rw [add_comm]
+              apply extend_path_inc_length_by_one
+            rw [← path_start_w_length] at p'_is_shorter
+            clear path_start_w_length
+            have w_in_supp : w ∈ support g p'.walk := by
+              rw [p'_compose]
+              rw [extend_path_extends_support]
+              simp
+              left
+              apply path_goal_in_support
+            have w_ne_v : w ≠ v := by
+              by_contra w_eq_v
+              rw [← w_eq_v] at v_not_earlier_in_path
+              have w_in_supp : w ∈ support g path_start_w.walk := path_goal_in_support g path_start_w
+              contradiction
+            have w_visited : w ∈ state.visited := (support_not_on_stack w w_in_supp w_ne_v).right
+            have w_not_on_stack : w ∉ state.stack := (support_not_on_stack w w_in_supp w_ne_v).left
+    
+            have w_not_head : w ≠ head := by
+              rw [compose] at w_not_on_stack
+              simp_all
+            have w_not_in_tail : w ∉ tail := by
+              rw [compose] at w_not_on_stack
+              simp_all
+    
+            have w_nei_updated := update_invar w w_visited w_not_head w_not_in_tail v w_adj_v
+            have w_dist_is_order := prior_invar w w_visited (Or.inl w_not_on_stack)
+            unfold graph_distance_is at w_dist_is_order
+            obtain ⟨shortest_to_w, ⟨w_len,is_shortest⟩ ⟩ := w_dist_is_order 
+            unfold path_is_shortest at is_shortest
+            simp at w_nei_updated
+            rw [←w_len] at w_nei_updated
+            have path_to_v_has_order_length := extract_length_invar v v_was_visited_before
+            unfold path_to_v at p'_is_shorter
+            rw [path_to_v_has_order_length] at p'_is_shorter
+            clear path_to_v_has_order_length
+            have path_start_w_shorter_than_shortest := lt_of_lt_of_le p'_is_shorter w_nei_updated
+            have path_start_w_longer_than_shortest := is_shortest path_start_w
+            omega
+      · next both =>
+        obtain ⟨ head_adj_v, v_not_visited_before ⟩ := both
+        simp_all
+        split
+        · next visited_empty =>
+          clear stack_not_empty_after head_after_is_v
+          have head_in_stack : head ∈ state.stack := by simp_all
+          apply t_0 at head_in_stack
+          simp_all -- by contradiction
+        · next visited_not_empty =>
+          by_cases tail_empty : tail = []
+          · simp_all
+            clear stack_not_empty_after head_after_is_v
             unfold graph_distance_is
-
-            let path_to_v : Path g start v :=
-              (extract_path_to start v state v_was_visited_before mother_invar mother_invar_adj decreasing_invar).1
-
+            -- we newly inserted v as the neighbour of head and it became the stack head immediately
+            
+            have head_was_visited_before : head ∈ state.visited := by simp_all
+            let path_to_head : Path g start head :=
+              (extract_path_to start head state head_was_visited_before mother_invar mother_invar_adj decreasing_invar).1
+            have support_visited : ∀ u ∈ support g path_to_head.walk, u ∈ state.visited := by
+              apply support_of_path_visited
+              · exact mother_invar 
+              · exact head_was_visited_before 
+    
+            let path_to_v : Path g start v := extend_path g path_to_head head_adj_v (by
+              by_contra v_in_support
+              have v_visited_before := support_visited v v_in_support
+              contradiction)
             use path_to_v
             constructor
-            · simp_all
-              apply extract_length_invar v
+            · unfold bfs_path_as_extracted_as_long_as_sort_index at extract_length_invar 
+              have hh := extract_length_invar head head_was_visited_before
+              rw [← hh]
+              unfold path_to_v
+              unfold path_to_head
+              apply extend_path_inc_length_by_one
             · unfold path_is_shortest
               intro p'
               by_contra p'_is_shorter
-              simp_all
-              
+              simp at p'_is_shorter
+
               have p'_elem_on_stack_or_v_visited :
                 (∃ u ∈ support g p'.walk, u ∈ state.stack ∧ u ≠ v) ∨
                   (v ∈ state.visited ∧ ∀ u ∈ support g p'.walk, u ≠ v → u ∉ state.stack ∧ u ∈ state.visited) := by sorry
-              
               cases p'_elem_on_stack_or_v_visited
               · next u_in_support_on_stack =>
                 obtain ⟨u, ⟨u_in_support, ⟨ u_on_stack, u_ne_v ⟩ ⟩ ⟩ := u_in_support_on_stack
-                
-                have stack_nodes_have_ge_paths : bfs_expansion_in_order start state := by sorry
-                unfold bfs_expansion_in_order at stack_nodes_have_ge_paths
-                simp at stack_nodes_have_ge_paths
-
-                let v_mother : V := state.mother ⟨ v, v_was_visited_before ⟩
-                have v_mother_was_visited : v_mother ∈ state.visited := by apply mother_invar
-                let path_to_mother : Path g start v_mother :=
-                  (extract_path_to start v_mother state v_mother_was_visited mother_invar mother_invar_adj decreasing_invar).1
-
-
-                have stack_before_not_empty : ¬ state.stack = [] := by
-                  apply List.ne_nil_of_mem
-                  apply u_on_stack
-
-                have stack_sorted : bfs_stack_sorted state := by sorry
-                
-
-                have dist_u_ge_stack_head := stack_nodes_have_ge_paths stack_before_not_empty u u_on_stack
-                have dist_u_ge_v_mother : graph_distance_ge g start u (state.pathOrder v_mother) := by
-                  have u_ne_head : u ≠ head := by sorry
-                  apply graph_distance_ge_lt
-                  constructor
-                  rotate_left
-                  · unfold v_mother
-                    apply le_iff_eq_or_lt.mpr
-                    right
-                    apply decreasing_invar (x:=⟨v, v_was_visited_before⟩)
-                    exact v_not_start
-                  · simp
-                    sorry
-                  --constructor
-                  --· exact dist_u_ge_stack_head
-                  --· apply le_trans
-                  --  · rw [head_iff compose] 
-                  --    unfold bfs_stack_sorted at stack_sorted
-                  --    rw [compose] at stack_sorted
-                  --    simp at stack_sorted
-                  --    obtain ⟨ head_le_tail, _rest ⟩ := stack_sorted
-                  --    sorry
-
-
-                apply bar (g:=g) (dhead := state.pathOrder v_mother) (start:=start) (u:=u) (v:=v) (head:=v_mother) (shortest_start_head_walk:=path_to_mother.walk)
-                · exact dist_u_ge_v_mother
-                · exact u_ne_v 
-                · exact u_in_support
-                · have hh := extract_length_invar v_mother v_mother_was_visited
-                  rw [← hh]
-                  unfold path_length
-                  rfl
-                · unfold path_length at p'_is_shorter
-                  unfold path_to_v at p'_is_shorter
-                  --unfold extend_path at p'_is_shorter
-                  --p'_is_shorter
-                  --simp at p'_is_shorter
-                  unfold path_to_mother
-                  unfold v_mother
-                  rw [← extract_path_to_compose (g:=g) (state:=state) (start:=start) (goal:=v) (goal_reached:=v_was_visited_before) (mother_invar := mother_invar) (mother_invar_adj:=mother_invar_adj) (decreasing_invar := decreasing_invar)]
-                  · exact p'_is_shorter 
-                  · exact v_not_start
-              · next both =>
-                obtain ⟨v_visited, support_not_on_stack⟩ := both 
-                obtain ⟨ w,path_start_w,w_adj_v,v_not_earlier_in_path,p'_compose⟩ := split_path_at_end g p' (Ne.symm v_not_start)
-                have path_start_w_length : path_length g path_start_w + 1 = path_length g p' := by
-                  rw [p'_compose]
-                  apply Eq.symm
-                  rw [add_comm]
-                  apply extend_path_inc_length_by_one
-                rw [← path_start_w_length] at p'_is_shorter
-                clear path_start_w_length
-                have w_in_supp : w ∈ support g p'.walk := by
-                  rw [p'_compose]
-                  rw [extend_path_extends_support]
-                  simp
-                  left
-                  apply path_goal_in_support
-                have w_ne_v : w ≠ v := by
-                  by_contra w_eq_v
-                  rw [← w_eq_v] at v_not_earlier_in_path
-                  have w_in_supp : w ∈ support g path_start_w.walk := path_goal_in_support g path_start_w
-                  contradiction
-                have w_visited : w ∈ state.visited := (support_not_on_stack w w_in_supp w_ne_v).right
-                have w_not_on_stack : w ∉ state.stack := (support_not_on_stack w w_in_supp w_ne_v).left
-
-                have update_invar : bfs_invar_on_stack_or_all_neighbours_max_order state := by sorry
-                --unfold bfs_invar_on_stack_or_all_neighbours_max_order at update_invar
-                have w_nei_updated := update_invar ⟨w, w_visited⟩ w_not_on_stack v w_adj_v
-                have w_dist_is_order := prior_invar w w_visited (Or.inl w_not_on_stack)
-                unfold graph_distance_is at w_dist_is_order
-                obtain ⟨shortest_to_w, ⟨w_len,is_shortest⟩ ⟩ := w_dist_is_order 
-                unfold path_is_shortest at is_shortest
-                simp at w_nei_updated
-                rw [←w_len] at w_nei_updated
-                have path_to_v_has_order_length := extract_length_invar v v_was_visited_before
+                rw [compose] at u_on_stack
+                simp at u_on_stack
+                simp_all
+                obtain ⟨ path_to_head_on_p', shorter⟩ := paths_contain_sub_paths g p' u_in_support u_ne_v
                 unfold path_to_v at p'_is_shorter
-                rw [path_to_v_has_order_length] at p'_is_shorter
-                clear path_to_v_has_order_length
-                have path_start_w_shorter_than_shortest := lt_of_lt_of_le p'_is_shorter w_nei_updated
-                have path_start_w_longer_than_shortest := is_shortest path_start_w
+                rw [extend_path_inc_length_by_one] at p'_is_shorter
+                unfold bfs_stack_shortest_path at prior_invar
+                simp_all
+                have head_shortest := prior_invar head head_was_visited_before
+                simp at head_shortest
+                unfold graph_distance_is at head_shortest
+                obtain ⟨ actual_shortest_to_head, x, xx ⟩ := head_shortest
+                unfold path_is_shortest at xx
+                have xxx := xx path_to_head_on_p'
+                rw [x] at xxx
+                have xxxx := extract_length_invar head head_was_visited_before
+                unfold path_to_head at p'_is_shorter
                 omega
-          · next both =>
-            obtain ⟨ head_adj_v, v_not_visited_before ⟩ := both
+              · next h =>
+                have v_visited := h.left
+                contradiction 
+    
+          · simp_all
+            have v_was_on_stack : v ∈ state.stack := by
+              rw [compose]
+              apply List.mem_cons.mpr
+              right
+              simp_all
+              apply List.mem_of_head?
+              rw [← head_after_is_v]
+              apply List.head?_eq_some_head
+            have v_visited_before : v ∈ state.visited := t_0 v v_was_on_stack
             simp_all
-            split
-            · next visited_empty =>
-              clear stack_not_empty_after head_after_is_v
-              have head_in_stack : head ∈ state.stack := by simp_all
-              apply t_0 at head_in_stack
-              simp_all -- by contradiction
-            · next visited_not_empty =>
-              by_cases tail_empty : tail = []
-              · simp_all
-                clear stack_not_empty_after head_after_is_v
-                unfold graph_distance_is
-                -- we newly inserted v as the neighbour of head and it became the stack head immediately
-                
-                have head_was_visited_before : head ∈ state.visited := by simp_all
-                let path_to_head : Path g start head :=
-                  (extract_path_to start head state head_was_visited_before mother_invar mother_invar_adj decreasing_invar).1
-                have support_visited : ∀ u ∈ support g path_to_head.walk, u ∈ state.visited := by
-                  apply support_of_path_visited
-                  · exact mother_invar 
-                  · exact head_was_visited_before 
-
-                let path_to_v : Path g start v := extend_path g path_to_head head_adj_v (by
-                  by_contra v_in_support
-                  have v_visited_before := support_visited v v_in_support
-                  contradiction)
-                use path_to_v
-                constructor
-                · unfold bfs_path_as_extracted_as_long_as_sort_index at extract_length_invar 
-                  have hh := extract_length_invar head head_was_visited_before
-                  rw [← hh]
-                  unfold path_to_v
-                  unfold path_to_head
-                  apply extend_path_inc_length_by_one
-                · unfold path_is_shortest
-                  intro p'
-                  by_contra p'_is_shorter
-                  simp at p'_is_shorter
-
-                  have v_not_on_stack_before : v ∉ state.stack := by
-                    by_contra v_on_stack
-                    apply t_0 at v_on_stack
-                    contradiction
-                  
-                  have p'_elem_on_stack_or_v_visited :
-                    (∃ u ∈ support g p'.walk, u ∈ state.stack) ∨ v ∈ state.visited := by sorry
-                  
-                  cases p'_elem_on_stack_or_v_visited
-                  · next u_in_support_on_stack =>
-                    obtain ⟨u, ⟨u_in_support, u_on_stack ⟩ ⟩ := u_in_support_on_stack
-                    have u_not_v : u ≠ v := by
-                      simp_all
-                      by_contra head_eq_v
-                      rw [head_eq_v] at v_not_on_stack_before
-                      simp_all
-                    
-                    have stack_nodes_have_ge_paths : bfs_expansion_in_order start state := by sorry
-                    unfold bfs_expansion_in_order at stack_nodes_have_ge_paths
-                    have stack_before_not_empty : ¬ state.stack = [] := by
-                      apply List.ne_nil_of_mem
-                      apply u_on_stack
-                    simp at stack_nodes_have_ge_paths
-
-                    have dist_u_ge_stack_head := stack_nodes_have_ge_paths stack_before_not_empty u u_on_stack
-                    rw [head_iff compose] at dist_u_ge_stack_head
-                    apply bar (g:=g) (dhead := state.pathOrder head) (start:=start) (u:=u) (v:=v) (head:=head) (shortest_start_head_walk:=path_to_head.walk)
-                    --· apply prior_invar
-                    --  · exact head_was_visited_before
-                    --  · simp_all 
-                    · exact dist_u_ge_stack_head
-                    · exact u_not_v 
-                    · exact u_in_support 
-                    · have hh := extract_length_invar head head_was_visited_before
-                      rw [← hh]
-                      unfold path_length
-                      rfl
-                    · unfold path_length at p'_is_shorter
-                      unfold path_to_v at p'_is_shorter
-                      unfold extend_path at p'_is_shorter
-                      simp at p'_is_shorter
-                      exact p'_is_shorter 
-                    --· exact head_adj_v 
-                  · contradiction
-              · -- tail is not empty: this is impossible as v becomes the head
-                simp_all
-                have v_was_on_stack : v ∈ state.stack := by
-                  rw [compose]
-                  apply List.mem_cons.mpr
-                  right
-                  simp_all
-                  apply List.mem_of_head?
-                  rw [← head_after_is_v]
-                  apply List.head?_eq_some_head
-                have v_visited_before : v ∈ state.visited := t_0 v v_was_on_stack
-                simp_all
-
-lemma gak {start v : V } (state : base_search_state g)
-  (path_to_v p' : Path g start v)
-  (p'_is_shorter : path_length g p' < path_length g path_to_v)
-  (v_visited : v ∈ state.visited)
-  (support_not_on_stack : ∀ u ∈ support g p'.walk, u ≠ v → u ∉ state.stack)
-  : ⊥ := by
-    sorry
-
 
 
 theorem bfs_is_optimal(g: WeightedDiGraph V E) (start : V) (goal : V)
@@ -895,6 +786,8 @@ theorem bfs_is_optimal(g: WeightedDiGraph V E) (start : V) (goal : V)
         apply i_1'
         right
         simp_all
+        obtain ⟨ tail, compose ⟩ := List.head?_eq_some_iff.mp h_4
+        simp_all
       unfold graph_distance_is at i_1''
       exact i_1''
 
@@ -926,4 +819,8 @@ theorem bfs_is_optimal(g: WeightedDiGraph V E) (start : V) (goal : V)
     rw [← p_path_length]
     unfold path_is_shortest at p_is_shortest
     simp_all
+
+
+
+
 

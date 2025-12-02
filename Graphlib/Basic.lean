@@ -218,6 +218,9 @@ theorem split_path_at_end (p : Path G u v) (not_nil : u ≠ v):
       p = extend_path G p' w_adj_v not_in_supp := by
     sorry
 
+theorem paths_contain_sub_paths {u v w : V} (p : Path G u v) (w_in_path : w ∈ support G p.walk) (w_ne_v : w ≠ v):
+    ∃ p' : Path G u w, path_length G p' < path_length G p := by sorry
+
 
 
 
