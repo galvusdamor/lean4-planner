@@ -69,6 +69,17 @@ structure Path (u : V) (v : V) where
   support_nodup : List.Nodup (support G walk)
   deriving DecidableEq
 
+
+def nil_path (u : V) : Path G u u :=
+  let w : Walk G u u := Walk.nil
+  have p : List.Nodup (support G w) := by
+    unfold w
+    unfold support
+    simp
+
+  Path.mk w p
+
+
 def path_length {u v : V} (p : Path G u v) : ℕ := walk_length G p.walk
 
 lemma paths_length_le_V_card_min_1 {u v : V} (p : Path G u v) : path_length G p ≤ Fintype.card V - 1 := by 

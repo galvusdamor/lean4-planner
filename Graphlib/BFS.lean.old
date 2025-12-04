@@ -7,7 +7,6 @@ abbrev bfs_expansion_in_order (start : V) (s : base_search_state g) :=
 
 abbrev bfs_path_exists (start : V) (s : base_search_state g) :=
   ∀ u ∈ s.visited, ∃ p : Path g start u, p=p
-
 abbrev bfs_path_as_long_as_sort_index (start : V) (s : base_search_state g) :=
   ∀ u ∈ s.visited, ∃ p : Path g start u, path_length g p = s.pathOrder u
 

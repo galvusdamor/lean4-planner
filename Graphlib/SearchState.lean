@@ -58,6 +58,9 @@ abbrev search_invar_on_stack_or_all_neighbours_visited (s : base_search_state g)
 abbrev search_invar_start_visited (start : V) (s : base_search_state g) :=
       start ∈ s.visited
 
+abbrev search_invar_start_path_order_zero (start : V) (s : base_search_state g) :=
+      s.pathOrder start = 0
+
 abbrev search_invar_all_basic (start : V) (s : base_search_state g) :=
       search_invar_stack_is_visited s
       ∧ search_invar_mother_is_visited s
