@@ -82,9 +82,8 @@ def nil_path (u : V) : Path G u u :=
 
 def path_length {u v : V} (p : Path G u v) : ℕ := walk_length G p.walk
 
-lemma paths_length_le_V_card_min_1 {u v : V} (p : Path G u v) : path_length G p ≤ Fintype.card V - 1 := by 
-  
-  sorry
+--lemma paths_length_le_V_card_min_1 {u v : V} (p : Path G u v) : path_length G p ≤ Fintype.card V - 1 := by 
+--  sorry
 
 
 /-- Definition of `Shortest Path` -/
@@ -113,12 +112,12 @@ def is_sub_path_tail {u v w : V} (p : Path G u v) (p' : Path G u w) : Bool :=
   is_sub_walk_tail G p.walk p'.walk
 
 
-lemma subpath_of_shortest_path_are_shortest {u v w : V} (p : Path G u v) (p_shortest : path_is_shortest G p) (p' : Path G u w) (sub_path : is_sub_path_tail G p p') : path_is_shortest G p' := by
-  by_contra not_shortest
-  unfold path_is_shortest at p_shortest not_shortest
-  simp_all
-  obtain ⟨ shorter_path', is_shorter'⟩ := not_shortest
-  sorry
+--lemma subpath_of_shortest_path_are_shortest {u v w : V} (p : Path G u v) (p_shortest : path_is_shortest G p) (p' : Path G u w) (sub_path : is_sub_path_tail G p p') : path_is_shortest G p' := by
+--  by_contra not_shortest
+--  unfold path_is_shortest at p_shortest not_shortest
+--  simp_all
+--  obtain ⟨ shorter_path', is_shorter'⟩ := not_shortest
+--  sorry
 
 
 
@@ -134,11 +133,11 @@ def graph_distance_gt (u v : V) (dist: ℕ) : Prop :=
 def graph_distance_lt (u v : V) (dist: ℕ) : Prop :=
   ∃ p : Path G u v, path_length G p < dist
 
-lemma shortest_path_shorter_than_example_path (u v : V) (p : Path G u v):
-    ∃ d : ℕ, d ≤ path_length G p ∧ graph_distance_is G u v d := by
-  by_contra distance_is_longer
-  simp_all
-  sorry
+--lemma shortest_path_shorter_than_example_path (u v : V) (p : Path G u v):
+--    ∃ d : ℕ, d ≤ path_length G p ∧ graph_distance_is G u v d := by
+--  by_contra distance_is_longer
+--  simp_all
+--  sorry
 
 omit [DecidableEq V] [DecidableEq E] in
 lemma graph_distance_ge_lt (u v : V) (d1 d2: ℕ) :
@@ -169,9 +168,9 @@ def extend_walk (ww : Walk G u v) (h : G.Adj v w) : Walk G u w :=
   append G ww (Walk.cons h Walk.nil)
 
 
-theorem append_eq_append (w1 : Walk G u v) (w2 : Walk G v w) (w1' : Walk G u v') (w2' : Walk G v' w) (v_eq_v' : v = v'):
-    w1 = v_eq_v' ▸ w1' ∧ w2 = v_eq_v' ▸ w2' →
-    append G w1 w2 = append G w1' w2' := by sorry
+--theorem append_eq_append (w1 : Walk G u v) (w2 : Walk G v w) (w1' : Walk G u v') (w2' : Walk G v' w) (v_eq_v' : v = v'):
+--    w1 = v_eq_v' ▸ w1' ∧ w2 = v_eq_v' ▸ w2' →
+--    append G w1 w2 = append G w1' w2' := by sorry
 
 /-- Support of extended walk is the same as the support list of the old walk ectended by one. -/
 theorem extend_walk_support_node_added_at_end
@@ -221,12 +220,31 @@ def extend_path (p : Path G u v) (h : G.Adj v w) (proof_w_not_in_support : w ∉
   Path.mk path_walk path_nodup -- constructor new path
 
 
-theorem extend_path_inc_length_by_one (p : Path G u v) (h : G.Adj v w) (proof_w_not_in_support : w ∉ support G p.walk) : path_length G (extend_path G p h proof_w_not_in_support) = 1 + path_length G p := by
-  sorry
+omit [DecidableEq V] [DecidableEq E] in
+theorem append_inc_length_by_one (ww : Walk G u v) (h : G.Adj v w) :
+  walk_length G (append G ww (Walk.cons h Walk.nil)) = 1 + walk_length G ww := by
+  unfold append
+  split
+  · unfold walk_length
+    unfold walk_length
+    simp
+  · unfold walk_length
+    apply IsLeftCancelAdd.add_left_cancel
+    · simp
+      apply append_inc_length_by_one
+    · use 0
 
 
+omit [DecidableEq V] [DecidableEq E] in
 theorem extend_walk_inc_length_by_one (p : Walk G u v) (h : G.Adj v w) : walk_length G (extend_walk G p h) = 1 + walk_length G p := by
-  sorry
+  unfold extend_walk
+  apply append_inc_length_by_one
+
+omit [DecidableEq V] [DecidableEq E] in
+theorem extend_path_inc_length_by_one (p : Path G u v) (h : G.Adj v w) (proof_w_not_in_support : w ∉ support G p.walk) : path_length G (extend_path G p h proof_w_not_in_support) = 1 + path_length G p := by
+  apply extend_walk_inc_length_by_one
+
+
 
 theorem split_path_at_end (p : Path G u v) (not_nil : u ≠ v):
     ∃ w : V, ∃ p' : Path G u w, ∃ w_adj_v : G.Adj w v, ∃ not_in_supp : v ∉ support G p'.walk,
@@ -251,8 +269,18 @@ theorem extend_path_extends_support (p: Path G u v) (h: G.Adj v w)(proof_w_not_i
       simp
       apply extend_walk_extends_support
 
-theorem path_goal_in_support (p: Path G u v): v ∈ support G p.walk := by sorry
+omit [DecidableEq V] [DecidableEq E] in
+theorem walk_goal_in_support (p: Walk G u v): v ∈ support G p := by
+  unfold support
+  split
+  · simp
+    right
+    apply walk_goal_in_support
+  · simp
 
+omit [DecidableEq V] [DecidableEq E] in
+theorem path_goal_in_support (p: Path G u v): v ∈ support G p.walk := by
+  apply walk_goal_in_support
 
 -- tests
 example : WeightedDiGraph (Fin 3) (Nat) where
