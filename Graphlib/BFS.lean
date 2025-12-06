@@ -423,6 +423,7 @@ abbrev astar_stack_shortest_path (start : V) (s : base_search_state g) :=
 
 abbrev bfs_all_invar (start : V) (s : base_search_state g) :=
       search_invar_all_basic start s
+    ∧ bfs_stack_shortest_path start s
     ∧ bfs_path_as_extracted_as_long_as_sort_index start s
     ∧ bfs_invar_on_stack_or_all_neighbours_max_order s
     ∧ bfs_stack_sorted s
@@ -433,7 +434,11 @@ abbrev bfs_all_invar (start : V) (s : base_search_state g) :=
 lemma support_of_path_visited (u v : V) (w : Walk g u v)
     (state : base_search_state g)
     (mother_invar : search_invar_mother_is_visited state)
+    (mother_invar_adj : search_invar_mother_is_adjacent u state)
+    (decreasing_invar : search_invar_mother_decreasing_path_order u state)
     (end_visited : v ∈ state.visited)
+    (walk_was_extracted : w = (extract_path_to u v state end_visited mother_invar mother_invar_adj decreasing_invar).fst.walk)
+    (state : base_search_state g)
     :
     ∀ u ∈ support g w, u ∈ state.visited:= by
       sorry
@@ -476,7 +481,24 @@ lemma bfs_expand_start_path_order_zero_carries (start : V) (goal : V):
       base_invar_carries_over_expand goal (bfs_step_expand g) (search_invar_start_path_order_zero (g:=g) start) := by
       sorry
 
-lemma foo
+lemma bfs_expand_keeps_max_diff (goal : V):
+      base_invar_carries_over_expand goal (bfs_step_expand g) (bfs_stack_max_diff (g:=g)) := by
+      sorry
+
+lemma bfs_expand_keeps_extracted_same_length_as_sort_index (start : V) (goal : V):
+      base_invar_carries_over_expand goal (bfs_step_expand g) (bfs_path_as_extracted_as_long_as_sort_index  (g:=g) start) := by
+      sorry
+
+lemma bfs_expand_keeps_on_stack_or_nei_max_order (goal : V):
+      base_invar_carries_over_expand goal (bfs_step_expand g) (bfs_invar_on_stack_or_all_neighbours_max_order (g:=g)) := by
+      sorry
+
+lemma bfs_expand_keeps_stack_sorted (goal : V):
+      base_invar_carries_over_expand goal (bfs_step_expand g) (bfs_stack_sorted (g:=g)) := by
+      sorry
+
+
+lemma bfs_expand_keeps_shortest_path_invar
     (start : V) (goal : V)
     (state : base_search_state g)
     ----- co-invariants needed for path extraction
@@ -677,8 +699,8 @@ lemma foo
                 (extract_path_to start head state head_was_visited_before mother_invar mother_invar_adj decreasing_invar).1
               have support_visited : ∀ u ∈ support g path_to_head.walk, u ∈ state.visited := by
                 apply support_of_path_visited
-                · exact mother_invar 
-                · exact head_was_visited_before 
+                unfold path_to_head
+                rfl
       
               let path_to_v : Path g start v := extend_path g path_to_head head_adj_v (by
                 by_contra v_in_support
@@ -768,9 +790,41 @@ lemma foo
 
 lemma bfs_expand_carries_all_bfs_invars (start : V) (goal : V):
       base_invar_carries_over_expand goal (bfs_step_expand g) (bfs_all_invar (g:=g) start) := by
+      unfold base_invar_carries_over_expand
+      intro s head tail ⟨ invar_before, head_ne_goal, compose⟩ 
+      unfold bfs_all_invar
+      constructor
+      · apply bfs_expand_keeps_base_invars
+        · exact ⟨ invar_before.left, head_ne_goal, compose⟩
+      · repeat rw [← and_assoc]
+        repeat constructor
+        · apply bfs_expand_keeps_shortest_path_invar
+          · exact invar_before.left.right.left
+          · exact invar_before.left.right.right.left
+          · exact invar_before.left.right.right.right.left
+          · exact invar_before.left.right.right.right.right.right
+          · exact invar_before.left.right.right.right.right.left
+          · exact invar_before.left.left
+          · exact invar_before.right.right.left
+          · exact invar_before.right.right.right.left
+          · exact invar_before.right.right.right.right.left
+          · exact invar_before.right.right.right.right.right.left
+          · exact invar_before.right.right.right.right.right.right
+          · exact ⟨ invar_before.right.left, head_ne_goal, compose⟩
+        · apply bfs_expand_keeps_extracted_same_length_as_sort_index
+          exact ⟨ invar_before.right.right.left, head_ne_goal, compose⟩
+        · apply bfs_expand_keeps_on_stack_or_nei_max_order
+          exact ⟨ invar_before.right.right.right.left, head_ne_goal, compose⟩
+        · apply bfs_expand_keeps_stack_sorted
+          exact ⟨ invar_before.right.right.right.right.left, head_ne_goal, compose⟩
+        · apply bfs_expand_keeps_max_diff
+          exact ⟨ invar_before.right.right.right.right.right.left, head_ne_goal, compose⟩
+        · apply bfs_expand_start_path_order_zero_carries
+          exact ⟨ invar_before.right.right.right.right.right.right, head_ne_goal, compose⟩
+
+lemma bfs_invar_holds_at_init (start : V):
+      bfs_all_invar start (base_search_state_initial (g:=g) start) := by
       sorry
-
-
 
 theorem bfs_is_optimal(g: WeightedDiGraph V E) (start : V) (goal : V)
     (returned_path : Option.isSome (bfs g start goal)):
@@ -847,9 +901,24 @@ theorem bfs_is_optimal(g: WeightedDiGraph V E) (start : V) (goal : V)
 
 
     -- BFS specific ones
-    have i_1 : bfs_stack_shortest_path start final_state := by sorry
+    have bfs_full_invar_at_end : bfs_all_invar start final_state := by
+     have right_class : (fun s => bfs_all_invar start (has_base_search_state.to_base_state (g:=g) s)) final_state := by
+      unfold final_state
+      unfold final
+      unfold search_with_stack_step
+      unfold search_internal
+      simp
+      apply search_recurse_lift_base_invariant (invar := fun s => bfs_all_invar start s) (search_step := (search_stack_step (bfs_step_expand g))) (goal := goal) (priorState := base_search_state_initial start) (termination_metric := base_search_state_termination_metric) 
+      constructor
+      · apply bfs_invar_holds_at_init
+      · apply base_invar_carries_over_stack_step
+        apply bfs_expand_carries_all_bfs_invars 
+     -- needs to be applied, lean4 has problems with they type-class here
+     apply right_class
 
-    have h_2 : bfs_path_as_extracted_as_long_as_sort_index start final_state t_1 t_2 t_3 := by sorry
+    have i_1 : bfs_stack_shortest_path start final_state := bfs_full_invar_at_end.2.1
+
+    have h_2 : bfs_path_as_extracted_as_long_as_sort_index start final_state := bfs_full_invar_at_end.2.2.1
 
 
     have h : graph_distance_is g start goal (final_state.pathOrder goal) := by
@@ -876,9 +945,8 @@ theorem bfs_is_optimal(g: WeightedDiGraph V E) (start : V) (goal : V)
     obtain ⟨p, ⟨ p_path_length, p_is_shortest ⟩ ⟩  := h
 
     unfold bfs_path_as_extracted_as_long_as_sort_index at h_2
-    have prop := h_2 goal
+    have prop := h_2 t_1 t_2 t_3 goal
     clear h_2
-    simp_all
     unfold final_state at prop
     unfold final at prop
     unfold search_with_stack_step at prop
