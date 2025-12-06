@@ -169,6 +169,10 @@ def extend_walk (ww : Walk G u v) (h : G.Adj v w) : Walk G u w :=
   append G ww (Walk.cons h Walk.nil)
 
 
+theorem append_eq_append (w1 : Walk G u v) (w2 : Walk G v w) (w1' : Walk G u v') (w2' : Walk G v' w) (v_eq_v' : v = v'):
+    w1 = v_eq_v' ▸ w1' ∧ w2 = v_eq_v' ▸ w2' →
+    append G w1 w2 = append G w1' w2' := by sorry
+
 /-- Support of extended walk is the same as the support list of the old walk ectended by one. -/
 theorem extend_walk_support_node_added_at_end
      [FinEnum V'] {G : WeightedDiGraph V' E'} {h : G.Adj v w} { www : Walk G a v } :
