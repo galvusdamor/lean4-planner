@@ -168,3 +168,8 @@ theorem head_iff {α : Type u_1} {l tail : List α} {head : α} (compose : l = h
     simp_all
 
 
+theorem option_mem{α : Type u_1} (o : Option α) (o_is_some : o.isSome = true) (s : Set α):
+  o.get o_is_some ∈ s → ∃ x : α, o.get o_is_some = x ∧ x ∈ s := by
+    intro get_in_s
+    use o.get o_is_some
+
