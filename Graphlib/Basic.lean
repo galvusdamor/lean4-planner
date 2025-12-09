@@ -251,11 +251,110 @@ theorem split_path_at_end (p : Path G u v) (not_nil : u ≠ v):
       p = extend_path G p' w_adj_v not_in_supp := by
     sorry
 
+omit [DecidableEq V] [DecidableEq E] in
+theorem length_nil_path_zero {u : V} : path_length G (nil_path G u) = 0 := by
+  unfold path_length walk_length nil_path
+  simp_all
+
+omit [DecidableEq V] [DecidableEq E] in
+theorem length_nil_walk_zero {u : V} : walk_length G (Walk.nil : Walk G u u) = 0 := by
+  unfold walk_length
+  simp_all
+
+omit [DecidableEq V] [DecidableEq E] in
+theorem walk_length_diff_ends_ne_zero {u v : V} (h : u ≠ v) (p : Walk G u v): walk_length G p > 0 := by
+  unfold walk_length
+  split
+  · simp
+  · contradiction
+
+
+omit [DecidableEq V] [DecidableEq E] in
+theorem path_length_diff_ends_ne_zero {u v : V} (h : u ≠ v) (p : Path G u v): path_length G p > 0 := by
+  unfold path_length walk_length
+  split
+  · simp
+  · contradiction
+
+omit [DecidableEq V] [DecidableEq E] in
+theorem walk_goal_in_support {u v : V} (p: Walk G u v): v ∈ support G p := by
+  unfold support
+  split
+  · simp
+    right
+    apply walk_goal_in_support
+  · simp
+
+omit [DecidableEq V] [DecidableEq E] in
+theorem nil_path_eq {u v: V} (h : u = v): nil_path G u = h ▸ nil_path G v := by
+  subst h
+  simp_all only
+
+omit [DecidableEq V] [DecidableEq E] in
+theorem nil_walk_eq {u v: V} (h : u = v): (Walk.nil : Walk G u u) = h ▸ (Walk.nil : Walk G v v) := by
+  subst h
+  simp_all only
+
+
+omit [DecidableEq V] [DecidableEq E] in
+@[simp]
+theorem nil_path_support {u : V} (p : Path G u u) : support G p.walk = [u] := by
+  obtain ⟨w,nodup⟩ := p
+  cases w
+  · unfold support
+    rfl
+  · next a b c =>
+    unfold support at nodup
+    simp at nodup
+    have u_not_in_supp := nodup.left
+    have h : u ∈ support G c := by apply walk_goal_in_support
+    contradiction
+
+omit [DecidableEq V] [DecidableEq E] in
+theorem walks_contain_sub_walk {u v w : V} (p : Walk G u v) (w_in_walk : w ∈ support G p) (w_ne_v : w ≠ v):
+    ∃ p' : Walk G u w, walk_length G p' < walk_length G p ∧ (support G p') <+: (support G p) := by
+    by_cases u_eq_w : u = w
+    · let w' : Walk G u u := Walk.nil
+      use u_eq_w ▸ w'
+      subst u_eq_w
+      rw [length_nil_walk_zero]
+      simp_all
+      constructor
+      · apply GT.gt.lt
+        apply walk_length_diff_ends_ne_zero
+        apply w_ne_v
+      · unfold support
+        grind
+    · cases p
+      · unfold support at w_in_walk
+        simp_all -- contradictory
+      · next a b c =>
+        unfold support at w_in_walk
+        simp_all
+        cases w_in_walk
+        · grind
+        · next w_in_c =>
+          obtain ⟨p',length_le⟩  := walks_contain_sub_walk c w_in_c w_ne_v
+          use (Walk.cons b p')
+          unfold walk_length
+          constructor
+          · grind
+          · unfold support
+            grind 
+
+omit [DecidableEq V] [DecidableEq E] in
 theorem paths_contain_sub_paths {u v w : V} (p : Path G u v) (w_in_path : w ∈ support G p.walk) (w_ne_v : w ≠ v):
-    ∃ p' : Path G u w, path_length G p' < path_length G p := by sorry
-
-
-
+    ∃ p' : Path G u w, path_length G p' < path_length G p := by
+    obtain ⟨w',len,supp⟩ := walks_contain_sub_walk G p.walk w_in_path w_ne_v 
+    let p' : Path G u w := Path.mk w' (by
+      apply List.Nodup.sublist (l₂ := support G p.walk)
+      · apply List.IsPrefix.sublist
+        exact supp
+      · exact p.support_nodup)
+    use p'
+    unfold path_length
+    apply len
+    
 
 omit [DecidableEq V] [DecidableEq E] in
 theorem extend_walk_extends_support (ww: Walk G u v) (h: G.Adj v w):
@@ -269,14 +368,6 @@ theorem extend_path_extends_support (p: Path G u v) (h: G.Adj v w)(proof_w_not_i
       simp
       apply extend_walk_extends_support
 
-omit [DecidableEq V] [DecidableEq E] in
-theorem walk_goal_in_support (p: Walk G u v): v ∈ support G p := by
-  unfold support
-  split
-  · simp
-    right
-    apply walk_goal_in_support
-  · simp
 
 omit [DecidableEq V] [DecidableEq E] in
 theorem path_goal_in_support (p: Path G u v): v ∈ support G p.walk := by
