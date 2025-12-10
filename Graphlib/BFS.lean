@@ -907,15 +907,17 @@ lemma bfs_expand_keeps_shortest_path_invar
               obtain ⟨v_visited, support_not_on_stack⟩ := both 
               obtain ⟨ w,path_start_w,w_adj_v,v_not_earlier_in_path,p'_compose⟩ := split_path_at_end g p' (Ne.symm v_not_start)
               have path_start_w_length : path_length g path_start_w + 1 = path_length g p' := by
+                unfold path_length
                 rw [p'_compose]
                 apply Eq.symm
                 rw [add_comm]
                 apply extend_path_inc_length_by_one
+                exact v_not_earlier_in_path
               rw [← path_start_w_length] at p'_is_shorter
               clear path_start_w_length
               have w_in_supp : w ∈ support g p'.walk := by
                 rw [p'_compose]
-                rw [extend_path_extends_support]
+                rw [extend_walk_extends_support]
                 simp
                 left
                 apply path_goal_in_support

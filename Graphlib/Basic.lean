@@ -219,6 +219,18 @@ def extend_path (p : Path G u v) (h : G.Adj v w) (proof_w_not_in_support : w ∉
     rw  [h]
   Path.mk path_walk path_nodup -- constructor new path
 
+omit [DecidableEq V] [DecidableEq E] in
+theorem extend_walk_extends_support (ww: Walk G u v) (h: G.Adj v w):
+    support G (extend_walk G ww h) = (support G ww) ++ [w] := by
+  induction ww <;> simp_all [extend_walk, append, support]
+
+omit [DecidableEq V] [DecidableEq E] in
+theorem extend_path_extends_support (p: Path G u v) (h: G.Adj v w)(proof_w_not_in_support : w ∉ support G p.walk):
+   support G (extend_path G p h proof_w_not_in_support).walk = (support G p.walk) ++ [w]  := by
+      unfold extend_path
+      simp
+      apply extend_walk_extends_support
+
 
 omit [DecidableEq V] [DecidableEq E] in
 theorem append_inc_length_by_one (ww : Walk G u v) (h : G.Adj v w) :
@@ -245,11 +257,81 @@ theorem extend_path_inc_length_by_one (p : Path G u v) (h : G.Adj v w) (proof_w_
   apply extend_walk_inc_length_by_one
 
 
+omit [DecidableEq V] [DecidableEq E] in
+theorem split_walk_at_end_length_one (p : Walk G u v) (len_ne_zero : walk_length G p > 0):
+    ∃ w : V, ∃ p' : Walk G u w, ∃ w_adj_v : G.Adj w v,
+      p = extend_walk G p' w_adj_v := by
+    cases p
+    · unfold walk_length at len_ne_zero
+      simp_all
+    · next u' u_adj_u' p_u' =>
+      cases p_u'
+      · use u
+        use (Walk.nil : Walk G u u)
+        use u_adj_u'
+        unfold extend_walk
+        unfold append
+        rfl
+      · next u'' u'_adj_u'' p_u'' =>
+        let p_u' := Walk.cons u'_adj_u'' p_u''
+        have p_u'_length : walk_length G p_u' > 0 := by
+          unfold p_u'
+          unfold walk_length
+          simp
+        obtain ⟨ w,p',w_adj_v, extend_prop⟩ := split_walk_at_end_length_one p_u' p_u'_length
+        use w
+        use Walk.cons u_adj_u' p'
+        use w_adj_v
+        unfold extend_walk
+        unfold append
+        unfold p_u' at extend_prop
+        rw [extend_prop]
+        congr
 
+omit [DecidableEq V] [DecidableEq E] in
+theorem split_walk_at_end (p : Walk G u v) (not_nil : u ≠ v):
+    ∃ w : V, ∃ p' : Walk G u w, ∃ w_adj_v : G.Adj w v,
+      p = extend_walk G p' w_adj_v := by
+    have len_ne_zero : walk_length G p > 0 := by
+      cases p
+      · contradiction
+      · unfold walk_length
+        simp
+    apply split_walk_at_end_length_one G p len_ne_zero
+
+
+
+omit [DecidableEq V] [DecidableEq E] in
 theorem split_path_at_end (p : Path G u v) (not_nil : u ≠ v):
-    ∃ w : V, ∃ p' : Path G u w, ∃ w_adj_v : G.Adj w v, ∃ not_in_supp : v ∉ support G p'.walk,
-      p = extend_path G p' w_adj_v not_in_supp := by
-    sorry
+    ∃ w : V, ∃ p' : Path G u w, ∃ w_adj_v : G.Adj w v,
+      v ∉ support G p'.walk ∧ p.walk = extend_walk G p'.walk w_adj_v := by
+    obtain ⟨ w, p_w, w_adj_v, walk_extended ⟩ := split_walk_at_end G p.walk not_nil
+    
+    have supp_compose : (support G p.walk) = (support G p_w) ++ [v] := by
+      rw [walk_extended]
+      apply extend_walk_extends_support
+
+    have nodup : (support G p_w).Nodup := by
+      have h : (support G p.walk).Nodup := p.support_nodup
+      rw [supp_compose] at h
+      apply List.pairwise_append.mp at h
+      grind
+    let p' := Path.mk p_w nodup
+    use w
+    use p'
+    use w_adj_v
+    have not_in_supp : v ∉ support G p'.walk := by
+      unfold p'
+      simp
+      --intro w_in_p'_support
+      have support_compose : support G p.walk = support G p_w ++ [v] := by
+        rw [walk_extended]
+        apply extend_walk_extends_support G p_w w_adj_v
+      have p_supp_nodup : (support G p.walk).Nodup := p.support_nodup
+      rw [support_compose] at p_supp_nodup
+      apply List.pairwise_append.mp at p_supp_nodup
+      grind
+    use not_in_supp
 
 omit [DecidableEq V] [DecidableEq E] in
 theorem length_nil_path_zero {u : V} : path_length G (nil_path G u) = 0 := by
@@ -355,18 +437,6 @@ theorem paths_contain_sub_paths {u v w : V} (p : Path G u v) (w_in_path : w ∈ 
     unfold path_length
     apply len
     
-
-omit [DecidableEq V] [DecidableEq E] in
-theorem extend_walk_extends_support (ww: Walk G u v) (h: G.Adj v w):
-    support G (extend_walk G ww h) = (support G ww) ++ [w] := by
-  induction ww <;> simp_all [extend_walk, append, support]
-
-omit [DecidableEq V] [DecidableEq E] in
-theorem extend_path_extends_support (p: Path G u v) (h: G.Adj v w)(proof_w_not_in_support : w ∉ support G p.walk):
-   support G (extend_path G p h proof_w_not_in_support).walk = (support G p.walk) ++ [w]  := by
-      unfold extend_path
-      simp
-      apply extend_walk_extends_support
 
 
 omit [DecidableEq V] [DecidableEq E] in
