@@ -380,8 +380,7 @@ theorem nil_walk_eq {u v: V} (h : u = v): (Walk.nil : Walk G u u) = h ▸ (Walk.
 
 omit [DecidableEq V] [DecidableEq E] in
 @[simp]
-theorem nil_path_support {u : V} (p : Path G u u) : support G p.walk = [u] := by
-  obtain ⟨w,nodup⟩ := p
+theorem nodup_walk_start_eq_end_support {u v: V} (w : Walk G u v) (u_eq_v : u = v) (nodup : (support G w).Nodup) : support G w = [u] := by
   cases w
   · unfold support
     rfl
@@ -389,8 +388,24 @@ theorem nil_path_support {u : V} (p : Path G u u) : support G p.walk = [u] := by
     unfold support at nodup
     simp at nodup
     have u_not_in_supp := nodup.left
-    have h : u ∈ support G c := by apply walk_goal_in_support
+    have h : v ∈ support G c := by apply walk_goal_in_support
+    rw [u_eq_v] at u_not_in_supp
     contradiction
+omit [DecidableEq V] [DecidableEq E] in
+@[simp]
+theorem nil_walk_support {u : V} (w : Walk G u u) (nodup : (support G w).Nodup) : support G w = [u] := by
+  apply nodup_walk_start_eq_end_support
+  · rfl
+  · exact nodup
+
+
+omit [DecidableEq V] [DecidableEq E] in
+@[simp]
+theorem nil_path_support {u : V} (p : Path G u u) : support G p.walk = [u] := by
+  obtain ⟨w,nodup⟩ := p
+  apply nil_walk_support
+  simp
+  exact nodup
 
 omit [DecidableEq V] [DecidableEq E] in
 theorem walks_contain_sub_walk {u v w : V} (p : Walk G u v) (w_in_walk : w ∈ support G p) (w_ne_v : w ≠ v):

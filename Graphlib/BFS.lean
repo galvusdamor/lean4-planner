@@ -476,6 +476,85 @@ decreasing_by
   apply decreasing_invar
   apply v_eq_u
 
+
+lemma run_walk_through_state_not_on_stack_yields_all_visited
+  (start v : V) (v_ne_start : v ≠ start)
+  (w : Walk g start v)
+  (w_support_nodup : (support g w).Nodup)
+  (state : base_search_state g)
+  (start_visited : search_invar_start_visited start state)
+  (on_stack_or_nei_visited : search_invar_on_stack_or_all_neighbours_visited state)
+  (all_not_on_stack : ∀ u ∈ support g w, u ∈ state.stack → u = v)
+  :
+  ∀ u ∈ support g w, u ∈ state.visited := by
+    cases w
+    · intro u u_in_support
+      have u_eq_start : u = start := by
+        unfold support at u_in_support 
+        simp_all
+      rw [u_eq_start]
+      apply start_visited
+    · -- walk is: start -> w -> ... -> v (with potentially w = v)
+      next w start_adj_w w' =>
+      intro u u_in_support_w
+      unfold support at u_in_support_w
+      simp at u_in_support_w
+      cases u_in_support_w
+      · next u_eq_start =>
+        rw [u_eq_start]
+        apply start_visited
+      · next u_in_support_w' =>
+        have w'_support_nodup : (support g w').Nodup := by 
+            unfold support at w_support_nodup
+            simp at w_support_nodup
+            exact w_support_nodup.right
+
+        by_cases v_neq_w : v ≠ w 
+        · apply run_walk_through_state_not_on_stack_yields_all_visited w v v_neq_w w' w'_support_nodup state
+          · unfold search_invar_start_visited
+            unfold search_invar_on_stack_or_all_neighbours_visited at on_stack_or_nei_visited
+            have h := on_stack_or_nei_visited ⟨ start, start_visited ⟩
+            cases h
+            · have start_eq_v : start = v := by
+                apply all_not_on_stack
+                · unfold support
+                  simp
+                · next hh =>
+                  exact hh
+              grind
+            · next hh =>
+              apply hh
+              exact start_adj_w
+          · exact on_stack_or_nei_visited 
+          · intro u' u'_in_support_w' u'_in_stack
+            apply all_not_on_stack
+            · unfold support
+              simp_all
+            · exact u'_in_stack
+          · exact u_in_support_w'
+        · simp at v_neq_w
+          have supp_w'_eq_w : support g w' = [w] := by
+            let w'_type : Walk g w w := v_neq_w ▸ w'
+            rw [v_neq_w] at w'
+            apply nodup_walk_start_eq_end_support
+            · symm
+              exact v_neq_w
+            · apply w'_support_nodup
+          rw [supp_w'_eq_w] at u_in_support_w'
+          simp_all
+          have nei_start := on_stack_or_nei_visited start start_visited
+          cases nei_start
+          · next start_in_stack =>
+            have start_eq_w : start = w := by
+              apply all_not_on_stack
+              · unfold support
+                simp
+              · exact start_in_stack
+            grind
+          · next all_start_nei_visited =>
+            apply all_start_nei_visited
+            exact start_adj_w
+
 lemma run_path_through_state_yields_node_on_stack_or_all_visited
   (start v : V) (v_ne_start : v ≠ start)
   (p : Path g start v)
@@ -484,7 +563,28 @@ lemma run_path_through_state_yields_node_on_stack_or_all_visited
   (on_stack_or_nei_visited : search_invar_on_stack_or_all_neighbours_visited state)
   :
   (∃ u ∈ support g p.walk, u ∈ state.stack ∧ u ≠ v) ∨
-    (v ∈ state.visited ∧ ∀ u ∈ support g p.walk, u ≠ v → u ∉ state.stack ∧ u ∈ state.visited) := by sorry
+    (v ∈ state.visited ∧ ∀ u ∈ support g p.walk, u ≠ v → u ∉ state.stack ∧ u ∈ state.visited) := by
+  by_cases no_onstack : (∃ u ∈ support g p.walk, u ∈ state.stack ∧ u ≠ v)
+  · left; exact no_onstack
+  · right
+    simp at no_onstack
+    have none_on_stack : ∀ u ∈ support g p.walk, u ≠ v → u ∉ state.stack := by
+      intro u u_in_support u_ne_v
+      intro u_on_stack
+      have u_eq_v : u = v := no_onstack u u_in_support u_on_stack
+      contradiction
+    constructor
+    · apply run_walk_through_state_not_on_stack_yields_all_visited start v v_ne_start p.walk p.support_nodup state start_visited on_stack_or_nei_visited
+      · exact no_onstack
+      · apply walk_goal_in_support
+    · intro u u_insupport u_neq_v
+      constructor
+      · apply none_on_stack
+        · exact u_insupport
+        · exact u_neq_v
+      · apply run_walk_through_state_not_on_stack_yields_all_visited start v v_ne_start p.walk p.support_nodup state start_visited on_stack_or_nei_visited
+        · exact no_onstack
+        · exact u_insupport
 
 lemma order_u_le_path_length_p (start u v : V)
   (p : Path g start v)
@@ -1289,4 +1389,4 @@ theorem bfs_is_optimal(g: WeightedDiGraph V E) (start : V) (goal : V)
 
 
 
-
+---
