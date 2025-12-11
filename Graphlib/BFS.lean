@@ -862,9 +862,58 @@ lemma bfs_expand_keeps_max_diff (goal : V)
               · rfl
       · rfl
 
-lemma bfs_expand_keeps_on_stack_or_nei_max_order (goal : V):
-      base_invar_carries_over_expand goal (bfs_step_expand g) (bfs_invar_on_stack_or_all_neighbours_max_order (g:=g)) := by
-      sorry
+lemma bfs_expand_keeps_on_stack_or_nei_max_order(goal : V)
+    (state : base_search_state g)
+    (on_stack_or_nei_visited : search_invar_on_stack_or_all_neighbours_visited state)
+    (stack_sorted : bfs_stack_sorted state)
+    (stack_shortest : bfs_stack_shortest_path start state)
+    :
+     ∀ head : V, ∀ tail : List V, 
+        bfs_invar_on_stack_or_all_neighbours_max_order  state
+          ∧ ¬ head = goal
+          ∧ state.stack = head :: tail
+        → bfs_invar_on_stack_or_all_neighbours_max_order  (bfs_step_expand g state head tail) := by
+      unfold bfs_invar_on_stack_or_all_neighbours_max_order
+      simp
+      intro head tail prior_invar head_ne_goal compose a a_visited_after a_not_on_stack_after y a_adj_y
+
+      unfold bfs_step_expand at a_visited_after a_not_on_stack_after
+      simp at a_visited_after a_not_on_stack_after
+      obtain ⟨ a_not_in_tail, a_visi_if_head_adj ⟩ := a_not_on_stack_after
+      cases a_visited_after
+      · next a_visited_before =>
+        by_cases a_eq_head : a = head
+        · unfold bfs_step_expand
+          simp_all
+          split
+          · next y_visited_before =>
+            by_contra
+            next y_geq_head_plus_one =>
+            simp_all
+            by_cases y_on_stack : y ∈ state.stack
+            · unfold bfs_stack_sorted at stack_sorted
+              rw [compose] at stack_sorted
+              simp at stack_sorted
+              by_cases head_eq_y : head = y
+              · grind
+              · sorry
+            · unfold bfs_stack_shortest_path at stack_shortest
+              sorry
+          · split
+            · simp
+            · simp
+        · unfold bfs_step_expand
+          simp_all
+          split
+          · next y_visited_before =>
+            simp_all
+          · split
+            · simp
+            · next y_not_visited_before visi_ne_empty =>
+              grind -- contradicts not on stack -> nei visited
+      · next both =>
+        obtain ⟨ head_adj_a, a_ne_visited ⟩ := both
+        grind -- contradictory
 
 lemma bfs_expand_keeps_stack_sorted (goal : V):
       base_invar_carries_over_expand goal (bfs_step_expand g) (bfs_stack_sorted (g:=g)) := by
@@ -1389,4 +1438,3 @@ theorem bfs_is_optimal(g: WeightedDiGraph V E) (start : V) (goal : V)
 
 
 
----
