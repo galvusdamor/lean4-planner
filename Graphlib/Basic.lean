@@ -451,12 +451,14 @@ theorem paths_contain_sub_paths {u v w : V} (p : Path G u v) (w_in_path : w ∈ 
     use p'
     unfold path_length
     apply len
-    
-
 
 omit [DecidableEq V] [DecidableEq E] in
 theorem path_goal_in_support (p: Path G u v): v ∈ support G p.walk := by
   apply walk_goal_in_support
+
+theorem walk_shorter_path_exists (w : Walk G u v):
+  ∃ p : Path G u v, path_length G p ≤ walk_length G w := by
+  sorry
 
 -- tests
 example : WeightedDiGraph (Fin 3) (Nat) where
