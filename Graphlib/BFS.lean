@@ -865,12 +865,16 @@ lemma bfs_expand_keeps_max_diff (goal : V)
 lemma bfs_expand_keeps_on_stack_or_nei_max_order(goal : V)
     (state : base_search_state g)
     (on_stack_or_nei_visited : search_invar_on_stack_or_all_neighbours_visited state)
-    (stack_sorted : bfs_stack_sorted state)
+    (max_diff_invar : bfs_stack_max_diff state)
     (stack_shortest : bfs_stack_shortest_path start state)
+    (extract_length_invar : bfs_path_as_extracted_as_long_as_sort_index start state)
+    (mother_invar : search_invar_mother_is_visited state)
+    (mother_invar_adj : search_invar_mother_is_adjacent start state)
+    (decreasing_invar : search_invar_mother_decreasing_path_order start state)
     :
      ∀ head : V, ∀ tail : List V, 
         bfs_invar_on_stack_or_all_neighbours_max_order  state
-          ∧ ¬ head = goal
+          ∧ head ≠ goal
           ∧ state.stack = head :: tail
         → bfs_invar_on_stack_or_all_neighbours_max_order  (bfs_step_expand g state head tail) := by
       unfold bfs_invar_on_stack_or_all_neighbours_max_order
@@ -883,25 +887,44 @@ lemma bfs_expand_keeps_on_stack_or_nei_max_order(goal : V)
       cases a_visited_after
       · next a_visited_before =>
         by_cases a_eq_head : a = head
-        · unfold bfs_step_expand
-          simp_all
-          split
-          · next y_visited_before =>
-            by_contra
-            next y_geq_head_plus_one =>
-            simp_all
+        · rw [a_eq_head] at ⊢ a_adj_y a_not_in_tail a_visi_if_head_adj a_visited_before
+          clear a_eq_head a a_visi_if_head_adj
+          by_cases y_visited_before : y ∈ state.visited
+          · unfold bfs_step_expand
+            simp [y_visited_before, a_visited_before]
             by_cases y_on_stack : y ∈ state.stack
-            · unfold bfs_stack_sorted at stack_sorted
-              rw [compose] at stack_sorted
-              simp at stack_sorted
-              by_cases head_eq_y : head = y
-              · grind
-              · sorry
+            · unfold bfs_stack_max_diff at max_diff_invar
+              grind
             · unfold bfs_stack_shortest_path at stack_shortest
-              sorry
-          · split
-            · simp
-            · simp
+              have shortest_dist_y := stack_shortest y y_visited_before (Or.inl y_on_stack)
+              unfold graph_distance_is at shortest_dist_y
+              obtain ⟨ p,p_length_order, length_is_shortest⟩ := shortest_dist_y 
+              by_contra p_longer_than_head_y
+              simp at p_longer_than_head_y
+              rw [← p_length_order] at p_longer_than_head_y
+              unfold path_is_shortest at length_is_shortest
+              have path_to_y_legth_head_plus_one : ∃ p' : Walk g start y, walk_length g p' = 1 + state.pathOrder head := by
+                let p := (extract_path_to start head state a_visited_before mother_invar mother_invar_adj decreasing_invar).fst
+                let p' := extend_walk g p.walk a_adj_y 
+                use p'
+                unfold p'
+                rw [extend_walk_inc_length_by_one]
+                unfold bfs_path_as_extracted_as_long_as_sort_index at extract_length_invar
+                rw [← extract_length_invar]
+                unfold path_length p
+                congr
+                · use mother_invar
+                · use mother_invar_adj
+                · use decreasing_invar
+                · use a_visited_before
+              obtain ⟨w',w'_length⟩ := path_to_y_legth_head_plus_one
+              rw [← w'_length] at p_longer_than_head_y
+              obtain ⟨ p', p'_leq_w'⟩ := walk_shorter_path_exists g w' 
+              have p'_longer := length_is_shortest p'
+              omega
+          · unfold bfs_step_expand
+            simp [y_visited_before, a_visited_before]
+            grind
         · unfold bfs_step_expand
           simp_all
           split
@@ -1244,7 +1267,14 @@ lemma bfs_expand_carries_all_bfs_invars (start : V) (goal : V):
           · exact invar_before.left.left
           · exact ⟨ invar_before.right.right.left, head_ne_goal, compose⟩
         · apply bfs_expand_keeps_on_stack_or_nei_max_order
-          exact ⟨ invar_before.right.right.right.left, head_ne_goal, compose⟩
+          · exact invar_before.left.right.right.right.right.left
+          · exact invar_before.right.right.right.right.right.left
+          · exact invar_before.right.left
+          · exact invar_before.right.right.left
+          · exact invar_before.left.right.left
+          · exact invar_before.left.right.right.left
+          · exact invar_before.left.right.right.right.left
+          · exact ⟨ invar_before.right.right.right.left, head_ne_goal, compose⟩
         · apply bfs_expand_keeps_stack_sorted
           exact ⟨ invar_before.right.right.right.right.left, head_ne_goal, compose⟩
         · apply bfs_expand_keeps_max_diff
@@ -1434,7 +1464,3 @@ theorem bfs_is_optimal(g: WeightedDiGraph V E) (start : V) (goal : V)
     rw [← p_path_length]
     unfold path_is_shortest at p_is_shortest
     simp_all
-
-
-
-
