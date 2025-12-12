@@ -1,3 +1,4 @@
+import Mathlib.Data.Bool.AllAny
 import Mathlib.Algebra.Order.Group.Nat
 import Mathlib.Combinatorics.Digraph.Basic
 import Mathlib.Data.Bool.AllAny
@@ -456,9 +457,158 @@ omit [DecidableEq V] [DecidableEq E] in
 theorem path_goal_in_support (p: Path G u v): v ∈ support G p.walk := by
   apply walk_goal_in_support
 
+
+
+/- Copied from Mathlib -/
+
+omit [DecidableEq V] [DecidableEq E] in
+theorem mem_support_nil_iff {u v : V}: u ∈ support G (Walk.nil : Walk G v v) ↔ u = v := by
+  apply Iff.intro
+  · intro u_in_supp
+    unfold support at u_in_supp
+    simp_all
+  · intro u_eq_v
+    unfold support
+    simp_all
+
+/-- Given a vertex in the support of a path, give the path from (and including) that vertex to
+the end. In other words, drop vertices from the front of a path until (and not including)
+that vertex. -/
+def dropUntil {v w : V} : ∀ (p : Walk G v w) (u : V), u ∈ support G p → Walk G u w
+  | Walk.nil, u, h => by
+    --rw [mem_support_nil_iff.mp h]
+    have u_eq_v : u = v := by
+      apply (mem_support_nil_iff G).mp
+      exact h
+    use u_eq_v ▸ Walk.nil
+  | Walk.cons r p, u, h =>
+    if hx : v = u then by
+      subst u
+      exact Walk.cons r p
+    else dropUntil p u <| by
+      cases h
+      · exact (hx rfl).elim
+      · assumption
+
+omit [DecidableEq V] [DecidableEq E] in
+lemma walk_trans (h : G.Adj u u') (w' : Walk G u' v)  :
+  ∀ (u_eq_v : u = v),
+  u_eq_v ▸ Walk.nil = Walk.cons h w' → ⊥ := by
+    intro u_eq_v
+    subst u_eq_v
+    grind
+
+omit [DecidableEq E] in
+lemma support_Drop_Until_Suffix (w : Walk G u v) (u : V) (u_in_supp : u ∈ support G w) :       
+  support G (dropUntil G w u u_in_supp) <:+ support G w := by
+  induction w with
+  | nil => 
+    unfold dropUntil support
+    split
+    · next nil_eq_cons =>
+      simp at nil_eq_cons
+      exfalso
+      apply walk_trans (V:=V)
+      apply nil_eq_cons
+    · simp
+  | cons h w' ih =>
+    unfold dropUntil
+    split
+    · simp
+      unfold support
+      simp_all
+      rename_i h_1
+      subst h_1
+      simp_all only [List.suffix_rfl]
+    · conv =>
+        right
+        unfold support
+      grind
+
+/-- Given a walk, produces a walk from it by bypassing subwalks between repeated vertices.
+The result is a path, as shown in `SimpleGraph.Walk.bypass_isPath`.
+This is packaged up in `SimpleGraph.Walk.toPath`. -/
+def bypass {u v : V} : Walk G u v → Walk G u v
+  | Walk.nil => Walk.nil
+  | Walk.cons ha p =>
+    let p' := bypass p
+    if hs : u ∈ support G p' then
+      dropUntil G p' u hs
+    else
+      Walk.cons ha p'
+
+      -- 1 2 3 4 5 2 6 -> 1 2 6
+
+omit [DecidableEq E] in
+theorem bypass_isPath (p : Walk G u v) : (support G (bypass G p)).Nodup := by
+  induction p with
+  | nil => simp!
+  | cons h p' ih =>
+    simp only [bypass]
+    split_ifs with hs
+    · next f w t =>
+      have suff : support G (dropUntil G (bypass G p') f hs) <:+ support G (bypass G p') := by
+        apply support_Drop_Until_Suffix
+      grind
+    · unfold support
+      simp
+      constructor
+      · exact hs
+      · exact ih
+
+omit [DecidableEq E] in
+theorem dropUntilMakesShorter (p : Walk G u v) (f : V) (h : f ∈ support G p):
+  walk_length G (dropUntil G p f h) ≤ walk_length G p := by
+  induction p with
+  | nil =>
+    unfold walk_length dropUntil
+    split
+    · next nil_eq_cons =>
+      simp at nil_eq_cons
+      exfalso
+      apply walk_trans (V:=V)
+      apply nil_eq_cons
+    · simp
+  | cons _ p' ih => 
+    unfold dropUntil
+    split
+    · rename_i h_2
+      subst h_2
+      simp_all only [le_refl]
+    · trans
+      · apply ih
+      · simp!
+
+omit [DecidableEq E] in
+theorem length_bypass_le (p : Walk G u v) : walk_length G (bypass G p) ≤ walk_length G p := by
+  induction p with
+  | nil =>
+    unfold bypass walk_length
+    rfl
+  | cons f_adj_t p' ih =>
+    
+    unfold bypass
+    simp_all
+    split
+    · conv =>
+        right
+        unfold walk_length
+      trans
+      · apply dropUntilMakesShorter
+      · grind
+    · unfold walk_length 
+      grind
+
+omit [DecidableEq E] in
 theorem walk_shorter_path_exists (w : Walk G u v):
   ∃ p : Path G u v, path_length G p ≤ walk_length G w := by
-  sorry
+  let w' : Walk G u v := bypass G w
+  have nodup : (support G w').Nodup := by
+    unfold w'
+    apply bypass_isPath
+  use Path.mk w' nodup
+  unfold path_length
+  apply length_bypass_le
 
 -- tests
 example : WeightedDiGraph (Fin 3) (Nat) where
