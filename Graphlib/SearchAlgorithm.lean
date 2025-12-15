@@ -15,42 +15,44 @@ set_option trace.split.failure true
 variable {V : Type} {E : Type} [FinEnum V] [DecidableEq V] [DecidableEq E]
 variable {g : WeightedDiGraph V E}
 
+namespace WeightedDiGraph
 
 def extract_path_to (start : V) (goal : V) (search_state : base_search_state g)
     (goal_reached : goal ∈ search_state.visited)
     (mother_invar : search_invar_mother_is_visited search_state)
     (mother_invar_adj : search_invar_mother_is_adjacent start search_state)
     (decreasing_invar : search_invar_mother_decreasing_path_order start search_state):
-      Σ' (p : Path g start goal), (∀ v ∈ support g p.walk, search_state.pathOrder v ≤ search_state.pathOrder goal):= 
+      Σ' (p : g.Path start goal), (∀ v ∈ p.support, search_state.pathOrder v ≤ search_state.pathOrder goal):= 
       if start_is_goal : goal = start then
-        let emptyW : Walk g start goal := start_is_goal ▸ Walk.nil
-        let emptyP : Path g start goal := Path.mk emptyW (by
+        let emptyW : g.Walk start goal := start_is_goal ▸ Walk.nil
+        let emptyW_nodup : emptyW.support.Nodup := by
           simp [emptyW]
-          unfold support
+          unfold Walk.support
           split
           · next u u' x w rest u_adj_v walk_is_cons => 
             simp_all
             subst start_is_goal
             simp_all only [reduceCtorEq] 
           · simp
-        )
-
-        have order : ∀ v ∈ support g emptyP.walk, search_state.pathOrder v ≤ search_state.pathOrder goal := by
+        
+        let emptyP : g.Path start goal := ⟨ emptyW, emptyW_nodup⟩ 
+        
+        have order : ∀ v ∈ emptyP.support, search_state.pathOrder v ≤ search_state.pathOrder goal := by
           intro a a_in_support
           unfold emptyP at a_in_support
           unfold emptyW at a_in_support
-          unfold support at a_in_support
+          unfold Path.support at a_in_support
+          unfold Walk.support at a_in_support
           simp_all
           subst start_is_goal
           simp_all only [List.mem_cons, List.not_mem_nil, or_false, le_refl]
-
         ⟨ emptyP, order ⟩ 
       else
         let goal_predecessor : V := search_state.mother ⟨ goal, goal_reached ⟩
         let ⟨ path_start_pre, order_proof ⟩ := -- : Path g start goal_predecessor :=
           extract_path_to start goal_predecessor search_state (by apply mother_invar) mother_invar mother_invar_adj decreasing_invar 
         let pre_adj_goal : g.Adj goal_predecessor goal := mother_invar_adj ⟨ goal , goal_reached ⟩ start_is_goal
-        let goal_not_visited : goal ∉ support g path_start_pre.walk := by
+        let goal_not_visited : goal ∉ path_start_pre.support := by
           by_contra goal_is_in_support
           have h := order_proof goal goal_is_in_support
           unfold goal_predecessor at h
@@ -60,13 +62,13 @@ def extract_path_to (start : V) (goal : V) (search_state : base_search_state g)
           simp_all
           omega
 
-        let goal_path : Path g start goal := extend_path g path_start_pre pre_adj_goal goal_not_visited
+        let goal_path : g.Path start goal := path_start_pre.concat pre_adj_goal goal_not_visited
 
-        let new_order_proof : ∀ v ∈ support g goal_path.walk, search_state.pathOrder v ≤ search_state.pathOrder goal := by
+        let new_order_proof : ∀ v ∈ goal_path.support, search_state.pathOrder v ≤ search_state.pathOrder goal := by
           intro a a_in_support
           unfold goal_path at a_in_support
-          rw [extend_path_extends_support] at a_in_support
-          simp_all
+          rw [Path.support_concat_is_append_at_end] at a_in_support
+          simp only [Path.support, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at a_in_support
           apply a_in_support.elim
           · intro a_in_old_path
             apply le_trans 
@@ -85,7 +87,7 @@ decreasing_by
 
 
 theorem search_termination_with_empty_stack_implies_goal_visited (start : V) (goal : V) (f : V) 
-  (theWalk : Walk g f goal)
+  (theWalk : g.Walk f goal)
   (final_state : base_search_state g)
   (f_visited : f ∈ final_state.visited)
   (final_stack_empty : final_state.stack = [])
@@ -274,8 +276,7 @@ lemma search_recurse_lift_invariant_under_return_assumption
       · next search_step_returned_none =>
         -- recursive case
         apply search_recurse_lift_invariant_under_return_assumption goal
-        rw [← and_assoc]
-        repeat constructor
+        and_intros
         rotate_right
         · use return_value
         · unfold invar_carries_over_step at invar_carries
@@ -356,8 +357,7 @@ lemma search_recurse_lift_invariant_under_trigger
           apply search_recurse_lift_invariant_under_trigger
           rotate_left
           · use invar_middle 
-          · repeat rw [← and_assoc]
-            repeat constructor
+          · and_intros
             · use terminated_with_invar_middle_false
             · use invar_end_not_true
             · use invar_middle_carries 
@@ -509,7 +509,7 @@ def search_exe
     (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
     (invar_carries_over_step : base_invar_carries_over_step goal search_step (search_invar_all_basic start))
     (goal_on_stack_if_terminated : search_step_goal_on_stack_if_terminated (search_step:=search_step)):
-    Option (Path g start goal) :=
+    Option (g.Path start goal) :=
   let ret := search_internal decreasing_proof
   let final_state:= ret.1
   let found_goal := ret.2
@@ -535,7 +535,7 @@ theorem search_is_sound
     (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
     (invar_carries_over_step : base_invar_carries_over_step goal search_step (search_invar_all_basic start))
     (goal_on_stack_if_terminated : search_step_goal_on_stack_if_terminated (search_step:=search_step)):
-    (Option.isSome (search_exe decreasing_proof start_is_base_init invar_carries_over_step goal_on_stack_if_terminated) → (∃ x : (Path g start goal), x = x)) := by
+    (Option.isSome (search_exe decreasing_proof start_is_base_init invar_carries_over_step goal_on_stack_if_terminated) → (∃ x : (g.Path start goal), x = x)) := by
   intro h -- Option.isSome true on some and false on none, x = x since we need a formula
   constructor -- since goal is existence
   rfl
@@ -595,8 +595,7 @@ lemma search_recurse_goal_not_visited_if_terminated
     intro ⟨ terminated_with_false, goal_not_visited_before ⟩ 
     unfold search_internal
     apply search_recurse_lift_invariant_under_trigger goal start_state search_step (invar_end:= fun s => search_prop_goal_visited goal (has_base_search_state.to_base_state s))
-    repeat rw [← and_assoc]
-    repeat constructor
+    and_intros
     rotate_right
     · use (fun s =>
         let base_state : base_search_state g := (has_base_search_state.to_base_state s)
@@ -657,7 +656,7 @@ theorem search_is_complete
 ----
     (step_terminates_if_goal_is_stack_head : search_step_terminates_when_goal_stack_head (search_step:=search_step) (goal:=goal) (start_state:=start_state))
     :
-    ((∃ x : (Path g start goal), x = x) → Option.isSome (search_exe decreasing_proof start_is_base_init invar_carries_over_step goal_on_stack_if_terminated)) := by
+    ((∃ x : (g.Path start goal), x = x) → Option.isSome (search_exe decreasing_proof start_is_base_init invar_carries_over_step goal_on_stack_if_terminated)) := by
     -- or Option.isNone (dfs g start goal) → ∄ x (Path g start goal), x = x
       intro path_exists
       apply Exists.elim path_exists
@@ -704,7 +703,7 @@ theorem search_is_complete_inv
 ----
     (step_terminates_if_goal_is_stack_head : search_step_terminates_when_goal_stack_head (search_step:=search_step) (goal:=goal) (start_state:=start_state))
     :
-    Option.isNone (search_exe decreasing_proof start_is_base_init invar_carries_over_step goal_on_stack_if_terminated) → ¬ ∃ x : (Path g start goal), x = x := by
+    Option.isNone (search_exe decreasing_proof start_is_base_init invar_carries_over_step goal_on_stack_if_terminated) → ¬ ∃ x : (g.Path start goal), x = x := by
       intro optionIsNone
       by_contra pathExists
       have isSome := search_is_complete decreasing_proof start_is_base_init invar_carries_over_step goal_on_stack_if_terminated stack_empty_if_terminated_without_goal keeps_goal_on_stack goal_becomes_visited_implies_on_stack step_terminates_if_goal_is_stack_head
@@ -712,7 +711,4 @@ theorem search_is_complete_inv
 
 end
 
-
-
-
-
+end WeightedDiGraph

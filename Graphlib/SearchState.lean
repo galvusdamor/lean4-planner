@@ -120,8 +120,7 @@ lemma search_invar_start_visited_initial (start : V):
 lemma base_search_state_initial_all_basic_invars (start : V):
     search_invar_all_basic (g:=g) start (base_search_state_initial start) := by
       unfold search_invar_all_basic 
-      repeat rw [← and_assoc]
-      repeat constructor
+      and_intros
       · apply search_invar_stack_is_visited_initial
       · apply search_invar_mother_is_visited_initial
       · apply search_invar_mother_is_adjacent_initial
