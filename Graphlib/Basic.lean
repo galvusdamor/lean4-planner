@@ -209,13 +209,13 @@ theorem append_cons_inc_length_by_one (w : G.Walk u v) (h : G.Adj v v') :
 
 
 @[simp]
-theorem concat_walk_inc_length_by_one (p : G.Walk u v) (h : G.Adj v w) :
+theorem concat_inc_length_by_one (p : G.Walk u v) (h : G.Adj v w) :
       (p.concat h).length = 1 + p.length := by
   unfold concat
   apply append_cons_inc_length_by_one
 
 
-theorem split_walk_at_end_length_one (p : G.Walk u v) (len_ne_zero : p.length > 0):
+theorem split_at_end_length_one (p : G.Walk u v) (len_ne_zero : p.length > 0):
     ∃ w : V, ∃ p' : G.Walk u w, ∃ w_adj_v : G.Adj w v,
       p = p'.concat w_adj_v := by
     cases p
@@ -231,7 +231,7 @@ theorem split_walk_at_end_length_one (p : G.Walk u v) (len_ne_zero : p.length > 
       · next u'' u'_adj_u'' p_u'' =>
         let p_u' := Walk.cons u'_adj_u'' p_u''
         have p_u'_length : p_u'.length > 0 := by simp [length, p_u']
-        obtain ⟨ w,p',w_adj_v, extend_prop⟩ := split_walk_at_end_length_one p_u' p_u'_length
+        obtain ⟨ w,p',w_adj_v, extend_prop⟩ := split_at_end_length_one p_u' p_u'_length
         use w
         use Walk.cons u_adj_u' p'
         use w_adj_v
@@ -240,14 +240,14 @@ theorem split_walk_at_end_length_one (p : G.Walk u v) (len_ne_zero : p.length > 
         rw [extend_prop]
         congr
 
-theorem split_walk_at_end (p : G.Walk u v) (not_nil : u ≠ v):
+theorem split_at_end (p : G.Walk u v) (not_nil : u ≠ v):
     ∃ w : V, ∃ p' : G.Walk u w, ∃ w_adj_v : G.Adj w v,
       p = p'.concat w_adj_v := by
     have len_ne_zero : p.length > 0 := by
       cases p
       · contradiction
       · simp [length]
-    apply p.split_walk_at_end_length_one len_ne_zero
+    apply p.split_at_end_length_one len_ne_zero
 
 theorem contains_subwalk {u v w : V} (p : G.Walk u v) (w_in_walk : w ∈ p.support) (w_ne_v : w ≠ v):
     ∃ p' : G.Walk u w, p'.length < p.length ∧ p'.support <+: p.support := by
@@ -306,9 +306,24 @@ theorem nil_path_eq {u v: V} (h : u = v): G.nil_path u = h ▸ G.nil_path v := b
 @[simp]
 def length {u v : V} (p : G.Path u v) : ℕ := p.1.length
 
+
+@[simp]
+theorem length_same {u v : V} (p : G.Path u v):
+    p.length = p.val.length := by unfold length ; rfl
+
 @[simp]
 theorem length_nil_zero {u : V} : (G.nil_path u).length  = 0 := by
   unfold length nil_path
+  simp_all
+
+@[simp]
+theorem length_nil_walk_zero {u : V} : (G.nil_path u).val.length  = 0 := by
+  unfold Walk.length nil_path
+  simp_all
+
+@[simp]
+theorem support_walk_nodup {u : V} : (G.nil_path u).val.support.Nodup := by
+  unfold Walk.support nil_path
   simp_all
 
 theorem length_diff_ends_ne_zero {u v : V} (h : u ≠ v) (p : G.Path u v):
@@ -316,6 +331,7 @@ theorem length_diff_ends_ne_zero {u v : V} (h : u ≠ v) (p : G.Path u v):
   unfold length 
   apply Walk.length_diff_ends_ne_zero
   exact h
+
 
 @[simp]
 def support {u v : V} (p : G.Path u v) : List V := p.1.support
@@ -369,14 +385,15 @@ theorem support_concat_is_append_at_end (p: G.Path u v) (h: G.Adj v w)(proof_w_n
    (p.concat h proof_w_not_in_support).support = p.support ++ [w] := by simp [concat]
 
 @[simp]
-theorem concat_path_inc_length_by_one (p : G.Path u v) (h : G.Adj v w) (proof_w_not_in_support : w ∉ p.support) :
+theorem concat_inc_length_by_one (p : G.Path u v) (h : G.Adj v w) (proof_w_not_in_support : w ∉ p.support) :
       (p.concat h proof_w_not_in_support).length = 1 + p.length := by
-  apply Walk.concat_walk_inc_length_by_one 
+  apply Walk.concat_inc_length_by_one 
 
-theorem split_path_at_end (p : G.Path u v) (not_nil : u ≠ v):
+
+theorem split_at_end (p : G.Path u v) (not_nil : u ≠ v):
     ∃ w : V, ∃ p' : G.Path u w, ∃ w_adj_v : G.Adj w v,
       v ∉ p'.support ∧ p.val = p'.val.concat w_adj_v := by
-    obtain ⟨ w, p_w, w_adj_v, walk_extended ⟩ := p.val.split_walk_at_end not_nil
+    obtain ⟨ w, p_w, w_adj_v, walk_extended ⟩ := p.val.split_at_end not_nil
     
     have supp_compose : p.support = p_w.support ++ [v] := by simp [walk_extended]
 
@@ -413,21 +430,21 @@ theorem contains_subpath {u v w : V} (p : G.Path u v) (w_in_path : w ∈ p.suppo
 end Path
 
 
-def graph_distance_is (u v : V) (dist: ℕ) : Prop :=
+def distance_is (u v : V) (dist: ℕ) : Prop :=
   (∃ p : G.Path u v, p.length = dist ∧ p.is_shortest)
 
-def graph_distance_ge (u v : V) (dist: ℕ) : Prop :=
+def distance_ge (u v : V) (dist: ℕ) : Prop :=
   ∀ p : G.Path u v, p.length ≥ dist
 
-def graph_distance_gt (u v : V) (dist: ℕ) : Prop :=
+def distance_gt (u v : V) (dist: ℕ) : Prop :=
   ∀ p : G.Path u v, p.length > dist
 
-def graph_distance_lt (u v : V) (dist: ℕ) : Prop :=
+def distance_lt (u v : V) (dist: ℕ) : Prop :=
   ∃ p : G.Path u v, p.length < dist
 
-lemma graph_distance_ge_lt (u v : V) (d1 d2: ℕ) :
-    G.graph_distance_ge u v d1 ∧ d2 ≤ d1 → G.graph_distance_ge u v d2 := by
-    unfold WeightedDiGraph.graph_distance_ge
+lemma distance_ge_lt (u v : V) (d1 d2: ℕ) :
+    G.distance_ge u v d1 ∧ d2 ≤ d1 → G.distance_ge u v d2 := by
+    unfold WeightedDiGraph.distance_ge
     simp_all
     intro ge_d1 d2_le_d1 p p_nodup
     apply le_trans
@@ -574,7 +591,7 @@ theorem length_bypass_le (p : G.Walk u v) : p.bypass.length ≤ p.length:= by
     · unfold length 
       grind
 
-theorem walk_shorter_path_exists (w : G.Walk u v):
+theorem shorter_path_exists (w : G.Walk u v):
   ∃ p : G.Path u v, p.length ≤ w.length := by
   let w' : G.Walk u v := w.bypass
   have nodup : w'.support.Nodup := by unfold w' ; apply bypass_isPath

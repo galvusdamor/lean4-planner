@@ -10,6 +10,7 @@ section
 variable {V : Type} {E : Type} [FinEnum V] [DecidableEq V] [DecidableEq E]
 variable {g : WeightedDiGraph V E}
 
+namespace WeightedDiGraph
 
 abbrev search_expand(g : WeightedDiGraph V E)
     {state_type : Type} [has_base_search_state g state_type] :=
@@ -109,8 +110,7 @@ lemma base_invar_carries_over_stack_step
     · exact invar_holds_for_s 
     · next head tail compose head_not_goal=>
       apply invar_carries
-      rw [← and_assoc]
-      repeat constructor
+      and_intros
       · exact invar_holds_for_s
       · exact head_not_goal 
       · exact compose
@@ -274,7 +274,7 @@ def search_exe_with_stack_step
     (invar_carries : base_invar_carries_over_expand goal expand (search_invar_all_basic start))
     (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
     :
-    Option (Path g start goal) :=
+    Option (g.Path start goal) :=
     
     let step : search_step_function g := search_stack_step expand
     let termination_proof : termination_metric_decreasing_proof goal step termination_metric :=
@@ -313,7 +313,7 @@ theorem search_with_stack_step_is_sound
     (invar_carries : base_invar_carries_over_expand goal expand (search_invar_all_basic start))
     (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
     :
-    (Option.isSome (search_exe_with_stack_step expand metric_for_expand_proof invar_carries start_is_base_init) → (∃ x : (Path g start goal), x = x)) := by
+    (Option.isSome (search_exe_with_stack_step expand metric_for_expand_proof invar_carries start_is_base_init) → (∃ x : (g.Path start goal), x = x)) := by
   intro h -- Option.isSome true on some and false on none, x = x since we need a formula
   unfold search_exe_with_stack_step at h
   simp at h
@@ -330,7 +330,7 @@ theorem search_with_stack_step_is_complete
     (goal_on_stack_carries_expand : base_invar_carries_over_expand goal expand (search_prop_goal_on_stack goal))
     (goal_trigger : goal_becomes_visited_puts_it_on_stack goal expand)
     :
-    ((∃ x : (Path g start goal), x = x) → Option.isSome (search_exe_with_stack_step expand metric_for_expand_proof invar_carries start_is_base_init)) := by
+    ((∃ x : (g.Path start goal), x = x) → Option.isSome (search_exe_with_stack_step expand metric_for_expand_proof invar_carries start_is_base_init)) := by
     intro path
     unfold search_exe_with_stack_step
     simp
@@ -351,5 +351,7 @@ end
 
 
 end
+
+end WeightedDiGraph
 
 end

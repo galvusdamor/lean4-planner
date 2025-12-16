@@ -17,6 +17,8 @@ set_option trace.split.failure true
 variable {V : Type} {E : Type} [FinEnum V] [DecidableEq V] [DecidableEq E]
 variable {g : WeightedDiGraph V E}
 
+
+namespace WeightedDiGraph
 -----------------------------------------------------------------------
 ------ DFS implementation and proof ------
 
@@ -260,8 +262,7 @@ lemma dfs_expand_keeps_base_invars:
     apply i1
     rw [compose]
     simp
-  repeat rw [← and_assoc]
-  repeat constructor
+  and_intros
   · apply dfs_expand_keeps_stack_in_visited
     constructor
     · exact i1
@@ -350,7 +351,7 @@ lemma dfs_expand_metric_reduction : termination_proof_for_expand (g:=g) goal (df
 
 ----------------- the actual DFS: create the initial search state and then recurse
 
-def dfs(g: WeightedDiGraph V E) (start : V) (goal : V): Option (Path g start goal) :=
+def dfs(g: WeightedDiGraph V E) (start : V) (goal : V): Option (g.Path start goal) :=
   let start_state := base_search_state_initial start
   have h : has_base_search_state.to_base_state (g:=g) start_state = base_search_state_initial start:= by simp_all only [start_state]; rfl
 
@@ -359,7 +360,7 @@ def dfs(g: WeightedDiGraph V E) (start : V) (goal : V): Option (Path g start goa
 
 
 theorem dfs_is_sound (g: WeightedDiGraph V E) (start : V) (goal : V) :
-    (Option.isSome (dfs g start goal) → (∃ x : (Path g start goal), x = x)) := by
+    (Option.isSome (dfs g start goal) → (∃ x : (g.Path start goal), x = x)) := by
   apply search_with_stack_step_is_sound
   · apply dfs_expand_metric_reduction
   · apply dfs_expand_keeps_base_invars
@@ -368,7 +369,7 @@ theorem dfs_is_sound (g: WeightedDiGraph V E) (start : V) (goal : V) :
 
 
 theorem dfs_is_complete (g: WeightedDiGraph V E) (start : V) (goal : V):
-    ((∃ x : (Path g start goal), x = x) → Option.isSome (dfs g start goal)) := by
+    ((∃ x : (g.Path start goal), x = x) → Option.isSome (dfs g start goal)) := by
   apply search_with_stack_step_is_complete
   · apply dfs_expand_metric_reduction
   · apply dfs_expand_keeps_base_invars
@@ -376,3 +377,4 @@ theorem dfs_is_complete (g: WeightedDiGraph V E) (start : V) (goal : V):
   · apply dfs_expand_keeps_goal_on_stack
   · apply dfs_expand_goal_becomes_visited_puts_it_on_stack
 
+end WeightedDiGraph
