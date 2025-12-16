@@ -593,24 +593,6 @@ lemma order_u_le_path_length_p (start u v : V)
       sorry
 
 
-lemma foo (start : V) (s : base_search_state g):
-    ∀ mother_invar : search_invar_mother_is_visited s,
-    ∀ mother_invar_adj : search_invar_mother_is_adjacent start s,
-    ∀ decreasing_invar : search_invar_mother_decreasing_path_order start s,
-    ∀ u : V, ∀ v : V, ∀ h : u ∈ s.visited, ∀ h' : v ∈ s.visited,
-    ∀ u_eq_v : u = v,
-    (extract_path_to start u s h mother_invar mother_invar_adj decreasing_invar).fst.val.length = 
-    (extract_path_to start v s h' mother_invar mother_invar_adj decreasing_invar).fst.val.length := by
-    intro mother_invar mother_invar_adj decreasing_invar u v h h' u_eq_v
-    unfold extract_path_to
-    unfold Walk.length
-    simp_all
-    by_cases v_eq_start : v = start
-    all_goals
-      subst u_eq_v
-      try subst v_eq_start -- does not work in one case
-      simp_all only
-
 
 lemma bfs_expand_does_not_change_paths (start u : V) (s : base_search_state g):
     ∀ mother_invar : search_invar_mother_is_visited s,
@@ -634,7 +616,7 @@ lemma bfs_expand_does_not_change_paths (start u : V) (s : base_search_state g):
         apply Nat.add_left_cancel_iff.mpr
         have hh : ((bfs_step_expand g s head tail).mother ⟨u, u_visited'⟩) = (s.mother ⟨u, u_visited⟩) := by
           simp_all [bfs_step_expand]
-        rw [foo (u_eq_v := hh)]
+        rw [extract_path_visited_proof_irrelevant (u_eq_v := hh)]
         apply bfs_expand_does_not_change_paths
         unfold bfs_step_expand
         simp
@@ -714,7 +696,7 @@ lemma bfs_expand_keeps_extracted_same_length_as_sort_index (start : V) (goal : V
             unfold Path.concat
             rw [Walk.concat_inc_length_by_one]
             apply Nat.add_left_cancel_iff.mpr 
-            apply foo
+            apply extract_path_visited_proof_irrelevant 
             unfold bfs_step_expand
             simp
             intro u_visited
@@ -909,9 +891,45 @@ lemma bfs_expand_keeps_on_stack_or_nei_max_order(goal : V)
         obtain ⟨ head_adj_a, a_ne_visited ⟩ := both
         grind -- contradictory
 
-lemma bfs_expand_keeps_stack_sorted (goal : V):
-      base_invar_carries_over_expand goal (bfs_step_expand g) (bfs_stack_sorted (g:=g)) := by
-      sorry
+lemma bfs_expand_keeps_stack_sorted(goal : V)
+    (state : base_search_state g)
+    (stack_visited_invar : search_invar_stack_is_visited state)
+    (max_diff_invar : bfs_stack_max_diff state)
+    :
+     ∀ head : V, ∀ tail : List V, 
+        bfs_stack_sorted  state
+          ∧ head ≠ goal
+          ∧ state.stack = head :: tail
+        → bfs_stack_sorted  (bfs_step_expand g state head tail) := by
+    intro head tail ⟨ prior_sorted, head_ne_goal, stack_compose ⟩ 
+    unfold bfs_stack_sorted
+    unfold bfs_step_expand
+    simp_all
+    unfold List.Sorted
+    apply List.pairwise_append.mpr 
+    and_intros
+    · apply List.Pairwise.imp_of_mem
+      case refine_1.p =>
+        unfold bfs_stack_sorted List.Sorted at prior_sorted
+        rw [stack_compose] at prior_sorted
+        simp at prior_sorted
+        refine prior_sorted.right
+      intro a b a_in_tail b_in_tail a_order_leq_b_order
+      grind
+    · apply List.Pairwise.filterMap
+      case refine_2.refine_1.R => use fun _ _ => true
+      · intro a a' _ b b_some b' b'_some
+        simp_all
+        have b_ne_visi : b ∉ state.visited := by rw [b_some.right] at b_some ; exact b_some.left.right
+        have b'_ne_visi : b' ∉ state.visited := by rw [b'_some.right] at b'_some ; exact b'_some.left.right
+        simp_all
+      · apply List.pairwise_of_forall
+        simp
+    · intro a a_in_tail b b_in_new_visited
+      have a_visited : a ∈ state.visited := by grind
+      have visi_ne_empty : state.visited ≠ ∅ := by grind
+      have b_not_visited : b ∉ state.visited := by grind 
+      grind
 
 
 lemma bfs_expand_keeps_shortest_path_invar
@@ -1231,7 +1249,9 @@ lemma bfs_expand_carries_all_bfs_invars (start : V) (goal : V):
           · exact invar_before.left.right.right.right.left
           · exact ⟨ invar_before.right.right.right.left, head_ne_goal, compose⟩
         · apply bfs_expand_keeps_stack_sorted
-          exact ⟨ invar_before.right.right.right.right.left, head_ne_goal, compose⟩
+          · exact invar_before.left.left
+          · exact invar_before.right.right.right.right.right.left
+          · exact ⟨ invar_before.right.right.right.right.left, head_ne_goal, compose⟩
         · apply bfs_expand_keeps_max_diff
           · exact invar_before.left.left
           · exact invar_before.right.right.right.right.left

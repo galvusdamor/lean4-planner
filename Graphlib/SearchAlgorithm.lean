@@ -85,6 +85,26 @@ termination_by search_state.pathOrder goal
 decreasing_by
   simp_all only [Subtype.forall, ne_eq, not_false_eq_true]
 
+theorem extract_path_visited_proof_irrelevant (start : V) (s : base_search_state g):
+    ∀ mother_invar : search_invar_mother_is_visited s,
+    ∀ mother_invar_adj : search_invar_mother_is_adjacent start s,
+    ∀ decreasing_invar : search_invar_mother_decreasing_path_order start s,
+    ∀ u : V, ∀ v : V, ∀ h : u ∈ s.visited, ∀ h' : v ∈ s.visited,
+    ∀ u_eq_v : u = v,
+    (extract_path_to start u s h mother_invar mother_invar_adj decreasing_invar).fst.val.length = 
+    (extract_path_to start v s h' mother_invar mother_invar_adj decreasing_invar).fst.val.length := by
+    intro mother_invar mother_invar_adj decreasing_invar u v h h' u_eq_v
+    unfold extract_path_to
+    unfold Walk.length
+    simp_all
+    by_cases v_eq_start : v = start
+    all_goals
+      subst u_eq_v
+      try subst v_eq_start -- does not work in one case
+      simp_all only
+
+
+
 
 theorem search_termination_with_empty_stack_implies_goal_visited (start : V) (goal : V) (f : V) 
   (theWalk : g.Walk f goal)
