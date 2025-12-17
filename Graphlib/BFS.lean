@@ -549,7 +549,46 @@ lemma run_walk_through_state_not_on_stack_yields_all_visited
             apply all_start_nei_visited
             exact start_adj_w
 
-lemma run_path_through_state_yields_node_on_stack_or_all_visited
+
+
+lemma path_has_earliest_node_on_stack (start v : V) --(v_ne_start : v ≠ start)
+  (p : g.Path start v)
+  (state : base_search_state g)
+  (start_visited : search_invar_start_visited start state)
+  (on_stack_or_nei_visited : search_invar_on_stack_or_all_neighbours_visited state)
+  :
+  (∃ u ∈ p.support, u ∈ state.stack ∧ u ≠ v) → 
+  (∃ u ∈ p.support, u ∈ state.stack ∧ u ≠ v ∧ (p.support.takeWhile (· ≠ u)).all (· ∉ state.stack)) := by
+    intro ⟨ u, u_in_support, u_on_stack, u_neq_v⟩  
+    let opt_first : Option V := p.support.find? (· ∈ state.stack)
+    have opt_first_is_some : opt_first.isSome := by
+      apply List.find?_isSome.mpr ; use u ; simp_all
+    
+    have support_compose : p.support = p.support.dropLast ++ [v] := by apply Walk.support_last
+
+    use opt_first.get opt_first_is_some
+    and_intros
+    · apply List.get_find?_mem
+    · unfold opt_first
+      grind [List.get_find?_prop]
+    · unfold opt_first
+      apply List.find?_nodup
+      · apply support_compose
+      · by_contra v_in_drop_last
+        have support_is_nodup : p.val.support.Nodup := p.prop
+        unfold Path.support at support_compose
+        rw [support_compose] at support_is_nodup
+        apply List.nodup_append.mp at support_is_nodup
+        have diff := support_is_nodup.right.right
+        specialize diff v v_in_drop_last v
+        grind
+      · apply u_in_support
+      · simp_all
+      · simp_all
+    · unfold opt_first
+      grind [List.takeWhile_until_find?]
+
+lemma run_path_through_state_yields_node_on_stack_or_all_visited_temp
   (start v : V) (v_ne_start : v ≠ start)
   (p : g.Path start v)
   (state : base_search_state g)
@@ -562,14 +601,14 @@ lemma run_path_through_state_yields_node_on_stack_or_all_visited
   · left; exact no_onstack
   · right
     simp at no_onstack
-    have none_on_stack : ∀ u ∈ p.support, u ≠ v → u ∉ state.stack := by
+    have none_on_stack : ∀ u ∈ p.val.support, u ≠ v → u ∉ state.stack := by
       intro u u_in_support u_ne_v
       intro u_on_stack
-      have u_eq_v : u = v := no_onstack u u_in_support u_on_stack
-      contradiction
+      have h := no_onstack u u_in_support u_on_stack
+      contradiction 
     constructor
     · apply run_walk_through_state_not_on_stack_yields_all_visited start v v_ne_start p p.prop state start_visited on_stack_or_nei_visited
-      · exact no_onstack
+      · grind
       · apply Walk.goal_in_support
     · intro u u_insupport u_neq_v
       constructor
@@ -577,21 +616,91 @@ lemma run_path_through_state_yields_node_on_stack_or_all_visited
         · exact u_insupport
         · exact u_neq_v
       · apply run_walk_through_state_not_on_stack_yields_all_visited start v v_ne_start p p.prop state start_visited on_stack_or_nei_visited
-        · exact no_onstack
+        · grind
+          --exact no_onstack
         · exact u_insupport
+
+
+lemma run_path_through_state_yields_node_on_stack_or_all_visited
+  (start v : V) (v_ne_start : v ≠ start)
+  (p : g.Path start v)
+  (state : base_search_state g)
+  (start_visited : search_invar_start_visited start state)
+  (on_stack_or_nei_visited : search_invar_on_stack_or_all_neighbours_visited state)
+  :
+  (∃ u ∈ p.support, u ∈ state.stack ∧ u ≠ v ∧ (p.support.takeWhile (· ≠ u)).all (· ∉ state.stack)) ∨
+    (v ∈ state.visited ∧ ∀ u ∈ p.support, u ≠ v → u ∉ state.stack ∧ u ∈ state.visited) := by
+    have h : (∃ u ∈ p.support, u ∈ state.stack ∧ u ≠ v) ∨ (v ∈ state.visited ∧ ∀ u ∈ p.support, u ≠ v → u ∉ state.stack ∧ u ∈ state.visited) := by apply run_path_through_state_yields_node_on_stack_or_all_visited_temp <;> simp_all
+
+    cases h
+    · next h =>
+      left
+      apply path_has_earliest_node_on_stack <;> simp_all
+    · next h =>
+      right ; exact h
+
+lemma order_u_le_walk_length_p (start u v : V)
+  (p : g.Walk start v)
+  (state : base_search_state g)
+  (update_invar : bfs_invar_on_stack_or_all_neighbours_max_order state)
+  (on_stack_or_nei_visited : search_invar_on_stack_or_all_neighbours_visited state)
+  (start_visited : start ∈ state.visited)
+  (u_in_support : u ∈ p.support)
+  (u_on_stack : u ∈ state.stack)
+  (all_prior_not_on_stack : (p.support.takeWhile (· ≠ u)).all (· ∉ state.stack))
+  (u_ne_v : u ≠ v)
+  :
+    state.pathOrder u - state.pathOrder start < p.length := by
+      -- by induction and using the expansion invar
+      -- must be strictly smaller as u is not the last node on the path!
+      cases p
+      case nil =>
+        apply Walk.mem_support_nil_iff.mp at u_in_support
+        contradiction
+      case cons w h p' =>
+        unfold Walk.length
+        by_cases u_eq_start : u = start
+        · grind
+        · have u_in_new_supp : u ∈ p'.support := by
+            apply Walk.cons_support at u_in_support
+            cases u_in_support <;> simp_all
+
+          have start_not_on_stack  : start ∉ state.stack := by
+            unfold List.takeWhile at all_prior_not_on_stack
+            unfold Walk.support at all_prior_not_on_stack
+            simp  at all_prior_not_on_stack
+            split at all_prior_not_on_stack <;> simp_all
+
+          have w_visited : w ∈ state.visited := by
+            specialize on_stack_or_nei_visited ⟨start,start_visited⟩   
+            grind
+          have all_p'_prior_not_on_stack : (p'.support.takeWhile (· ≠ u)).all (· ∉ state.stack) := by
+            unfold Walk.support at all_prior_not_on_stack
+            simp at all_prior_not_on_stack
+            unfold List.takeWhile at all_prior_not_on_stack
+            split at all_prior_not_on_stack <;> simp_all
+          have via_recursion := order_u_le_walk_length_p w u v p' state update_invar on_stack_or_nei_visited w_visited u_in_new_supp u_on_stack all_p'_prior_not_on_stack u_ne_v
+
+          specialize update_invar ⟨ start, start_visited ⟩ start_not_on_stack w h
+          simp_all
+          omega
 
 lemma order_u_le_path_length_p (start u v : V)
   (p : g.Path start v)
   (state : base_search_state g)
+  (update_invar : bfs_invar_on_stack_or_all_neighbours_max_order state)
+  (on_stack_or_nei_visited : search_invar_on_stack_or_all_neighbours_visited state)
+  (start_path_order : search_invar_start_path_order_zero start state)
+  (start_visited : search_invar_start_visited start state)
   (u_in_support : u ∈ p.support)
   (u_on_stack : u ∈ state.stack)
+  (all_prior_not_on_stack : (p.support.takeWhile (· ≠ u)).all (· ∉ state.stack))
   (u_ne_v : u ≠ v)
   :
+    -- todo: also need that all nodes *before* in the support are not on stack!
     state.pathOrder u < p.length := by
-              -- by inudction and using the expansion invar
-              -- must be strictly smaller as u is not the last node on the path!
-      sorry
-
+      have h := order_u_le_walk_length_p start u v p.val state update_invar on_stack_or_nei_visited start_visited u_in_support u_on_stack all_prior_not_on_stack u_ne_v
+      simp_all
 
 
 lemma bfs_expand_does_not_change_paths (start u : V) (s : base_search_state g):
@@ -1020,19 +1129,24 @@ lemma bfs_expand_keeps_shortest_path_invar
             by_contra p'_is_shorter
             
             have p'_elem_on_stack_or_v_visited :
-              (∃ u ∈ p'.val.support, u ∈ state.stack ∧ u ≠ v) ∨
+              (∃ u ∈ p'.val.support, u ∈ state.stack ∧ u ≠ v ∧ (p'.support.takeWhile (· ≠ u)).all (· ∉ state.stack)) ∨
                 (v ∈ state.visited ∧ ∀ u ∈ p'.val.support, u ≠ v → u ∉ state.stack ∧ u ∈ state.visited) :=
                 run_path_through_state_yields_node_on_stack_or_all_visited start v v_not_start p' state start_visited on_stack_or_nei_visited
             
             cases p'_elem_on_stack_or_v_visited
             · next u_in_support_on_stack =>
-              obtain ⟨u, ⟨u_in_support, ⟨ u_on_stack, u_ne_v ⟩ ⟩ ⟩ := u_in_support_on_stack
+              obtain ⟨u, ⟨u_in_support, ⟨ u_on_stack, u_ne_v, all_prior_not_on_stack ⟩ ⟩ ⟩ := u_in_support_on_stack
               have path_length_is_pathOrder : path_to_v.length = state.pathOrder v := by
                 apply extract_length_invar mother_invar mother_invar_adj decreasing_invar
               have order_u_le_path_length_p' : state.pathOrder u < p'.length := by
                 apply order_u_le_path_length_p
+                · exact update_invar
+                · exact on_stack_or_nei_visited
+                · exact start_path_order
+                · exact start_visited
                 · exact u_in_support
-                · exact u_on_stack 
+                · exact u_on_stack
+                · exact all_prior_not_on_stack
                 · exact u_ne_v 
              
               by_cases u_ne_head : u ≠ head
@@ -1147,14 +1261,14 @@ lemma bfs_expand_keeps_shortest_path_invar
                 simp at p'_is_shorter
 
                 have p'_elem_on_stack_or_v_visited :
-                  (∃ u ∈ p'.val.support, u ∈ state.stack ∧ u ≠ v) ∨
+                  (∃ u ∈ p'.val.support, u ∈ state.stack ∧ u ≠ v ∧ (p'.support.takeWhile (· ≠ u)).all (· ∉ state.stack)) ∨
                     (v ∈ state.visited ∧ ∀ u ∈ p'.val.support, u ≠ v → u ∉ state.stack ∧ u ∈ state.visited) := 
                   run_path_through_state_yields_node_on_stack_or_all_visited start v v_not_start p' state start_visited on_stack_or_nei_visited
 
 
                 cases p'_elem_on_stack_or_v_visited
                 · next u_in_support_on_stack =>
-                  obtain ⟨u, ⟨u_in_support, ⟨ u_on_stack, u_ne_v ⟩ ⟩ ⟩ := u_in_support_on_stack
+                  obtain ⟨u, ⟨u_in_support, ⟨ u_on_stack, u_ne_v, _⟩ ⟩ ⟩ := u_in_support_on_stack
                   rw [compose] at u_on_stack
                   simp at u_on_stack
                   simp_all
@@ -1209,6 +1323,7 @@ lemma bfs_expand_keeps_shortest_path_invar
       use (g.nil_path start)
       unfold Path.is_shortest
       constructor <;> rw [Path.length_nil_zero] ; simp
+
 
 lemma bfs_expand_carries_all_bfs_invars (start : V) (goal : V):
       base_invar_carries_over_expand goal (bfs_step_expand g) (bfs_all_invar (g:=g) start) := by
@@ -1435,5 +1550,6 @@ theorem bfs_is_optimal(g: WeightedDiGraph V E) (start : V) (goal : V)
     unfold Path.is_shortest at p_is_shortest
     specialize p_is_shortest p'
     simp_all
+
 
 end WeightedDiGraph
