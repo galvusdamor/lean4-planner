@@ -133,6 +133,31 @@ theorem goal_in_support {u v : V} (p: G.Walk u v): v ∈ p.support := by
   · simp
 
 @[simp]
+theorem support_ne_nil {u v : V} (p : G.Walk u v): p.support ≠ [] := by
+  unfold support
+  cases p <;> simp_all
+
+@[simp]
+theorem cons_support {x u v w: V} (p: G.Walk v w) (h : G.Adj u v ): x ∈ (Walk.cons h p).support → x = u ∨ x ∈ p.support:= by
+  intro x_in_cons_supp
+  unfold support at x_in_cons_supp
+  grind
+
+theorem support_last {u v : V} (p : G.Walk u v):
+    p.support = p.support.dropLast ++ [v] := by
+    induction p
+    case nil =>
+      unfold support
+      simp_all
+    case cons h p' ih =>
+      unfold support
+      conv =>
+        right
+        unfold List.dropLast
+      simp
+      apply ih
+
+@[simp]
 theorem nodup_and_start_eq_end_support {u v: V} (w : G.Walk u v) (u_eq_v : u = v) (nodup : w.support.Nodup) : w.support = [u] := by
   cases w
   · unfold support
