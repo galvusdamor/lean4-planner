@@ -173,3 +173,72 @@ theorem option_mem{α : Type u_1} (o : Option α) (o_is_some : o.isSome = true) 
     intro get_in_s
     use o.get o_is_some
 
+theorem List.get_find?_prop {α : Type u_1} {xs : List α} {p : α → Bool} (h : (find? p xs).isSome = true) : p ((find? p xs).get h) := by
+  cases xs
+  case nil => grind
+  case cons x xs  =>
+    unfold find?
+    by_cases this_is_p : p x
+    · simp_all
+    · simp_all
+      apply List.get_find?_prop
+
+
+lemma List.takeWhile_until_find?_helper {α : Type u_1} [DecidableEq α] {xs : List α} {p : α → Bool} 
+  (h : (find? p xs).isSome = true): 
+    ∀ a ∈ takeWhile (fun x => !decide (x = (find? p xs).get h)) xs, p a = false := by
+    cases xs
+    case nil => grind
+    case cons x xs =>
+      unfold find?
+      by_cases this_is_p : p x
+      · simp_all
+      · unfold takeWhile
+        simp_all
+        split
+        · simp_all
+          intro a
+          apply List.takeWhile_until_find?_helper
+        · simp_all
+
+
+theorem List.takeWhile_until_find? {α : Type u_1} [DecidableEq α] {xs : List α} {p : α → Bool}  : 
+  ∀ h : (find? p xs).isSome = true,
+  (List.takeWhile (fun x => decide (x ≠ (List.find? p xs).get h)) xs).all (fun x => ¬ (p x)) := by
+    intro h
+    grind [List.takeWhile_until_find?_helper]
+
+
+
+theorem List.find?_nodup {α : Type u_1} {l xs : List α} {last : α} {compose : l = xs ++ [last]} {last_not_mem_xs : last ∉ xs} {p : α → Bool} { u : α } { u_mem_list : u ∈ l} {u_ne_l : u ≠ last} {u_is_p : p u} {h : (List.find? p l).isSome} :
+  (List.find? p l).get h ≠ last := by
+  cases l
+  case nil =>
+    simp_all
+  case cons x xss =>
+    unfold find?
+    by_cases this_is_p : p x
+    · simp_all
+      by_contra x_is_last
+      subst x_is_last
+      apply List.cons_eq_append_iff.mp at compose
+      cases compose
+      · grind
+      · next h' =>
+        obtain ⟨ as', xs_head_s, _ ⟩ := h'
+        simp_all
+    · simp_all
+      cases xs
+      case neg.nil => grind
+      case neg.cons y xys =>
+        have x_ne_u : x ≠ u := by grind
+        simp at compose
+        obtain ⟨x_eq_y, compose⟩ := compose
+        subst x_eq_y
+        apply List.find?_nodup
+        · exact compose
+        · grind
+        · change u ∈ xss
+          grind
+        · apply u_ne_l
+        · exact u_is_p
