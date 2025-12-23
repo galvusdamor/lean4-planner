@@ -397,7 +397,7 @@ abbrev bfs_path_as_extracted_as_long_as_sort_index (start : V) (s : base_search_
 
 -- stack is sorted by the path_order (i.e. distance) value
 abbrev bfs_stack_sorted (s : base_search_state g) :=
-  List.Sorted (fun u v => s.pathOrder u ≤ s.pathOrder v) s.stack
+  List.Pairwise (fun u v => s.pathOrder u ≤ s.pathOrder v) s.stack
 
 -- for BFS we don't sort the stack, we just append
 -- this is allowed as the maximum difference of values in the stack is one (from head to tail)
@@ -554,8 +554,6 @@ lemma run_walk_through_state_not_on_stack_yields_all_visited
 lemma path_has_earliest_node_on_stack (start v : V) --(v_ne_start : v ≠ start)
   (p : g.Path start v)
   (state : base_search_state g)
-  (start_visited : search_invar_start_visited start state)
-  (on_stack_or_nei_visited : search_invar_on_stack_or_all_neighbours_visited state)
   :
   (∃ u ∈ p.support, u ∈ state.stack ∧ u ≠ v) → 
   (∃ u ∈ p.support, u ∈ state.stack ∧ u ≠ v ∧ (p.support.takeWhile (· ≠ u)).all (· ∉ state.stack)) := by
@@ -635,7 +633,7 @@ lemma run_path_through_state_yields_node_on_stack_or_all_visited
     cases h
     · next h =>
       left
-      apply path_has_earliest_node_on_stack <;> simp_all
+      apply path_has_earliest_node_on_stack ; exact h
     · next h =>
       right ; exact h
 
@@ -1014,12 +1012,11 @@ lemma bfs_expand_keeps_stack_sorted(goal : V)
     unfold bfs_stack_sorted
     unfold bfs_step_expand
     simp_all
-    unfold List.Sorted
     apply List.pairwise_append.mpr 
     and_intros
     · apply List.Pairwise.imp_of_mem
       case refine_1.p =>
-        unfold bfs_stack_sorted List.Sorted at prior_sorted
+        unfold bfs_stack_sorted at prior_sorted
         rw [stack_compose] at prior_sorted
         simp at prior_sorted
         refine prior_sorted.right
