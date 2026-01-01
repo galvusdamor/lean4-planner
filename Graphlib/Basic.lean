@@ -39,12 +39,17 @@ structure WeightedDiGraph (V : Type) (E : Type) [FinEnum V] extends Digraph V wh
   instDecAdj : DecidableRel Adj
 
 
+
+
 -- def local global variable for a graph
 variable {V : Type} {E : Type} [FinEnum V] --[DecidableEq V] [DecidableEq E]
 variable {G : WeightedDiGraph V E}
 
 
 namespace WeightedDiGraph
+
+theorem payloadProofIrrelevant (u v : V) (h h' : G.Adj u v) :
+    G.Payload u v h = G.Payload u v h' := by dsimp
 
 /--  A `walk` is a sequence of adjacent vertices.  For vertices `u v : V`,
 the type `walk u v` consists of all walks starting at `u` and ending at `v`. -/
