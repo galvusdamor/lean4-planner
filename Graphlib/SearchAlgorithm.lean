@@ -85,6 +85,7 @@ termination_by search_state.pathOrder goal
 decreasing_by
   simp_all only [Subtype.forall, ne_eq, not_false_eq_true]
 
+
 theorem extract_path_visited_proof_irrelevant (start : V) (s : base_search_state g)
     (mother_invar : search_invar_mother_is_visited s)
     (mother_invar_adj : search_invar_mother_is_adjacent start s)
@@ -102,8 +103,6 @@ theorem extract_path_visited_proof_irrelevant (start : V) (s : base_search_state
       subst u_eq_v
       try subst v_eq_start -- does not work in one case
       simp_all only
-
-
 
 
 theorem search_termination_with_empty_stack_implies_goal_visited (start : V) (goal : V) (f : V) 
@@ -421,14 +420,9 @@ lemma search_returns_with_invariants
     · rw [start_is_base_init]
       unfold base_search_state_initial
       simp_all
-      apply base_search_state_initial_all_basic_invars
     · exact invar_carries_over_step
 
-      --unfold base_invar_carries_over_step
-      --intro s cond
-      --apply dfs_step_keeps_all_basic_invars
-      --exact cond
- 
+
 lemma search_returns_with_stack_visited
   (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
   (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))

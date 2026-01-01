@@ -1291,8 +1291,7 @@ lemma bfs_expand_keeps_shortest_path_invar
                   have v_visited := h.left
                   contradiction 
       
-            · simp_all
-              have v_was_on_stack : v ∈ state.stack := by
+            · have v_was_on_stack : v ∈ state.stack := by
                 rw [compose]
                 apply List.mem_cons.mpr
                 right

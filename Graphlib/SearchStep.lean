@@ -198,17 +198,10 @@ lemma stack_step_goal_becomes_visited_it_is_on_stack
     := by 
   intro ⟨ goal_was_not_visited, goal_now_visited ⟩  
   unfold search_stack_step at goal_now_visited ⊢
-  simp
+  dsimp
   split
   · simp_all
-  · simp_all
-    split
-    · simp_all
-    · unfold search_prop_goal_on_stack
-      simp_all
-      --unfold dfs_step_expand at goal_now_visited ⊢
-      --simp_all
-
+  · simp_all ; split <;> simp_all
 
 
 end
