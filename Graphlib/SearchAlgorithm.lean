@@ -11,20 +11,30 @@ import Graphlib.SearchState
 set_option trace.split.failure true
 --set_option diagnostics true
 
--- def local global variable for a graph
-variable {V : Type} {E : Type} [FinEnum V] [DecidableEq V] [DecidableEq E]
-variable {g : WeightedDiGraph V E}
+
 
 namespace WeightedDiGraph
 
-def extract_path_to (start : V) (goal : V) (search_state : base_search_state g)
+variable {V : Type} {E : Type} [FinEnum V] 
+
+-- the graph should be an explicit parameter here
+abbrev search_step_function (G : WeightedDiGraph V E) (D : Type) [Preorder D] [SizeOf D] (state_type : Type) [has_base_search_state G D state_type] :=
+      V → state_type → state_type × (Option Bool)
+
+
+-- def local global variable for a graph
+variable {G : WeightedDiGraph V E}
+variable {D : Type} [Preorder D] [SizeOf D] 
+
+
+def extract_path_to [SizeOfFromPreOrder D] (start : V) (goal : V) (search_state : base_search_state G D)
     (goal_reached : goal ∈ search_state.visited)
     (mother_invar : search_invar_mother_is_visited search_state)
     (mother_invar_adj : search_invar_mother_is_adjacent start search_state)
     (decreasing_invar : search_invar_mother_decreasing_path_order start search_state):
-      Σ' (p : g.Path start goal), (∀ v ∈ p.support, search_state.pathOrder v ≤ search_state.pathOrder goal):= 
+      Σ' (p : G.Path start goal), (∀ v ∈ p.support, search_state.pathOrder v ≤ search_state.pathOrder goal):= 
       if start_is_goal : goal = start then
-        let emptyW : g.Walk start goal := start_is_goal ▸ Walk.nil
+        let emptyW : G.Walk start goal := start_is_goal ▸ Walk.nil
         let emptyW_nodup : emptyW.support.Nodup := by
           simp [emptyW]
           unfold Walk.support
@@ -35,7 +45,7 @@ def extract_path_to (start : V) (goal : V) (search_state : base_search_state g)
             simp_all only [reduceCtorEq] 
           · simp
         
-        let emptyP : g.Path start goal := ⟨ emptyW, emptyW_nodup⟩ 
+        let emptyP : G.Path start goal := ⟨ emptyW, emptyW_nodup⟩ 
         
         have order : ∀ v ∈ emptyP.support, search_state.pathOrder v ≤ search_state.pathOrder goal := by
           intro a a_in_support
@@ -51,7 +61,7 @@ def extract_path_to (start : V) (goal : V) (search_state : base_search_state g)
         let goal_predecessor : V := search_state.mother ⟨ goal, goal_reached ⟩
         let ⟨ path_start_pre, order_proof ⟩ := -- : Path g start goal_predecessor :=
           extract_path_to start goal_predecessor search_state (by apply mother_invar) mother_invar mother_invar_adj decreasing_invar 
-        let pre_adj_goal : g.Adj goal_predecessor goal := mother_invar_adj ⟨ goal , goal_reached ⟩ start_is_goal
+        let pre_adj_goal : G.Adj goal_predecessor goal := mother_invar_adj ⟨ goal , goal_reached ⟩ start_is_goal
         let goal_not_visited : goal ∉ path_start_pre.support := by
           by_contra goal_is_in_support
           have h := order_proof goal goal_is_in_support
@@ -59,10 +69,9 @@ def extract_path_to (start : V) (goal : V) (search_state : base_search_state g)
           unfold search_invar_mother_decreasing_path_order at decreasing_invar
           have h' := decreasing_invar ⟨ goal, goal_reached⟩ 
           clear mother_invar decreasing_invar
-          simp_all
-          omega
+          grind
 
-        let goal_path : g.Path start goal := path_start_pre.concat pre_adj_goal goal_not_visited
+        let goal_path : G.Path start goal := path_start_pre.concat pre_adj_goal goal_not_visited
 
         let new_order_proof : ∀ v ∈ goal_path.support, search_state.pathOrder v ≤ search_state.pathOrder goal := by
           intro a a_in_support
@@ -83,10 +92,11 @@ def extract_path_to (start : V) (goal : V) (search_state : base_search_state g)
 
 termination_by search_state.pathOrder goal
 decreasing_by
+  apply SizeOfFromPreOrder.comp
   simp_all only [Subtype.forall, ne_eq, not_false_eq_true]
 
 
-theorem extract_path_visited_proof_irrelevant (start : V) (s : base_search_state g)
+theorem extract_path_visited_proof_irrelevant [SizeOfFromPreOrder D] (start : V) (s : base_search_state G D)
     (mother_invar : search_invar_mother_is_visited s)
     (mother_invar_adj : search_invar_mother_is_adjacent start s)
     (decreasing_invar : search_invar_mother_decreasing_path_order start s)
@@ -106,8 +116,8 @@ theorem extract_path_visited_proof_irrelevant (start : V) (s : base_search_state
 
 
 theorem search_termination_with_empty_stack_implies_goal_visited (start : V) (goal : V) (f : V) 
-  (theWalk : g.Walk f goal)
-  (final_state : base_search_state g)
+  (theWalk : G.Walk f goal)
+  (final_state : base_search_state G D)
   (f_visited : f ∈ final_state.visited)
   (final_stack_empty : final_state.stack = [])
   (on_stack_or_all_nei_visited : search_invar_on_stack_or_all_neighbours_visited final_state): goal ∈ final_state.visited := by
@@ -123,19 +133,15 @@ theorem search_termination_with_empty_stack_implies_goal_visited (start : V) (go
       · exact on_stack_or_all_nei_visited
 
 
--- the graph should be an explicit parameter here
-abbrev search_step_function (g : WeightedDiGraph V E)
-    {state_type : Type} [has_base_search_state g state_type] :=
-      V → state_type → state_type × (Option Bool)
 
 def base_search_state_termination_metric 
-    (s : base_search_state g): ℕ × ℕ :=
+    (s : base_search_state G D): ℕ × ℕ :=
     (Fintype.card V - s.visited.card, s.stack.length)
 
 abbrev termination_metric_decreasing_proof
-   {state_type : Type} [has_base_search_state g state_type]
+   {state_type : Type} [has_base_search_state G D state_type]
   (goal : V)
-  (search_step : search_step_function (state_type := state_type) (g:=g))
+  (search_step : search_step_function G D state_type)
   (termination_metric : state_type → ℕ × ℕ) :=
     ∀ s : state_type, (search_step goal s).2 = none → 
         Prod.Lex (fun x1 x2 => x1 < x2) (fun x1 x2 => x1 < x2)
@@ -146,10 +152,12 @@ abbrev termination_metric_decreasing_proof
 ------------------------------------------------------------------------------------------
 -- Search Recurse
 ------------------
-def search_recurse {state_type : Type} [has_base_search_state g state_type]
-    (goal : V)
+variable {state_type : Type} [has_base_search_state G D state_type]
+variable {goal : V}
+
+def search_recurse 
     (priorState : state_type)
-    (search_step : search_step_function g)
+    (search_step : search_step_function G D state_type)
     (termination_metric : state_type → ℕ × ℕ)
     (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric):
     state_type × Bool :=
@@ -159,7 +167,7 @@ def search_recurse {state_type : Type} [has_base_search_state g state_type]
   if result_is_none : result = none then 
     
     --let still_not_terminated : nextState.terminated = false := by
-    search_recurse goal nextState search_step termination_metric decreasing_proof
+    search_recurse nextState search_step termination_metric decreasing_proof
   else ⟨ nextState, result.get (by apply Option.isSome_iff_ne_none.mpr ; exact result_is_none) ⟩ 
 termination_by termination_metric priorState
 decreasing_by
@@ -168,10 +176,9 @@ decreasing_by
 
 
 
-lemma search_recurse_obtain_termination_property {state_type : Type} [has_base_search_state g state_type]
-    (goal : V)
+lemma search_recurse_obtain_termination_property 
     (priorState : state_type)
-    (search_step : search_step_function g)
+    (search_step : search_step_function G D state_type)
     (termination_metric : state_type → ℕ × ℕ)
     (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
         -- until here all necessary for calling the search_recurse
@@ -179,8 +186,8 @@ lemma search_recurse_obtain_termination_property {state_type : Type} [has_base_s
     (property_after_termination : state_type → Prop):
       (∀ s : state_type, (search_step goal s).2 = some terminated_with → property_after_termination (search_step goal s).1)
     → 
-      ((search_recurse goal priorState search_step termination_metric decreasing_proof).2 = terminated_with → 
-      property_after_termination (search_recurse goal priorState search_step termination_metric decreasing_proof).1):= by
+      ((search_recurse priorState search_step termination_metric decreasing_proof).2 = terminated_with → 
+      property_after_termination (search_recurse priorState search_step termination_metric decreasing_proof).1):= by
       intro step_termination_property recursion_terminated_with
       unfold search_recurse at recursion_terminated_with ⊢
       simp_all
@@ -188,7 +195,7 @@ lemma search_recurse_obtain_termination_property {state_type : Type} [has_base_s
       · next search_step_returned_none =>
         -- recursive case
         simp_all
-        apply search_recurse_obtain_termination_property goal
+        apply search_recurse_obtain_termination_property 
         rotate_right
         · use terminated_with -- recursion termiantes with same result
         · apply step_termination_property
@@ -208,58 +215,53 @@ decreasing_by
 
 
 
-lemma search_recurse_obtain_base_termination_property {state_type : Type} [has_base_search_state g state_type]
+lemma search_recurse_obtain_base_termination_property 
     (goal : V)
     (priorState : state_type)
-    (search_step : search_step_function g)
+    (search_step : search_step_function G D state_type)
     (termination_metric : state_type → ℕ × ℕ)
     (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
         -- until here all necessary for calling the search_recurse
     (terminated_with : Bool) -- recursion terminated with
-    (property_after_termination : base_search_state g → Prop):
+    (property_after_termination : base_search_state G D → Prop):
       (∀ s : state_type, (search_step goal s).2 = some terminated_with → property_after_termination (has_base_search_state.to_base_state (search_step goal s).1))
     → 
-      ((search_recurse goal priorState search_step termination_metric decreasing_proof).2 = terminated_with → 
-      property_after_termination (has_base_search_state.to_base_state (search_recurse goal priorState search_step termination_metric decreasing_proof).1)) := by
+      ((search_recurse priorState search_step termination_metric decreasing_proof).2 = terminated_with → 
+      property_after_termination (has_base_search_state.to_base_state (search_recurse priorState search_step termination_metric decreasing_proof).1)) := by
       intro property_holds
-      apply search_recurse_obtain_termination_property goal priorState search_step termination_metric decreasing_proof (terminated_with) (fun x => property_after_termination (has_base_search_state.to_base_state x)) -- fun needed to tell lean what the "invariant" is it should apply
+      apply search_recurse_obtain_termination_property priorState search_step termination_metric decreasing_proof (terminated_with) (fun x => property_after_termination (has_base_search_state.to_base_state x)) -- fun needed to tell lean what the "invariant" is it should apply
       exact property_holds
 
 
 abbrev invar_carries_over_step 
-    {state_type : Type} [has_base_search_state g state_type]
-    (goal : V)
-    (search_step : search_step_function (g:=g) (state_type := state_type))
+    (search_step : search_step_function G D state_type)
     (invar : state_type → Prop) :=
       ∀ s : state_type, invar s → invar (search_step goal s).fst
 
 
 abbrev base_invar_carries_over_step 
-    {state_type : Type} [has_base_search_state g state_type]
-    (goal : V)
-    (search_step : search_step_function (g:=g) (state_type := state_type))
-    (invar : base_search_state g → Prop) :=
+    (search_step : search_step_function G D state_type)
+    (invar : base_search_state G D → Prop) :=
       ∀ s : state_type, invar (has_base_search_state.to_base_state s) → invar (has_base_search_state.to_base_state (search_step goal s).fst)
 
 
 
-lemma search_recurse_lift_invariant {state_type : Type} [has_base_search_state g state_type]
-    (goal : V)
+lemma search_recurse_lift_invariant 
     (priorState : state_type)
-    (search_step : search_step_function (g:=g))
+    (search_step : search_step_function G D state_type)
     (termination_metric : state_type → ℕ × ℕ)
     (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
         -- until here all necessary for calling the search_recurse
     (invar : state_type → Prop):
-      invar priorState ∧ (invar_carries_over_step goal search_step invar)
-         → invar (search_recurse goal priorState search_step termination_metric decreasing_proof).fst:= by
+      invar priorState ∧ (invar_carries_over_step (goal := goal) search_step invar)
+         → invar (search_recurse priorState search_step termination_metric decreasing_proof).fst:= by
       intro ⟨ prior_invar, invar_carries ⟩ 
       unfold search_recurse 
       simp_all
       split
       · next search_step_returned_none =>
         -- recursive case
-        apply search_recurse_lift_invariant goal
+        apply search_recurse_lift_invariant 
         constructor
         · unfold invar_carries_over_step at invar_carries
           apply invar_carries
@@ -276,25 +278,23 @@ decreasing_by
 
 
 lemma search_recurse_lift_invariant_under_return_assumption 
-    {state_type : Type} [has_base_search_state g state_type]
-    (goal : V)
     (priorState : state_type)
-    (search_step : search_step_function g)
+    (search_step : search_step_function G D state_type)
     (termination_metric : state_type → ℕ × ℕ)
     (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
         -- until here all necessary for calling the search_recurse
     (invar : state_type → Prop)
     (return_value : Bool):
-      invar priorState ∧ (invar_carries_over_step goal search_step invar)
-      ∧ (search_recurse goal priorState search_step termination_metric decreasing_proof).snd = return_value
-         → invar (search_recurse goal priorState search_step termination_metric decreasing_proof).fst:= by
+      invar priorState ∧ (invar_carries_over_step (goal:=goal) search_step invar)
+      ∧ (search_recurse priorState search_step termination_metric decreasing_proof).snd = return_value
+         → invar (search_recurse priorState search_step termination_metric decreasing_proof).fst:= by
       intro ⟨ prior_invar, invar_carries, returned_value⟩ 
       unfold search_recurse 
       simp_all
       split
       · next search_step_returned_none =>
         -- recursive case
-        apply search_recurse_lift_invariant_under_return_assumption goal
+        apply search_recurse_lift_invariant_under_return_assumption 
         and_intros
         rotate_right
         · use return_value
@@ -315,19 +315,17 @@ decreasing_by
 
 
 lemma search_recurse_lift_base_invariant  
-    {state_type : Type} [has_base_search_state g state_type]
-    (goal : V)
     (priorState : state_type)
-    (search_step : search_step_function g)
+    (search_step : search_step_function G D state_type)
     (termination_metric : state_type → ℕ × ℕ)
     (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
         -- until here all necessary for calling the search_recurse
-    (invar : base_search_state g → Prop):
+    (invar : base_search_state G D → Prop):
       invar (has_base_search_state.to_base_state priorState)
-      ∧ (base_invar_carries_over_step goal search_step invar)
-         → invar (has_base_search_state.to_base_state (search_recurse goal priorState search_step termination_metric decreasing_proof).fst) := by
+      ∧ (base_invar_carries_over_step search_step invar (goal := goal))
+         → invar (has_base_search_state.to_base_state (search_recurse priorState search_step termination_metric decreasing_proof).fst) := by
       intro ⟨invar_holds_on_base, invar_carries⟩
-      apply search_recurse_lift_invariant goal priorState search_step termination_metric decreasing_proof (fun x => invar (has_base_search_state.to_base_state x)) -- fun needed to tell lean what the "invariant" is it should apply
+      apply search_recurse_lift_invariant priorState search_step termination_metric decreasing_proof (fun x => invar (has_base_search_state.to_base_state x)) -- fun needed to tell lean what the "invariant" is it should apply
       constructor
       · use invar_holds_on_base
       · use invar_carries
@@ -335,29 +333,25 @@ lemma search_recurse_lift_base_invariant
 
 
 abbrev invar_becoming_true_causes_other_invar 
-    {state_type : Type} [has_base_search_state g state_type]
-    (goal : V)
-    (search_step : search_step_function (g:=g) (state_type := state_type))
+    (search_step : search_step_function G D state_type)
     (invar_1 : state_type → Prop) (invar_2 : state_type → Prop) :=
       ∀ s : state_type, ¬ invar_1 s ∧ invar_1 (search_step goal s).fst → invar_2 (search_step goal s).fst
 
 
 
 lemma search_recurse_lift_invariant_under_trigger
-    {state_type : Type} [has_base_search_state g state_type]
-    (goal : V)
     (priorState : state_type)
-    (search_step : search_step_function g)
+    (search_step : search_step_function G D state_type)
     (termination_metric : state_type → ℕ × ℕ)
     (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
         -- until here all necessary for calling the search_recurse
     (invar_end : state_type → Prop)
     (invar_middle : state_type → Prop):
-      (¬ invar_middle (search_recurse goal priorState search_step termination_metric decreasing_proof).fst)
+      (¬ invar_middle (search_recurse priorState search_step termination_metric decreasing_proof).fst)
       ∧ (¬ invar_end priorState)
-      ∧ (invar_carries_over_step goal search_step invar_middle)
-      ∧ (invar_becoming_true_causes_other_invar goal search_step invar_end invar_middle)
-      → ¬ invar_end (search_recurse goal priorState search_step termination_metric decreasing_proof).fst:= by
+      ∧ (invar_carries_over_step search_step invar_middle (goal := goal))
+      ∧ (invar_becoming_true_causes_other_invar search_step invar_end invar_middle (goal := goal))
+      → ¬ invar_end (search_recurse priorState search_step termination_metric decreasing_proof).fst:= by
       intro ⟨ terminated_with_invar_middle_false, not_invar_end_prior, invar_middle_carries, invar_end_triggers_middle⟩ 
 
       unfold search_recurse at terminated_with_invar_middle_false ⊢
@@ -368,7 +362,7 @@ lemma search_recurse_lift_invariant_under_trigger
         by_cases invar_end next_state
         · next invar_end_becomes_true =>
           have invar_middle_becomes_true := invar_end_triggers_middle priorState ⟨not_invar_end_prior, invar_end_becomes_true ⟩
-          have invar_middle_stays_true : invar_middle (search_recurse goal (search_step goal priorState).1 search_step termination_metric decreasing_proof).1 := by
+          have invar_middle_stays_true : invar_middle (search_recurse (search_step goal priorState).1 search_step termination_metric decreasing_proof).1 := by
             apply search_recurse_lift_invariant
             exact ⟨ invar_middle_becomes_true, invar_middle_carries⟩ 
           contradiction
@@ -395,25 +389,70 @@ decreasing_by
 
 section
 
-variable {state_type : Type} [has_base_search_state g state_type]
 variable {start : V}
-variable {goal : V}
+variable {d : D}
 variable {start_state : state_type}
-variable {search_step : search_step_function g (state_type := state_type)}
+variable {search_step : search_step_function G D state_type}
 variable {termination_metric : state_type → ℕ × ℕ}
 
 
-def search_internal
-  (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric):
-  state_type × Bool :=
-  search_recurse goal start_state search_step termination_metric decreasing_proof
 
 
-lemma search_returns_with_invariants
-  (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
-  (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
-  (invar_carries_over_step : base_invar_carries_over_step goal search_step (search_invar_all_basic start)):
-    search_invar_all_basic start (has_base_search_state.to_base_state (g:=g) (search_internal (start_state:=start_state) decreasing_proof).1) := by
+abbrev step_stack_empty_if_terminated_without_goal :=
+  ∀ s : state_type,
+    (search_step goal s).2 = false →
+      search_prop_stack_empty (has_base_search_state.to_base_state (G:=G) (D:=D) (search_step goal s).1)
+
+abbrev step_keeps_goal_on_stack :=
+  ∀ s : state_type,
+    search_prop_goal_on_stack goal (has_base_search_state.to_base_state (G:=G) (D:=D) s) → 
+    search_prop_goal_on_stack goal (has_base_search_state.to_base_state (G:=G) (D:=D) (search_step goal s).1)
+
+abbrev step_goal_becomes_visited_it_is_on_stack:=
+  ∀ s : state_type,
+  goal ∉ (has_base_search_state.to_base_state (G:=G) (D:=D) s).visited ∧ goal ∈ (has_base_search_state.to_base_state (G:=G) (D:=D) (search_step goal s).1).visited 
+  → search_prop_goal_on_stack goal (has_base_search_state.to_base_state (G:=G) (D:=D) (search_step goal s).1)
+
+abbrev search_step_terminates_when_goal_stack_head
+--  (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
+:= (∃ tail : List V, (has_base_search_state.to_base_state (G:=G) (D:=D) start_state).stack = goal :: tail) → (search_step goal start_state).2 = some true 
+--:= (has_base_search_state.to_base_state (g:=g) start_state).stack = [goal] → (search_step goal start_state).2 = some true 
+
+
+
+section
+variable (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
+
+
+def search_internal: state_type × Bool :=
+    search_recurse start_state search_step termination_metric decreasing_proof
+
+abbrev search_step_goal_on_stack_if_terminated :=
+    ∀ s : state_type, ∀ goal : V, (search_step goal s).2 = true →
+      goal ∈ (has_base_search_state.to_base_state (G:=G) (D:=D) (search_step goal s).1).stack 
+
+
+lemma search_goal_on_stack_if_returned_true
+  (goal_on_stack_if_terminated : search_step_goal_on_stack_if_terminated (search_step:=search_step)):
+    (search_internal (start_state:=start_state) decreasing_proof).2 = true →
+      search_prop_goal_on_stack goal (has_base_search_state.to_base_state (G:=G) (D:=D) (search_internal (start_state:=start_state) decreasing_proof).1) := by 
+    intro terminated_with_goal_found 
+    unfold search_internal
+    apply search_recurse_obtain_base_termination_property goal (start_state) (property_after_termination := search_prop_goal_on_stack goal) (terminated_with := true) 
+    · intro s
+      apply goal_on_stack_if_terminated
+    · exact terminated_with_goal_found
+
+
+
+section 
+variable (start_is_base_init : (has_base_search_state.to_base_state (G:=G) (D:=D) start_state) = (base_search_state_initial start d))
+variable (invar_carries_over_step : base_invar_carries_over_step search_step (goal:=goal) (search_invar_all_basic start))
+include start_is_base_init invar_carries_over_step
+
+
+lemma search_returns_with_invariants :
+    search_invar_all_basic start (has_base_search_state.to_base_state (G:=G) (D:=D) (search_internal (start_state:=start_state) decreasing_proof).1) := by
     unfold search_internal
     apply search_recurse_lift_base_invariant 
     constructor
@@ -423,41 +462,16 @@ lemma search_returns_with_invariants
     · exact invar_carries_over_step
 
 
-lemma search_returns_with_stack_visited
-  (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
-  (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
-  (invar_carries_over_step : base_invar_carries_over_step goal search_step (search_invar_all_basic start)):
-    search_invar_stack_is_visited (has_base_search_state.to_base_state (g:=g) (search_internal (start_state:=start_state) decreasing_proof).1) := by
-    have all_invars := search_returns_with_invariants (g:=g) decreasing_proof start_is_base_init invar_carries_over_step
+lemma search_returns_with_stack_visited:
+    search_invar_stack_is_visited (has_base_search_state.to_base_state (G:=G) (D:=D) (search_internal (start_state:=start_state) decreasing_proof).1) := by
+    have all_invars := search_returns_with_invariants decreasing_proof start_is_base_init invar_carries_over_step
     unfold search_invar_all_basic at all_invars
     exact all_invars.1
 
 
-
-abbrev search_step_goal_on_stack_if_terminated :=
-    ∀ s : state_type, ∀ goal : V, (search_step goal s).2 = true →
-      goal ∈ (has_base_search_state.to_base_state (g:=g) (search_step goal s).1).stack 
-
-
-lemma search_goal_on_stack_if_returned_true
-  (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
-  (goal_on_stack_if_terminated : search_step_goal_on_stack_if_terminated (search_step:=search_step)):
-    (search_internal (g:=g) (start_state:=start_state) decreasing_proof).2 = true →
-      search_prop_goal_on_stack goal (has_base_search_state.to_base_state (g:=g) (search_internal (start_state:=start_state) decreasing_proof).1) := by 
-    intro terminated_with_goal_found 
-    unfold search_internal
-    apply search_recurse_obtain_base_termination_property goal (start_state) (property_after_termination := search_prop_goal_on_stack goal) (terminated_with := true) 
-    · intro s
-      apply goal_on_stack_if_terminated
-    · exact terminated_with_goal_found
-
-
 lemma search_visited_goal_if_returned_true 
-  (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
-  (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
-  (invar_carries_over_step : base_invar_carries_over_step goal search_step (search_invar_all_basic start))
   (goal_on_stack_if_terminated : search_step_goal_on_stack_if_terminated (search_step:=search_step)):
-  (search_internal (g:=g) (start_state:=start_state) decreasing_proof).2 = true → goal ∈ (has_base_search_state.to_base_state (g:=g) (search_internal (start_state:=start_state) decreasing_proof).1).visited := by 
+  (search_internal (start_state:=start_state) decreasing_proof).2 = true → goal ∈ (has_base_search_state.to_base_state (G:=G) (D:=D) (search_internal (start_state:=start_state) decreasing_proof).1).visited := by 
     intro terminated_with_goal_found 
     apply search_returns_with_stack_visited 
     · exact start_is_base_init 
@@ -467,63 +481,44 @@ lemma search_visited_goal_if_returned_true
       · exact terminated_with_goal_found 
 
 
-
-lemma search_returns_with_mother_visited
-  (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
-  (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
-  (invar_carries_over_step : base_invar_carries_over_step goal search_step (search_invar_all_basic start)):
-    search_invar_mother_is_visited (has_base_search_state.to_base_state (g:=g) (search_internal (start_state:=start_state) decreasing_proof).1) := by
-    have all_invars := search_returns_with_invariants (g:=g) decreasing_proof start_is_base_init invar_carries_over_step
+lemma search_returns_with_mother_visited:
+    search_invar_mother_is_visited (has_base_search_state.to_base_state (G:=G) (D:=D) (search_internal (start_state:=start_state) decreasing_proof).1) := by
+    have all_invars := search_returns_with_invariants decreasing_proof start_is_base_init invar_carries_over_step
     unfold search_invar_all_basic at all_invars
     exact all_invars.2.1
 
-lemma search_returns_with_mother_adjacent
-  (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
-  (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
-  (invar_carries_over_step : base_invar_carries_over_step goal search_step (search_invar_all_basic start)):
-    search_invar_mother_is_adjacent start (has_base_search_state.to_base_state (g:=g) (search_internal (start_state:=start_state) decreasing_proof).1) := by
-    have all_invars := search_returns_with_invariants (g:=g) decreasing_proof start_is_base_init invar_carries_over_step
+lemma search_returns_with_mother_adjacent:
+    search_invar_mother_is_adjacent start (has_base_search_state.to_base_state (G:=G) (D:=D) (search_internal (start_state:=start_state) decreasing_proof).1) := by
+    have all_invars := search_returns_with_invariants decreasing_proof start_is_base_init invar_carries_over_step
     unfold search_invar_all_basic at all_invars
     exact all_invars.2.2.1
 
-lemma search_returns_with_mother_decreasing
-  (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
-  (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
-  (invar_carries_over_step : base_invar_carries_over_step goal search_step (search_invar_all_basic start)):
-    search_invar_mother_decreasing_path_order start (has_base_search_state.to_base_state (g:=g) (search_internal (start_state:=start_state) decreasing_proof).1) := by
-    have all_invars := search_returns_with_invariants (g:=g) decreasing_proof start_is_base_init invar_carries_over_step
+lemma search_returns_with_mother_decreasing:
+    search_invar_mother_decreasing_path_order start (has_base_search_state.to_base_state (G:=G) (D:=D)  (search_internal (start_state:=start_state) decreasing_proof).1) := by
+    have all_invars := search_returns_with_invariants decreasing_proof start_is_base_init invar_carries_over_step
     unfold search_invar_all_basic at all_invars
     exact all_invars.2.2.2.1
 
-lemma search_returns_with_start_visited
-  (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
-  (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
-  (invar_carries_over_step : base_invar_carries_over_step goal search_step (search_invar_all_basic start)):
-    search_invar_start_visited start (has_base_search_state.to_base_state (g:=g) (search_internal (start_state:=start_state) decreasing_proof).1) := by
-    have all_invars := search_returns_with_invariants (g:=g) decreasing_proof start_is_base_init invar_carries_over_step
+lemma search_returns_with_start_visited:
+    search_invar_start_visited start (has_base_search_state.to_base_state (G:=G) (D:=D) (search_internal (start_state:=start_state) decreasing_proof).1) := by
+    have all_invars := search_returns_with_invariants decreasing_proof start_is_base_init invar_carries_over_step
     unfold search_invar_all_basic at all_invars
     exact all_invars.2.2.2.2.2
 
-lemma search_returns_with_node_on_stack_or_all_neighbours_visited 
-  (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
-  (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
-  (invar_carries_over_step : base_invar_carries_over_step goal search_step (search_invar_all_basic start)):
-    search_invar_on_stack_or_all_neighbours_visited (has_base_search_state.to_base_state (g:=g) (search_internal (start_state:=start_state) decreasing_proof).1) := by
-    have all_invars := search_returns_with_invariants (g:=g) decreasing_proof start_is_base_init invar_carries_over_step
+lemma search_returns_with_node_on_stack_or_all_neighbours_visited:
+    search_invar_on_stack_or_all_neighbours_visited (has_base_search_state.to_base_state (G:=G) (D:=D) (search_internal (start_state:=start_state) decreasing_proof).1) := by
+    have all_invars := search_returns_with_invariants decreasing_proof start_is_base_init invar_carries_over_step
     unfold search_invar_all_basic at all_invars
     exact all_invars.2.2.2.2.1
-
 
 
 ------------------------------------------------------------------------------
 -- Execution of search
 
-def search_exe
-    (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
-    (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
-    (invar_carries_over_step : base_invar_carries_over_step goal search_step (search_invar_all_basic start))
+
+def search_exe [SizeOfFromPreOrder D]
     (goal_on_stack_if_terminated : search_step_goal_on_stack_if_terminated (search_step:=search_step)):
-    Option (g.Path start goal) :=
+    Option (G.Path start goal) :=
   let ret := search_internal decreasing_proof
   let final_state:= ret.1
   let found_goal := ret.2
@@ -544,12 +539,9 @@ def search_exe
   else
     none
 
-theorem search_is_sound
-    (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
-    (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
-    (invar_carries_over_step : base_invar_carries_over_step goal search_step (search_invar_all_basic start))
+theorem search_is_sound [SizeOfFromPreOrder D]
     (goal_on_stack_if_terminated : search_step_goal_on_stack_if_terminated (search_step:=search_step)):
-    (Option.isSome (search_exe decreasing_proof start_is_base_init invar_carries_over_step goal_on_stack_if_terminated) → (∃ x : (g.Path start goal), x = x)) := by
+    (Option.isSome (search_exe decreasing_proof start_is_base_init invar_carries_over_step goal_on_stack_if_terminated) → (∃ x : (G.Path start goal), x = x)) := by
   intro h -- Option.isSome true on some and false on none, x = x since we need a formula
   constructor -- since goal is existence
   rfl
@@ -557,39 +549,21 @@ theorem search_is_sound
   apply w
   simp_all
 
-
-abbrev step_stack_empty_if_terminated_without_goal :=
-  ∀ s : state_type,
-    (search_step goal s).2 = false →
-      search_prop_stack_empty (has_base_search_state.to_base_state (g:=g) (search_step goal s).1)
-
-abbrev step_keeps_goal_on_stack :=
-  ∀ s : state_type,
-    search_prop_goal_on_stack goal (has_base_search_state.to_base_state (g:=g) s) → 
-    search_prop_goal_on_stack goal (has_base_search_state.to_base_state (g:=g) (search_step goal s).1)
-
-abbrev step_goal_becomes_visited_it_is_on_stack:=
-  ∀ s : state_type,
-  goal ∉ (has_base_search_state.to_base_state (g:=g) s).visited ∧ goal ∈ (has_base_search_state.to_base_state (g:=g) (search_step goal s).1).visited 
-  → search_prop_goal_on_stack goal (has_base_search_state.to_base_state (g:=g) (search_step goal s).1)
-
-abbrev search_step_terminates_when_goal_stack_head
---  (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
-:= (∃ tail : List V, (has_base_search_state.to_base_state (g:=g) start_state).stack = goal :: tail) → (search_step goal start_state).2 = some true 
---:= (has_base_search_state.to_base_state (g:=g) start_state).stack = [goal] → (search_step goal start_state).2 = some true 
+end
 
 
-lemma search_empty_stack_if_returned_false_recurse
-    (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
-    (stack_empty_if_terminated_without_goal : step_stack_empty_if_terminated_without_goal (g:=g) (search_step:=search_step) (goal:=goal))
-    :
+section
+variable (stack_empty_if_terminated_without_goal : step_stack_empty_if_terminated_without_goal (search_step:=search_step) (goal:=goal))
+include stack_empty_if_terminated_without_goal
+
+lemma search_empty_stack_if_returned_false_recurse:
     (search_internal (start_state := start_state) decreasing_proof).2 = false
-    → search_prop_stack_empty (has_base_search_state.to_base_state (g:=g) (search_internal (start_state := start_state) decreasing_proof).1) := by
+    → search_prop_stack_empty (has_base_search_state.to_base_state (G:=G) (D:=D) (search_internal (start_state := start_state) decreasing_proof).1) := by
     intro terminated_with_goal_not_found
     unfold search_internal
     let prop_after_termination : state_type → Prop :=
-      (fun s => search_prop_stack_empty (g:=g) (has_base_search_state.to_base_state (g:=g) s))
-    apply search_recurse_obtain_termination_property (g:=g) goal start_state (property_after_termination := prop_after_termination) (terminated_with := false) 
+      (fun s => search_prop_stack_empty (has_base_search_state.to_base_state (G:=G) (D:=D) s))
+    apply search_recurse_obtain_termination_property (state_type := state_type) (property_after_termination := prop_after_termination) (terminated_with := false) 
     · intro s
       unfold prop_after_termination
       unfold step_stack_empty_if_terminated_without_goal at stack_empty_if_terminated_without_goal
@@ -598,21 +572,19 @@ lemma search_empty_stack_if_returned_false_recurse
 
 
 lemma search_recurse_goal_not_visited_if_terminated
-    (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
-    (stack_empty_if_terminated_without_goal : step_stack_empty_if_terminated_without_goal (g:=g) (search_step:=search_step) (goal:=goal))
-    (keeps_goal_on_stack : step_keeps_goal_on_stack (g:=g) (search_step:=search_step) (goal:=goal))
-    (goal_becomes_visited_implies_on_stack: step_goal_becomes_visited_it_is_on_stack (g:=g) (search_step:=search_step) (goal:=goal))
+    (keeps_goal_on_stack : step_keeps_goal_on_stack (search_step:=search_step) (goal:=goal))
+    (goal_becomes_visited_implies_on_stack: step_goal_becomes_visited_it_is_on_stack (search_step:=search_step) (goal:=goal))
     :
     (search_internal (start_state := start_state) decreasing_proof).2 = false
-    ∧ ¬ search_prop_goal_visited goal (has_base_search_state.to_base_state (g:=g) start_state)
-    → ¬ search_prop_goal_visited goal (has_base_search_state.to_base_state (g:=g) (search_internal (start_state := start_state) decreasing_proof).1) := by
+    ∧ ¬ search_prop_goal_visited goal (has_base_search_state.to_base_state (G:=G) (D:=D) start_state)
+    → ¬ search_prop_goal_visited goal (has_base_search_state.to_base_state (G:=G) (D:=D) (search_internal (start_state := start_state) decreasing_proof).1) := by
     intro ⟨ terminated_with_false, goal_not_visited_before ⟩ 
     unfold search_internal
-    apply search_recurse_lift_invariant_under_trigger goal start_state search_step (invar_end:= fun s => search_prop_goal_visited goal (has_base_search_state.to_base_state s))
+    apply search_recurse_lift_invariant_under_trigger start_state search_step (invar_end:= fun s => search_prop_goal_visited goal (has_base_search_state.to_base_state s))
     and_intros
     rotate_right
     · use (fun s =>
-        let base_state : base_search_state g := (has_base_search_state.to_base_state s)
+        let base_state : base_search_state G D := (has_base_search_state.to_base_state s)
         search_prop_goal_on_stack goal base_state)
     · apply search_empty_stack_if_returned_false_recurse at terminated_with_false
       unfold search_prop_goal_on_stack at ⊢  
@@ -624,17 +596,20 @@ lemma search_recurse_goal_not_visited_if_terminated
     · apply keeps_goal_on_stack
     · apply goal_becomes_visited_implies_on_stack
 
+section 
+variable (start_is_base_init : (has_base_search_state.to_base_state (G:=G) (D:=D) start_state) = (base_search_state_initial start d))
+include start_is_base_init
+
+
+
 
 
 lemma search_not_visited_goal_if_returned_false
-    (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
-    (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
     (step_terminates_if_goal_is_stack_head : search_step_terminates_when_goal_stack_head (search_step:=search_step) (goal:=goal) (start_state:=start_state))
-    (stack_empty_if_terminated_without_goal : step_stack_empty_if_terminated_without_goal (g:=g) (search_step:=search_step) (goal:=goal))
-    (keeps_goal_on_stack : step_keeps_goal_on_stack (g:=g) (search_step:=search_step) (goal:=goal))
-    (goal_becomes_visited_implies_on_stack: step_goal_becomes_visited_it_is_on_stack (g:=g) (search_step:=search_step) (goal:=goal))
+    (keeps_goal_on_stack : step_keeps_goal_on_stack (search_step:=search_step) (goal:=goal))
+    (goal_becomes_visited_implies_on_stack: step_goal_becomes_visited_it_is_on_stack (search_step:=search_step) (goal:=goal))
     :
-    (search_internal (start_state := start_state) decreasing_proof).2 = false → goal ∉ (has_base_search_state.to_base_state (g:=g) (search_internal (start_state := start_state) decreasing_proof).1).visited := by
+    (search_internal (start_state := start_state) decreasing_proof).2 = false → goal ∉ (has_base_search_state.to_base_state (G:=G) (D:=D) (search_internal (start_state := start_state) decreasing_proof).1).visited := by
     --(start : V) (goal : V):
     --(dfs_internal g start goal).2 = false → goal ∉ (dfs_internal g start goal).1.visited := by
      intro terminated_with_not_goal_found
@@ -651,7 +626,7 @@ lemma search_not_visited_goal_if_returned_false
        by_contra goal_is_start
        unfold search_internal at terminated_with_not_goal_found
        unfold search_recurse at terminated_with_not_goal_found
-       have initial_stack_is_goal : (has_base_search_state.to_base_state (g:=g) start_state).stack = [goal] := by
+       have initial_stack_is_goal : (has_base_search_state.to_base_state (G:=G) (D:=D) start_state).stack = [goal] := by
          rw [start_is_base_init]
          unfold base_search_state_initial 
          simp_all
@@ -659,25 +634,26 @@ lemma search_not_visited_goal_if_returned_false
        simp_all
 
 
+section
+variable [SizeOfFromPreOrder D]
+variable (invar_carries_over_step : base_invar_carries_over_step search_step (goal:=goal) (search_invar_all_basic start))
+include invar_carries_over_step
+
 theorem search_is_complete 
-    (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
-    (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
-    (invar_carries_over_step : base_invar_carries_over_step goal search_step (search_invar_all_basic start))
     (goal_on_stack_if_terminated : search_step_goal_on_stack_if_terminated (search_step:=search_step))
-    (stack_empty_if_terminated_without_goal : step_stack_empty_if_terminated_without_goal (g:=g) (search_step:=search_step) (goal:=goal))
-    (keeps_goal_on_stack : step_keeps_goal_on_stack (g:=g) (search_step:=search_step) (goal:=goal))
-    (goal_becomes_visited_implies_on_stack: step_goal_becomes_visited_it_is_on_stack (g:=g) (search_step:=search_step) (goal:=goal))
+    (keeps_goal_on_stack : step_keeps_goal_on_stack (search_step:=search_step) (goal:=goal))
+    (goal_becomes_visited_implies_on_stack: step_goal_becomes_visited_it_is_on_stack (search_step:=search_step) (goal:=goal))
 ----
     (step_terminates_if_goal_is_stack_head : search_step_terminates_when_goal_stack_head (search_step:=search_step) (goal:=goal) (start_state:=start_state))
     :
-    ((∃ x : (g.Path start goal), x = x) → Option.isSome (search_exe decreasing_proof start_is_base_init invar_carries_over_step goal_on_stack_if_terminated)) := by
+    ((∃ x : (G.Path start goal), x = x) → Option.isSome (search_exe decreasing_proof start_is_base_init invar_carries_over_step goal_on_stack_if_terminated)) := by
     -- or Option.isNone (dfs g start goal) → ∄ x (Path g start goal), x = x
       intro path_exists
       apply Exists.elim path_exists
       intro thePath a; clear a-- uninformativ x=X
 
       let final := search_internal (start_state:=start_state) decreasing_proof
-      let final_state : base_search_state g := has_base_search_state.to_base_state final.1
+      let final_state : base_search_state G D := has_base_search_state.to_base_state final.1
       
       have start_visited : search_invar_start_visited start final_state :=
         search_returns_with_start_visited decreasing_proof start_is_base_init invar_carries_over_step
@@ -699,7 +675,7 @@ theorem search_is_complete
 
 
       have goal_not_visited : goal ∉ final_state.visited := --
-        search_not_visited_goal_if_returned_false decreasing_proof start_is_base_init step_terminates_if_goal_is_stack_head stack_empty_if_terminated_without_goal keeps_goal_on_stack goal_becomes_visited_implies_on_stack search_returned_false 
+        search_not_visited_goal_if_returned_false decreasing_proof stack_empty_if_terminated_without_goal start_is_base_init step_terminates_if_goal_is_stack_head keeps_goal_on_stack goal_becomes_visited_implies_on_stack search_returned_false 
 
       obtain ⟨theWalk, nodupe ⟩ := thePath
       have goal_in_final := search_termination_with_empty_stack_implies_goal_visited start goal start theWalk final_state start_visited final_stack_empty on_stack_or_all_nei_visited
@@ -707,22 +683,22 @@ theorem search_is_complete
 
 
 theorem search_is_complete_inv
-    (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
-    (start_is_base_init : (has_base_search_state.to_base_state (g:=g) start_state) = (base_search_state_initial start))
-    (invar_carries_over_step : base_invar_carries_over_step goal search_step (search_invar_all_basic start))
     (goal_on_stack_if_terminated : search_step_goal_on_stack_if_terminated (search_step:=search_step))
-    (stack_empty_if_terminated_without_goal : step_stack_empty_if_terminated_without_goal (g:=g) (search_step:=search_step) (goal:=goal))
-    (keeps_goal_on_stack : step_keeps_goal_on_stack (g:=g) (search_step:=search_step) (goal:=goal))
-    (goal_becomes_visited_implies_on_stack: step_goal_becomes_visited_it_is_on_stack (g:=g) (search_step:=search_step) (goal:=goal))
+    (keeps_goal_on_stack : step_keeps_goal_on_stack (search_step:=search_step) (goal:=goal))
+    (goal_becomes_visited_implies_on_stack: step_goal_becomes_visited_it_is_on_stack (search_step:=search_step) (goal:=goal))
 ----
     (step_terminates_if_goal_is_stack_head : search_step_terminates_when_goal_stack_head (search_step:=search_step) (goal:=goal) (start_state:=start_state))
     :
-    Option.isNone (search_exe decreasing_proof start_is_base_init invar_carries_over_step goal_on_stack_if_terminated) → ¬ ∃ x : (g.Path start goal), x = x := by
+    Option.isNone (search_exe decreasing_proof start_is_base_init invar_carries_over_step goal_on_stack_if_terminated) → ¬ ∃ x : (G.Path start goal), x = x := by
       intro optionIsNone
       by_contra pathExists
-      have isSome := search_is_complete decreasing_proof start_is_base_init invar_carries_over_step goal_on_stack_if_terminated stack_empty_if_terminated_without_goal keeps_goal_on_stack goal_becomes_visited_implies_on_stack step_terminates_if_goal_is_stack_head
+      have isSome := search_is_complete decreasing_proof stack_empty_if_terminated_without_goal start_is_base_init invar_carries_over_step goal_on_stack_if_terminated keeps_goal_on_stack goal_becomes_visited_implies_on_stack step_terminates_if_goal_is_stack_head
       simp_all
 
-end
+end 
 
+end
+end
+end
+end
 end WeightedDiGraph

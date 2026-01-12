@@ -15,7 +15,7 @@ set_option maxHeartbeats 10000000
 --set_option diagnostics true
 
 -- def local global variable for a graph
-variable {V : Type} {E : Type} [FinEnum V] [DecidableEq V] [DecidableEq E]
+variable {V : Type} {E : Type} [FinEnum V] [DecidableEq V] 
 variable {g : WeightedDiGraph V E}
 
 
@@ -23,12 +23,12 @@ namespace WeightedDiGraph
 -----------------------------------------------------------------------
 ------ BFS implementation and proof ------
 
-def bfs_step_expand[FinEnum V] [DecidableEq E] [DecidableEq V]
+def bfs_step_expand[FinEnum V] [DecidableEq V]
     (g: WeightedDiGraph V E)
-    (priorState : base_search_state g)
+    (priorState : base_search_state g ℕ)
     (stackHead : V)
     (stackTail : List V):
-    (base_search_state g) :=
+    (base_search_state g ℕ) :=
       let newly_visited : Finset V := (Finset.univ).filterMap
         (λ v => if @decide (g.Adj stackHead v) (g.instDecAdj stackHead v) ∧ v ∉ priorState.visited
                   then some v
@@ -56,7 +56,7 @@ def bfs_step_expand[FinEnum V] [DecidableEq E] [DecidableEq V]
 
 
 lemma bfs_expand_newly_added_are_adjacent 
-    (priorState : base_search_state g)
+    (priorState : base_search_state g ℕ)
     (stackHead : V)
     (stackTail : List V):
     ∀ x : V, x ∉ priorState.visited ∧ x ∉ stackTail ∧
@@ -68,7 +68,7 @@ lemma bfs_expand_newly_added_are_adjacent
 
 
 lemma bfs_expand_keeps_stack_in_visited 
-    (priorState : base_search_state g)
+    (priorState : base_search_state g ℕ)
     (stackHead : V)
     (stackTail : List V):
     search_invar_stack_is_visited priorState ∧
@@ -90,7 +90,7 @@ lemma bfs_expand_keeps_stack_in_visited
 
 
 lemma bfs_expand_keeps_mother_in_visited 
-    (priorState : base_search_state g)
+    (priorState : base_search_state g ℕ)
     (stackHead : V)
     (stackTail : List V):
     search_invar_mother_is_visited priorState ∧ stackHead ∈ priorState.visited → search_invar_mother_is_visited (bfs_step_expand g priorState stackHead stackTail) := by
@@ -106,7 +106,7 @@ lemma bfs_expand_keeps_mother_in_visited
 
 lemma bfs_expand_keeps_mother_is_adjacent
     (start : V)
-    (priorState : base_search_state g)
+    (priorState : base_search_state g ℕ)
     (stackHead : V)
     (stackTail : List V):
     search_invar_mother_is_adjacent start priorState → search_invar_mother_is_adjacent start (bfs_step_expand g priorState stackHead stackTail) := by
@@ -127,7 +127,7 @@ lemma bfs_expand_keeps_mother_is_adjacent
 
 lemma bfs_expand_keeps_mother_ordered 
     (start : V)
-    (priorState : base_search_state g)
+    (priorState : base_search_state g ℕ)
     (stackHead : V)
     (stackTail : List V):
     search_invar_mother_is_visited priorState ∧
@@ -152,7 +152,7 @@ lemma bfs_expand_keeps_mother_ordered
         apply le_refl
 
 lemma bfs_expand_keeps_on_stack_or_all_neighbours_visited
-    (priorState : base_search_state g)
+    (priorState : base_search_state g ℕ)
     (stackHead : V)
     (stackTail : List V):
      search_invar_on_stack_or_all_neighbours_visited priorState
@@ -193,7 +193,7 @@ lemma bfs_expand_keeps_on_stack_or_all_neighbours_visited
 
 lemma bfs_expand_keeps_start_visited
     (start : V)
-    (priorState : base_search_state g)
+    (priorState : base_search_state g ℕ)
     (stackHead : V)
     (stackTail : List V):
      search_invar_start_visited start priorState →
@@ -204,7 +204,7 @@ lemma bfs_expand_keeps_start_visited
       unfold search_invar_start_visited 
       simp_all
 
-lemma bfs_expand_visited_subset (priorState : base_search_state g)
+lemma bfs_expand_visited_subset (priorState : base_search_state g ℕ)
     (stackHead : V)
     (stackTail : List V):
     priorState.visited ⊆ (bfs_step_expand g priorState stackHead stackTail).visited := by
@@ -212,7 +212,7 @@ lemma bfs_expand_visited_subset (priorState : base_search_state g)
     simp_all
 
 lemma bfs_expand_keeps_goal_on_stack :
-    base_invar_carries_over_expand (state_type := base_search_state g) goal (bfs_step_expand g) (search_prop_goal_on_stack (g:=g) goal):= by
+    base_invar_carries_over_expand (state_type := base_search_state g ℕ) (bfs_step_expand g) goal (search_prop_goal_on_stack (G:=g) (D:=ℕ) goal):= by
     unfold base_invar_carries_over_expand
     intro s head tail ⟨ goal_prior_on_stack, head_not_goal, compose⟩ 
     change search_prop_goal_on_stack goal (bfs_step_expand g s head tail)
@@ -226,7 +226,7 @@ lemma bfs_expand_keeps_goal_on_stack :
 lemma bfs_expand_goal_becomes_visited_puts_it_on_stack
   (goal : V)
   : 
-  goal_becomes_visited_puts_it_on_stack (g:=g) goal (bfs_step_expand g):= by
+  goal_becomes_visited_puts_it_on_stack (G:=g) (D:=ℕ) (bfs_step_expand g) goal:= by
     unfold goal_becomes_visited_puts_it_on_stack
     intro s head tail ⟨ a,b,c,d⟩ 
     change search_prop_goal_on_stack goal (bfs_step_expand g s head tail)
@@ -240,12 +240,12 @@ lemma bfs_expand_goal_becomes_visited_puts_it_on_stack
     · next h => right; exact h
 
 
-lemma visited_is_smaller_than_V (state : base_search_state g): state.visited.card ≤ Fintype.card V := by
+lemma visited_is_smaller_than_V (state : base_search_state g ℕ): state.visited.card ≤ Fintype.card V := by
     apply Finset.card_le_univ
   
 
 lemma bfs_expand_visited_increases
-    (priorState : base_search_state g)
+    (priorState : base_search_state g ℕ)
     (head : V)
     (tail : List V):
       (bfs_step_expand g priorState head tail).visited.card ≥ priorState.visited.card := by
@@ -255,7 +255,7 @@ lemma bfs_expand_visited_increases
 
 
 lemma bfs_expand_keeps_base_invars:
-  base_invar_carries_over_expand goal (bfs_step_expand g) (search_invar_all_basic (g:=g) start) := by
+  base_invar_carries_over_expand (bfs_step_expand g) goal (search_invar_all_basic (G:=g) (D:=ℕ) start) := by
   unfold base_invar_carries_over_expand
   unfold search_invar_all_basic
   intro s head tail ⟨ ⟨ i1,i2,i3,i4,i5,i6⟩ , head_not_goal, compose⟩ 
@@ -299,8 +299,8 @@ lemma bfs_expand_keeps_base_invars:
 -- main recursion loop 
 
 lemma termination_bfs_recurse
-    (priorState : base_search_state g)
-    (nextState : base_search_state g)
+    (priorState : base_search_state g ℕ)
+    (nextState : base_search_state g ℕ)
     (head : V)
     (tail : List V)
     (compose : priorState.stack = head :: tail):
@@ -338,7 +338,7 @@ lemma termination_bfs_recurse
     · left; exact h
     · right; exact h
 
-lemma bfs_expand_metric_reduction : termination_proof_for_expand (g:=g) goal (bfs_step_expand g) base_search_state_termination_metric := by
+lemma bfs_expand_metric_reduction : termination_proof_for_expand (G:=g) (D:=ℕ) (bfs_step_expand g) goal base_search_state_termination_metric := by
     unfold termination_proof_for_expand
     unfold base_search_state_termination_metric
     simp
@@ -351,14 +351,14 @@ lemma bfs_expand_metric_reduction : termination_proof_for_expand (g:=g) goal (bf
 ----------------- the actual bfs: create the initial search state and then recurse
 
 def bfs(g: WeightedDiGraph V E) (start : V) (goal : V): Option (g.Path start goal) :=
-  let start_state := base_search_state_initial start
-  have h : has_base_search_state.to_base_state (g:=g) start_state = base_search_state_initial start:= by simp_all only [start_state]; rfl
+  let start_state := base_search_state_initial start 0
+  have h : has_base_search_state.to_base_state (G:=g) start_state = base_search_state_initial start 0:= by simp_all only [start_state]; rfl
 
-  search_exe_with_stack_step (g:=g) (start := start) (goal:=goal) (start_state:=start_state) (termination_metric := base_search_state_termination_metric) (bfs_step_expand g) bfs_expand_metric_reduction bfs_expand_keeps_base_invars h 
+  search_exe_with_stack_step (G:=g) (start := start) (bfs_step_expand g) goal bfs_expand_metric_reduction bfs_expand_keeps_base_invars h 
 
 
-def bfs_last_state (g: WeightedDiGraph V E) (start : V) (goal : V): base_search_state g × Bool :=
-  search_with_stack_step (goal:=goal) (start_state := base_search_state_initial start) (bfs_step_expand g) bfs_expand_metric_reduction
+def bfs_last_state (g: WeightedDiGraph V E) (start : V) (goal : V): base_search_state g ℕ × Bool :=
+  search_with_stack_step (goal:=goal) (start_state := base_search_state_initial start 0) (bfs_step_expand g) bfs_expand_metric_reduction
 
 
 theorem bfs_is_sound (g: WeightedDiGraph V E) (start : V) (goal : V) :
@@ -384,11 +384,11 @@ theorem bfs_is_complete (g: WeightedDiGraph V E) (start : V) (goal : V):
 -------------
 
 
-abbrev bfs_invar_on_stack_or_all_neighbours_max_order (s : base_search_state g):=
+abbrev bfs_invar_on_stack_or_all_neighbours_max_order (s : base_search_state g ℕ):=
   ∀ x : s.visited, ↑x ∉ s.stack → ∀ y : V, (g.Adj x y) → s.pathOrder y ≤ 1 + s.pathOrder x
 
 
-abbrev bfs_path_as_extracted_as_long_as_sort_index (start : V) (s : base_search_state g) :=
+abbrev bfs_path_as_extracted_as_long_as_sort_index (start : V) (s : base_search_state g ℕ) :=
     ∀ mother_invar : search_invar_mother_is_visited s,
     ∀ mother_invar_adj : search_invar_mother_is_adjacent start s,
     ∀ decreasing_invar : search_invar_mother_decreasing_path_order start s,
@@ -396,12 +396,12 @@ abbrev bfs_path_as_extracted_as_long_as_sort_index (start : V) (s : base_search_
     (extract_path_to start u s h mother_invar mother_invar_adj decreasing_invar).1.length = s.pathOrder u
 
 -- stack is sorted by the path_order (i.e. distance) value
-abbrev bfs_stack_sorted (s : base_search_state g) :=
+abbrev bfs_stack_sorted (s : base_search_state g ℕ) :=
   List.Pairwise (fun u v => s.pathOrder u ≤ s.pathOrder v) s.stack
 
 -- for BFS we don't sort the stack, we just append
 -- this is allowed as the maximum difference of values in the stack is one (from head to tail)
-abbrev bfs_stack_max_diff (s : base_search_state g) :=
+abbrev bfs_stack_max_diff (s : base_search_state g ℕ) :=
   if stack_not_empty : s.stack ≠ [] then
     ∀ x ∈ s.stack, s.pathOrder (s.stack.head stack_not_empty) + 1 ≥ s.pathOrder x
   else true
@@ -409,20 +409,20 @@ abbrev bfs_stack_max_diff (s : base_search_state g) :=
 
 -- this invariant is only true for BFS and Dijkstra
 -- for A*, we might have to re-open
-abbrev bfs_stack_shortest_path (start : V) (s : base_search_state g) :=
+abbrev bfs_stack_shortest_path (start : V) (s : base_search_state g ℕ) :=
   ∀ u ∈ s.visited, u ∉ s.stack ∨ (if ne : s.stack ≠ [] then s.stack.head ne = u else false) → g.distance_is start u (s.pathOrder u)
 
 
 -- for A*, a node that is not on the stack might have a shortert path that goes through some node that is actually still on the stack
 -- this is due to inconsistent heuristics requiring re-opening
 -- TODO here we need a "splicing lemma" for paths that states that in these cases the 
-abbrev astar_stack_shortest_path (start : V) (s : base_search_state g) :=
+abbrev astar_stack_shortest_path (start : V) (s : base_search_state g ℕ) :=
   ∀ u ∈ s.visited, u ∉ s.stack ∨ (if ne : s.stack ≠ [] then s.stack.head ne = u else false) → (g.distance_is start u (s.pathOrder u) ∨ (
     ∀ p : g.Path start u, p.is_shortest → p.support ∩ s.stack ≠ ∅
   ))
 
 
-abbrev bfs_all_invar (start : V) (s : base_search_state g) :=
+abbrev bfs_all_invar (start : V) (s : base_search_state g ℕ) :=
       search_invar_all_basic start s
     ∧ bfs_stack_shortest_path start s
     ∧ bfs_path_as_extracted_as_long_as_sort_index start s
@@ -431,9 +431,8 @@ abbrev bfs_all_invar (start : V) (s : base_search_state g) :=
     ∧ bfs_stack_max_diff s
     ∧ search_invar_start_path_order_zero start s
 
-
 lemma support_of_path_visited (u v : V) (w : g.Walk u v)
-    (state : base_search_state g)
+    (state : base_search_state g ℕ)
     (mother_invar : search_invar_mother_is_visited state)
     (mother_invar_adj : search_invar_mother_is_adjacent u state)
     (decreasing_invar : search_invar_mother_decreasing_path_order u state)
@@ -480,7 +479,7 @@ lemma run_walk_through_state_not_on_stack_yields_all_visited
   (start v : V) (v_ne_start : v ≠ start)
   (w : g.Walk start v)
   (w_support_nodup : w.support.Nodup)
-  (state : base_search_state g)
+  (state : base_search_state g ℕ)
   (start_visited : search_invar_start_visited start state)
   (on_stack_or_nei_visited : search_invar_on_stack_or_all_neighbours_visited state)
   (all_not_on_stack : ∀ u ∈ w.support, u ∈ state.stack → u = v)
@@ -553,7 +552,7 @@ lemma run_walk_through_state_not_on_stack_yields_all_visited
 
 lemma path_has_earliest_node_on_stack (start v : V) --(v_ne_start : v ≠ start)
   (p : g.Path start v)
-  (state : base_search_state g)
+  (state : base_search_state g ℕ)
   :
   (∃ u ∈ p.support, u ∈ state.stack ∧ u ≠ v) → 
   (∃ u ∈ p.support, u ∈ state.stack ∧ u ≠ v ∧ (p.support.takeWhile (· ≠ u)).all (· ∉ state.stack)) := by
@@ -589,7 +588,7 @@ lemma path_has_earliest_node_on_stack (start v : V) --(v_ne_start : v ≠ start)
 lemma run_path_through_state_yields_node_on_stack_or_all_visited_temp
   (start v : V) (v_ne_start : v ≠ start)
   (p : g.Path start v)
-  (state : base_search_state g)
+  (state : base_search_state g ℕ)
   (start_visited : search_invar_start_visited start state)
   (on_stack_or_nei_visited : search_invar_on_stack_or_all_neighbours_visited state)
   :
@@ -600,8 +599,7 @@ lemma run_path_through_state_yields_node_on_stack_or_all_visited_temp
   · right
     simp at no_onstack
     have none_on_stack : ∀ u ∈ p.val.support, u ≠ v → u ∉ state.stack := by
-      intro u u_in_support u_ne_v
-      intro u_on_stack
+      intro u u_in_support u_ne_v u_on_stack
       have h := no_onstack u u_in_support u_on_stack
       contradiction 
     constructor
@@ -622,7 +620,7 @@ lemma run_path_through_state_yields_node_on_stack_or_all_visited_temp
 lemma run_path_through_state_yields_node_on_stack_or_all_visited
   (start v : V) (v_ne_start : v ≠ start)
   (p : g.Path start v)
-  (state : base_search_state g)
+  (state : base_search_state g ℕ)
   (start_visited : search_invar_start_visited start state)
   (on_stack_or_nei_visited : search_invar_on_stack_or_all_neighbours_visited state)
   :
@@ -639,7 +637,7 @@ lemma run_path_through_state_yields_node_on_stack_or_all_visited
 
 lemma order_u_le_walk_length_p (start u v : V)
   (p : g.Walk start v)
-  (state : base_search_state g)
+  (state : base_search_state g ℕ)
   (update_invar : bfs_invar_on_stack_or_all_neighbours_max_order state)
   (on_stack_or_nei_visited : search_invar_on_stack_or_all_neighbours_visited state)
   (start_visited : start ∈ state.visited)
@@ -685,7 +683,7 @@ lemma order_u_le_walk_length_p (start u v : V)
 
 lemma order_u_le_path_length_p (start u v : V)
   (p : g.Path start v)
-  (state : base_search_state g)
+  (state : base_search_state g ℕ)
   (update_invar : bfs_invar_on_stack_or_all_neighbours_max_order state)
   (on_stack_or_nei_visited : search_invar_on_stack_or_all_neighbours_visited state)
   (start_path_order : search_invar_start_path_order_zero start state)
@@ -701,7 +699,7 @@ lemma order_u_le_path_length_p (start u v : V)
       simp_all
 
 
-lemma bfs_expand_does_not_change_paths (start u : V) (s : base_search_state g):
+lemma bfs_expand_does_not_change_paths (start u : V) (s : base_search_state g ℕ):
     ∀ mother_invar : search_invar_mother_is_visited s,
     ∀ mother_invar_adj : search_invar_mother_is_adjacent start s,
     ∀ decreasing_invar : search_invar_mother_decreasing_path_order start s,
@@ -737,7 +735,7 @@ decreasing_by
 
 
 lemma bfs_expand_start_path_order_zero_carries (start : V) (goal : V)
-    (state : base_search_state g)
+    (state : base_search_state g ℕ)
     (start_visited : search_invar_start_visited start state)
     :
      ∀ head : V, ∀ tail : List V, 
@@ -754,7 +752,7 @@ lemma bfs_expand_start_path_order_zero_carries (start : V) (goal : V)
       simp_all
 
 lemma bfs_expand_keeps_extracted_same_length_as_sort_index (start : V) (goal : V)
-    (state : base_search_state g)
+    (state : base_search_state g ℕ)
     (start_visited : search_invar_start_visited start state)
     (bef_mother_invar : search_invar_mother_is_visited state)
     (bef_mother_invar_adj : search_invar_mother_is_adjacent start state)
@@ -831,7 +829,7 @@ lemma bfs_expand_keeps_extracted_same_length_as_sort_index (start : V) (goal : V
         apply prior_invar
 
 lemma bfs_expand_keeps_max_diff (goal : V)
-    (state : base_search_state g)
+    (state : base_search_state g ℕ)
     (bef_stack_visited_invar : search_invar_stack_is_visited state)
     (stack_sorted : bfs_stack_sorted state)
     :
@@ -923,7 +921,7 @@ lemma bfs_expand_keeps_max_diff (goal : V)
       · rfl
 
 lemma bfs_expand_keeps_on_stack_or_nei_max_order(goal : V)
-    (state : base_search_state g)
+    (state : base_search_state g ℕ)
     (on_stack_or_nei_visited : search_invar_on_stack_or_all_neighbours_visited state)
     (max_diff_invar : bfs_stack_max_diff state)
     (stack_shortest : bfs_stack_shortest_path start state)
@@ -999,7 +997,7 @@ lemma bfs_expand_keeps_on_stack_or_nei_max_order(goal : V)
         grind -- contradictory
 
 lemma bfs_expand_keeps_stack_sorted(goal : V)
-    (state : base_search_state g)
+    (state : base_search_state g ℕ)
     (stack_visited_invar : search_invar_stack_is_visited state)
     (max_diff_invar : bfs_stack_max_diff state)
     :
@@ -1040,7 +1038,7 @@ lemma bfs_expand_keeps_stack_sorted(goal : V)
 
 lemma bfs_expand_keeps_shortest_path_invar
     (start : V) (goal : V)
-    (state : base_search_state g)
+    (state : base_search_state g ℕ)
     ----- co-invariants needed for path extraction
     (mother_invar : search_invar_mother_is_visited state)
     (mother_invar_adj : search_invar_mother_is_adjacent start state)
@@ -1322,7 +1320,7 @@ lemma bfs_expand_keeps_shortest_path_invar
 
 
 lemma bfs_expand_carries_all_bfs_invars (start : V) (goal : V):
-      base_invar_carries_over_expand goal (bfs_step_expand g) (bfs_all_invar (g:=g) start) := by
+      base_invar_carries_over_expand (bfs_step_expand g) goal (bfs_all_invar (g:=g) start) := by
       unfold base_invar_carries_over_expand
       intro s head tail ⟨ invar_before, head_ne_goal, compose⟩ 
       unfold bfs_all_invar
@@ -1372,7 +1370,7 @@ lemma bfs_expand_carries_all_bfs_invars (start : V) (goal : V):
           · exact ⟨ invar_before.right.right.right.right.right.right, head_ne_goal, compose⟩
 
 lemma bfs_invar_holds_at_init (start : V):
-      bfs_all_invar start (base_search_state_initial (g:=g) start) := by
+      bfs_all_invar start (base_search_state_initial (G:=g) start 0) := by
       constructor
       · apply base_search_state_initial_all_basic_invars
       · and_intros
@@ -1413,7 +1411,7 @@ theorem bfs_is_optimal(g: WeightedDiGraph V E) (start : V) (goal : V)
     (returned_path : Option.isSome (bfs g start goal)):
     ((bfs g start goal).get returned_path).is_shortest := by
 
-    let final := search_with_stack_step (goal:=goal) (start_state := base_search_state_initial start) (bfs_step_expand g) bfs_expand_metric_reduction
+    let final := search_with_stack_step (goal:=goal) (start_state := base_search_state_initial start 0) (bfs_step_expand g) bfs_expand_metric_reduction
     let final_state := final.1
 
     -- general properties
@@ -1426,7 +1424,7 @@ theorem bfs_is_optimal(g: WeightedDiGraph V E) (start : V) (goal : V)
       unfold search_with_stack_step
       simp
       unfold search_internal
-      apply search_recurse_obtain_base_termination_property goal (base_search_state_initial start) (property_after_termination := search_prop_stack_head_is_goal goal ) (terminated_with := true) (search_step := search_stack_step (bfs_step_expand g))
+      apply search_recurse_obtain_base_termination_property goal (base_search_state_initial start 0) (property_after_termination := search_prop_stack_head_is_goal goal ) (terminated_with := true) (search_step := search_stack_step (bfs_step_expand g))
       · intro s
         apply search_stack_step_goal_stack_head_if_terminated
       · unfold bfs at returned_path
@@ -1440,7 +1438,7 @@ theorem bfs_is_optimal(g: WeightedDiGraph V E) (start : V) (goal : V)
       unfold final
       unfold search_with_stack_step
       simp only []
-      apply search_returns_with_stack_visited (state_type := base_search_state g) (start_state := base_search_state_initial start) (start := start)
+      apply search_returns_with_stack_visited (state_type := base_search_state g ℕ) (start_state := base_search_state_initial start 0) (start := start)
       · rfl
       · apply base_invar_carries_over_stack_step
         apply bfs_expand_keeps_base_invars
@@ -1457,7 +1455,7 @@ theorem bfs_is_optimal(g: WeightedDiGraph V E) (start : V) (goal : V)
       unfold final
       unfold search_with_stack_step
       simp only []
-      apply search_returns_with_mother_visited (state_type := base_search_state g) (start_state := base_search_state_initial start) (start := start)
+      apply search_returns_with_mother_visited (state_type := base_search_state g ℕ) (start_state := base_search_state_initial start 0) (start := start)
       · rfl
       · apply base_invar_carries_over_stack_step
         apply bfs_expand_keeps_base_invars
@@ -1467,7 +1465,7 @@ theorem bfs_is_optimal(g: WeightedDiGraph V E) (start : V) (goal : V)
       unfold final
       unfold search_with_stack_step
       simp only []
-      apply search_returns_with_mother_adjacent (state_type := base_search_state g) (start_state := base_search_state_initial start) (start := start)
+      apply search_returns_with_mother_adjacent (state_type := base_search_state g ℕ) (start_state := base_search_state_initial start 0) (start := start)
       · rfl
       · apply base_invar_carries_over_stack_step
         apply bfs_expand_keeps_base_invars
@@ -1477,7 +1475,7 @@ theorem bfs_is_optimal(g: WeightedDiGraph V E) (start : V) (goal : V)
       unfold final
       unfold search_with_stack_step
       simp only []
-      apply search_returns_with_mother_decreasing (state_type := base_search_state g) (start_state := base_search_state_initial start) (start := start)
+      apply search_returns_with_mother_decreasing (state_type := base_search_state g ℕ) (start_state := base_search_state_initial start 0) (start := start)
       · rfl
       · apply base_invar_carries_over_stack_step
         apply bfs_expand_keeps_base_invars
@@ -1485,13 +1483,13 @@ theorem bfs_is_optimal(g: WeightedDiGraph V E) (start : V) (goal : V)
 
     -- BFS specific ones
     have bfs_full_invar_at_end : bfs_all_invar start final_state := by
-     have right_class : (fun s => bfs_all_invar start (has_base_search_state.to_base_state (g:=g) s)) final_state := by
+     have right_class : (fun s => bfs_all_invar start (has_base_search_state.to_base_state (G:=g) s)) final_state := by
       unfold final_state
       unfold final
       unfold search_with_stack_step
       unfold search_internal
       simp
-      apply search_recurse_lift_base_invariant (invar := fun s => bfs_all_invar start s) (search_step := (search_stack_step (bfs_step_expand g))) (goal := goal) (priorState := base_search_state_initial start) (termination_metric := base_search_state_termination_metric) 
+      apply search_recurse_lift_base_invariant 
       constructor
       · apply bfs_invar_holds_at_init
       · apply base_invar_carries_over_stack_step
