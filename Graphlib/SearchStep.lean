@@ -9,7 +9,7 @@ namespace WeightedDiGraph
 
 -- def local global variable for a graph
 variable {V : Type} {E : Type} [FinEnum V] [DecidableEq V]
-abbrev search_expand (G : WeightedDiGraph V E) (D : Type) [Preorder D] [SizeOf D]
+abbrev search_expand (G : WeightedDiGraph V E) (D : Type) [FValueComp D]
   {state_type : Type} [has_base_search_state G D state_type]:=
     state_type → V → List V → state_type
 
@@ -17,7 +17,7 @@ abbrev search_expand (G : WeightedDiGraph V E) (D : Type) [Preorder D] [SizeOf D
 
 section
 variable {state_type : Type}
-variable {D : Type} [Preorder D] [SizeOf D] 
+variable {D : Type} [FValueComp D] 
 variable {G : WeightedDiGraph V E}
 variable {start : V}
 variable [G.has_base_search_state D state_type]
@@ -238,7 +238,7 @@ lemma search_stack_step_reduces_metric
 
 section
 
-def search_exe_with_stack_step [SizeOfFromPreOrder D]
+def search_exe_with_stack_step
     (metric_for_expand_proof : termination_proof_for_expand expand goal termination_metric)
     (invar_carries : base_invar_carries_over_expand expand goal (search_invar_all_basic start))
     (start_is_base_init : (has_base_search_state.to_base_state (G:=G) (D:=D) start_state) = (base_search_state_initial start d))
@@ -274,7 +274,7 @@ def search_with_stack_step
 
 
 
-theorem search_with_stack_step_is_sound [SizeOfFromPreOrder D]
+theorem search_with_stack_step_is_sound 
     (metric_for_expand_proof : termination_proof_for_expand expand goal termination_metric)
     (invar_carries : base_invar_carries_over_expand expand goal (search_invar_all_basic start))
     (start_is_base_init : (has_base_search_state.to_base_state (G:=G) (D:=D) start_state) = (base_search_state_initial start d))
@@ -288,7 +288,7 @@ theorem search_with_stack_step_is_sound [SizeOfFromPreOrder D]
 
 
 
-theorem search_with_stack_step_is_complete [SizeOfFromPreOrder D]   
+theorem search_with_stack_step_is_complete 
     (metric_for_expand_proof : termination_proof_for_expand expand goal termination_metric)
     (invar_carries : base_invar_carries_over_expand expand goal (search_invar_all_basic start))
     (start_is_base_init : (has_base_search_state.to_base_state (G:=G) (D:=D) start_state) = (base_search_state_initial start d))

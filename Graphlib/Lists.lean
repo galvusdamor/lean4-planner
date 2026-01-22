@@ -242,3 +242,11 @@ theorem List.find?_nodup {α : Type u_1} {l xs : List α} {last : α} {compose :
           grind
         · apply u_ne_l
         · exact u_is_p
+
+
+
+theorem a_a_imp_b_to_a_and_b {a b : Prop} : (a ∧ (a → b)) → (a ∧ b) := by
+  intro ⟨ a, a_to_b⟩ 
+  and_intros
+  · exact a
+  · exact a_to_b a 

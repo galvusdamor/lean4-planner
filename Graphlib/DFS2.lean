@@ -147,8 +147,9 @@ lemma dfs_expand_keeps_mother_ordered
       split
       · simp_all
       · rw [Nat.add_comm]
-        apply Nat.lt_succ_of_le
-        apply le_refl
+        unfold FValueComp.lt
+        unfold Nat.instFValueComp
+        simp
 
 lemma dfs_expand_keeps_on_stack_or_all_neighbours_visited
     (priorState : base_search_state g ℕ)
@@ -239,10 +240,7 @@ lemma dfs_expand_goal_becomes_visited_puts_it_on_stack
     · next h => left; exact h
 
 
-omit [DecidableEq V] in
-lemma visited_is_smaller_than_V (state : base_search_state g ℕ): state.visited.card ≤ Fintype.card V := by
-    apply Finset.card_le_univ
-  
+ 
 
 lemma dfs_expand_visited_increases
     (priorState : base_search_state g ℕ)

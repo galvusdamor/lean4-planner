@@ -18,21 +18,20 @@ namespace WeightedDiGraph
 variable {V : Type} {E : Type} [FinEnum V] 
 
 -- the graph should be an explicit parameter here
-abbrev search_step_function (G : WeightedDiGraph V E) (D : Type) [Preorder D] [SizeOf D] (state_type : Type) [has_base_search_state G D state_type] :=
+abbrev search_step_function (G : WeightedDiGraph V E) (D : Type) [FValueComp D] (state_type : Type) [has_base_search_state G D state_type] :=
       V → state_type → state_type × (Option Bool)
 
 
 -- def local global variable for a graph
 variable {G : WeightedDiGraph V E}
-variable {D : Type} [Preorder D] [SizeOf D] 
+variable {D : Type} [FValueComp D] 
 
-
-def extract_path_to [SizeOfFromPreOrder D] (start : V) (goal : V) (search_state : base_search_state G D)
+def extract_path_to (start : V) (goal : V) (search_state : base_search_state G D)
     (goal_reached : goal ∈ search_state.visited)
     (mother_invar : search_invar_mother_is_visited search_state)
     (mother_invar_adj : search_invar_mother_is_adjacent start search_state)
     (decreasing_invar : search_invar_mother_decreasing_path_order start search_state):
-      Σ' (p : G.Path start goal), (∀ v ∈ p.support, search_state.pathOrder v ≤ search_state.pathOrder goal):= 
+      Σ' (p : G.Path start goal), (∀ v ∈ p.support, v ≠ goal → search_state.pathOrder v ≺ search_state.pathOrder goal):= 
       if start_is_goal : goal = start then
         let emptyW : G.Walk start goal := start_is_goal ▸ Walk.nil
         let emptyW_nodup : emptyW.support.Nodup := by
@@ -47,56 +46,71 @@ def extract_path_to [SizeOfFromPreOrder D] (start : V) (goal : V) (search_state 
         
         let emptyP : G.Path start goal := ⟨ emptyW, emptyW_nodup⟩ 
         
-        have order : ∀ v ∈ emptyP.support, search_state.pathOrder v ≤ search_state.pathOrder goal := by
-          intro a a_in_support
+        have order : ∀ v ∈ emptyP.support, v ≠ goal → search_state.pathOrder v ≺ search_state.pathOrder goal := by
+          intro a a_in_support v_ne_goal
           unfold emptyP at a_in_support
           unfold emptyW at a_in_support
           unfold Path.support at a_in_support
           unfold Walk.support at a_in_support
-          simp_all
           subst start_is_goal
-          simp_all only [List.mem_cons, List.not_mem_nil, or_false, le_refl]
+          simp_all
         ⟨ emptyP, order ⟩ 
       else
         let goal_predecessor : V := search_state.mother ⟨ goal, goal_reached ⟩
         let ⟨ path_start_pre, order_proof ⟩ := -- : Path g start goal_predecessor :=
           extract_path_to start goal_predecessor search_state (by apply mother_invar) mother_invar mother_invar_adj decreasing_invar 
         let pre_adj_goal : G.Adj goal_predecessor goal := mother_invar_adj ⟨ goal , goal_reached ⟩ start_is_goal
+        have goal_mother_ne_goal : goal ≠ search_state.mother ⟨goal, goal_reached⟩ := by
+          by_contra goal_is_mother
+          have h := FValueComp.lt_irr (search_state.pathOrder goal)
+          unfold search_invar_mother_decreasing_path_order at decreasing_invar
+          specialize decreasing_invar ⟨goal,goal_reached⟩ start_is_goal
+          nth_rw 1 [← goal_is_mother] at decreasing_invar
+          contradiction
+        
         let goal_not_visited : goal ∉ path_start_pre.support := by
           by_contra goal_is_in_support
-          have h := order_proof goal goal_is_in_support
+          have h := order_proof goal goal_is_in_support goal_mother_ne_goal
           unfold goal_predecessor at h
           unfold search_invar_mother_decreasing_path_order at decreasing_invar
-          have h' := decreasing_invar ⟨ goal, goal_reached⟩ 
-          clear mother_invar decreasing_invar
-          grind
+          specialize decreasing_invar ⟨ goal, goal_reached⟩ start_is_goal
+          clear mother_invar 
+          simp_all
+          have eq : search_state.pathOrder (search_state.mother ⟨goal, goal_reached⟩) = search_state.pathOrder goal := by 
+            apply FValueComp.lt_antisymm
+            exact decreasing_invar
+            exact h
+          have g_nle_g : ¬ search_state.pathOrder goal ≺ search_state.pathOrder goal := by
+            apply FValueComp.lt_irr
+          nth_rw 2 [← eq] at g_nle_g
+          apply absurd h g_nle_g
 
         let goal_path : G.Path start goal := path_start_pre.concat pre_adj_goal goal_not_visited
 
-        let new_order_proof : ∀ v ∈ goal_path.support, search_state.pathOrder v ≤ search_state.pathOrder goal := by
-          intro a a_in_support
+        let new_order_proof : ∀ v ∈ goal_path.support, v ≠ goal → search_state.pathOrder v ≺ search_state.pathOrder goal := by
+          intro a a_in_support a_ne_goal
           unfold goal_path at a_in_support
           rw [Path.support_concat_is_append_at_end] at a_in_support
           simp only [Path.support, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at a_in_support
           apply a_in_support.elim
           · intro a_in_old_path
-            apply le_trans 
-            · apply order_proof
-              exact a_in_old_path
-            · unfold goal_predecessor
-              apply le_of_lt
-              exact decreasing_invar ⟨ goal,goal_reached ⟩ start_is_goal
+            by_cases a_old_goal : a = goal_predecessor
+            · grind
+            · apply FValueComp.lt_trans 
+              · apply order_proof a a_in_old_path 
+                exact a_old_goal
+              · unfold goal_predecessor
+                exact decreasing_invar ⟨ goal,goal_reached ⟩ start_is_goal
           · simp_all
 
         ⟨ goal_path, new_order_proof ⟩ 
 
-termination_by search_state.pathOrder goal
+termination_by FValueComp.wf.wrap (search_state.pathOrder goal)
 decreasing_by
-  apply SizeOfFromPreOrder.comp
-  simp_all only [Subtype.forall, ne_eq, not_false_eq_true]
+  simp_all
 
 
-theorem extract_path_visited_proof_irrelevant [SizeOfFromPreOrder D] (start : V) (s : base_search_state G D)
+theorem extract_path_visited_proof_irrelevant (start : V) (s : base_search_state G D)
     (mother_invar : search_invar_mother_is_visited s)
     (mother_invar_adj : search_invar_mother_is_adjacent start s)
     (decreasing_invar : search_invar_mother_decreasing_path_order start s)
@@ -516,7 +530,7 @@ lemma search_returns_with_node_on_stack_or_all_neighbours_visited:
 -- Execution of search
 
 
-def search_exe [SizeOfFromPreOrder D]
+def search_exe 
     (goal_on_stack_if_terminated : search_step_goal_on_stack_if_terminated (search_step:=search_step)):
     Option (G.Path start goal) :=
   let ret := search_internal decreasing_proof
@@ -539,7 +553,7 @@ def search_exe [SizeOfFromPreOrder D]
   else
     none
 
-theorem search_is_sound [SizeOfFromPreOrder D]
+theorem search_is_sound 
     (goal_on_stack_if_terminated : search_step_goal_on_stack_if_terminated (search_step:=search_step)):
     (Option.isSome (search_exe decreasing_proof start_is_base_init invar_carries_over_step goal_on_stack_if_terminated) → (∃ x : (G.Path start goal), x = x)) := by
   intro h -- Option.isSome true on some and false on none, x = x since we need a formula
@@ -635,7 +649,6 @@ lemma search_not_visited_goal_if_returned_false
 
 
 section
-variable [SizeOfFromPreOrder D]
 variable (invar_carries_over_step : base_invar_carries_over_step search_step (goal:=goal) (search_invar_all_basic start))
 include invar_carries_over_step
 

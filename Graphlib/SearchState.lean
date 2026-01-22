@@ -7,6 +7,28 @@ import Mathlib.Algebra.Order.Kleene
 --set_option trace.Meta.synthInstance true
 
 
+-- custom less than predicate on the type of the F-Values
+class FValueComp (D : Type) where
+  lt : D → D → Prop -- WellFounded requires prop here. But we know it is actually bool
+  wf : WellFounded lt
+  lt_irr (x : D) : ¬ lt x x
+  lt_trans (x y z : D) : lt x y → lt y z → lt x z
+  lt_antisymm (x y : D) : lt x y → lt y x → x = y
+
+infix:90 " ≺ " => FValueComp.lt
+
+namespace Nat
+instance : FValueComp ℕ where
+  lt (x y : ℕ) : Bool := x < y
+  wf := by
+    simp
+    apply lt_wfRel.wf
+  lt_irr := by grind
+  lt_trans := by grind
+  lt_antisymm := by grind
+end Nat 
+
+
 class SizeOfFromPreOrder (D : Type) [Preorder D] [SizeOf D] where
   comp : ∀ x y : D, x < y → sizeOf x < sizeOf y
 
@@ -53,12 +75,16 @@ end Nat
 
 
 
+
+
+
+
 namespace WeightedDiGraph
 
 -----------------------------------------------------------------------
 ------ Search state of the DFS and its invariants
 
-structure base_search_state {V E : Type} [FinEnum V] (G : WeightedDiGraph V E) (D : Type) [Preorder D] [SizeOf D]  where
+structure base_search_state {V E : Type} [FinEnum V] (G : WeightedDiGraph V E) (D : Type) [FValueComp D]  where
     visited : Finset V
     pathOrder : V → D 
     mother : visited → V
@@ -66,11 +92,11 @@ structure base_search_state {V E : Type} [FinEnum V] (G : WeightedDiGraph V E) (
 
 
 -- type class for possible expansions later on
-class has_base_search_state {V E : Type} [FinEnum V] (G : WeightedDiGraph V E) (D : Type) [Preorder D] [SizeOf D] 
+class has_base_search_state {V E : Type} [FinEnum V] (G : WeightedDiGraph V E) (D : Type) [FValueComp D] 
     (B : Type) where
   to_base_state : B → base_search_state G D
 
-instance {V E : Type} [FinEnum V] (G : WeightedDiGraph V E) (D : Type) [Preorder D] [SizeOf D]:
+instance {V E : Type} [FinEnum V] (G : WeightedDiGraph V E) (D : Type) [FValueComp D]:
     has_base_search_state G D (base_search_state G D) where
   to_base_state := fun x => x 
 
@@ -79,7 +105,7 @@ instance {V E : Type} [FinEnum V] (G : WeightedDiGraph V E) (D : Type) [Preorder
 --------------------------- basic properties
 variable {V : Type} {E : Type} [FinEnum V] --[DecidableEq V] [DecidableEq E]
 variable {G : WeightedDiGraph V E}
-variable {D : Type} [Preorder D] [SizeOf D]
+variable {D : Type} [FValueComp D]
 
 @[simp]
 abbrev search_prop_goal_on_stack (goal : V) (s : base_search_state G D):=
@@ -115,7 +141,7 @@ abbrev search_invar_mother_is_adjacent (start : V) (s : base_search_state G D):=
 
 @[simp]
 abbrev search_invar_mother_decreasing_path_order (start : V) (s : base_search_state G D) :=
-      ∀ x : s.visited, ↑x ≠ start → s.pathOrder (s.mother x) < s.pathOrder x 
+      ∀ x : s.visited, ↑x ≠ start → s.pathOrder (s.mother x) ≺ s.pathOrder x 
 
 @[simp]
 abbrev search_invar_on_stack_or_all_neighbours_visited (s : base_search_state G D):=
@@ -193,4 +219,8 @@ lemma base_search_state_initial_all_basic_invars:
     search_invar_all_basic (G:=G) start (base_search_state_initial start d) := by
       unfold search_invar_all_basic ; and_intros <;> simp
 
+
+lemma visited_is_smaller_than_V (state : base_search_state G D): state.visited.card ≤ Fintype.card V := by
+    apply Finset.card_le_univ
+ 
 end WeightedDiGraph

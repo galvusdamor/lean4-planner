@@ -148,8 +148,9 @@ lemma bfs_expand_keeps_mother_ordered
       split
       · simp_all
       · rw [Nat.add_comm]
-        apply Nat.lt_succ_of_le
-        apply le_refl
+        unfold FValueComp.lt
+        unfold Nat.instFValueComp
+        simp
 
 lemma bfs_expand_keeps_on_stack_or_all_neighbours_visited
     (priorState : base_search_state g ℕ)
@@ -240,10 +241,6 @@ lemma bfs_expand_goal_becomes_visited_puts_it_on_stack
     · next h => right; exact h
 
 
-lemma visited_is_smaller_than_V (state : base_search_state g ℕ): state.visited.card ≤ Fintype.card V := by
-    apply Finset.card_le_univ
-  
-
 lemma bfs_expand_visited_increases
     (priorState : base_search_state g ℕ)
     (head : V)
@@ -271,7 +268,7 @@ lemma bfs_expand_keeps_base_invars:
       · exact head_is_visited 
       · intro x x_not_visited
         by_contra x_in_tail
-        have x_on_stack : x ∈ (has_base_search_state.to_base_state (g:=g) s).stack := by
+        have x_on_stack : x ∈ (has_base_search_state.to_base_state (G:=g) (D:=ℕ) s).stack := by
           rw [compose]
           simp_all
         apply i1 at x_on_stack
@@ -469,7 +466,7 @@ lemma support_of_path_visited (u v : V) (w : g.Walk u v)
       · next x_eq_v =>
         rw [x_eq_v]
         exact end_visited
-termination_by state.pathOrder v
+termination_by FValueComp.wf.wrap (state.pathOrder v)
 decreasing_by
   apply decreasing_invar
   apply v_eq_u
@@ -727,7 +724,7 @@ lemma bfs_expand_does_not_change_paths (start u : V) (s : base_search_state g �
         simp
         left
         simp_all
-termination_by s.pathOrder u
+termination_by FValueComp.wf.wrap (s.pathOrder u)
 decreasing_by
   apply decreasing_invar
   simp_all
