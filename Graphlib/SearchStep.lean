@@ -18,6 +18,7 @@ abbrev search_expand (G : WeightedDiGraph V E) (D : Type) [FValueComp D]
 section
 variable {state_type : Type}
 variable {D : Type} [FValueComp D] 
+variable {T : Type} [WellFoundedRelation T] 
 variable {G : WeightedDiGraph V E}
 variable {start : V}
 variable [G.has_base_search_state D state_type]
@@ -189,28 +190,27 @@ lemma stack_step_goal_becomes_visited_it_is_on_stack
 
 section
 --variable {expand : search_expand g (state_type := state_type)}
-variable {termination_metric : state_type → ℕ × ℕ}
+variable {termination_metric : state_type → T}
 variable {start_state : state_type}
 variable {d : D}
 
 abbrev termination_proof_for_expand
-    (termination_metric : state_type → ℕ × ℕ):=
+    (termination_metric : state_type → T):=
     ∀ state : state_type, ∀ head : V, ∀ tail : List V,
       head ≠ goal ∧ (has_base_search_state.to_base_state (G:=G) (D:=D) state).stack = head :: tail
-    → 
-    (termination_metric (expand state head tail)).1 < (termination_metric state).1 ∨
-      (termination_metric (expand state head tail)).1 = (termination_metric state).1 ∧
-        (termination_metric (expand state head tail)).2 < (termination_metric state).2
+    → WellFoundedRelation.rel (termination_metric (expand state head tail)) (termination_metric state)
+    --(termination_metric (expand state head tail)).1 < (termination_metric state).1 ∨
+    --  (termination_metric (expand state head tail)).1 = (termination_metric state).1 ∧
+    --    (termination_metric (expand state head tail)).2 < (termination_metric state).2
 
 lemma search_stack_step_reduces_metric 
-  (termination_metric : state_type → ℕ × ℕ)
+  (termination_metric : state_type → T)
   (termination_dfs_recurse : termination_proof_for_expand expand goal termination_metric)
   :
     ∀ s : state_type, (search_stack_step expand goal s).2 = none → 
-        Prod.Lex (fun x1 x2 => x1 < x2) (fun x1 x2 => x1 < x2)
+        WellFoundedRelation.rel 
         (termination_metric (search_stack_step expand goal s).1) (termination_metric s) := by
     intro state did_not_terminate
-    apply Prod.lex_def.mpr
     
     unfold search_stack_step at did_not_terminate
     simp_all
@@ -283,7 +283,7 @@ theorem search_with_stack_step_is_sound
   intro h -- Option.isSome true on some and false on none, x = x since we need a formula
   unfold search_exe_with_stack_step at h
   simp at h
-  apply search_is_sound (state_type := state_type) (D:=D) 
+  apply search_is_sound (state_type := state_type) (D:=D) (T:=T) 
   apply h
 
 

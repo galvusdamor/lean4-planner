@@ -343,6 +343,11 @@ lemma dfs_expand_metric_reduction : termination_proof_for_expand (G:=g) (D:=ℕ)
     unfold base_search_state_termination_metric
     simp
     intro s head tail head_not_goal stack_not_empty 
+    
+    unfold WellFoundedRelation.rel
+    unfold Prod.instWellFoundedRelation
+    apply Prod.lex_iff.mpr
+    simp
     apply termination_dfs_recurse
     · exact stack_not_empty
     · rfl 

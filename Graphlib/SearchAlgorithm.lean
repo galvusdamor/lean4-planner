@@ -25,6 +25,8 @@ abbrev search_step_function (G : WeightedDiGraph V E) (D : Type) [FValueComp D] 
 -- def local global variable for a graph
 variable {G : WeightedDiGraph V E}
 variable {D : Type} [FValueComp D] 
+variable {T : Type} [WellFoundedRelation T] 
+
 
 def extract_path_to (start : V) (goal : V) (search_state : base_search_state G D)
     (goal_reached : goal ∈ search_state.visited)
@@ -156,10 +158,11 @@ abbrev termination_metric_decreasing_proof
    {state_type : Type} [has_base_search_state G D state_type]
   (goal : V)
   (search_step : search_step_function G D state_type)
-  (termination_metric : state_type → ℕ × ℕ) :=
-    ∀ s : state_type, (search_step goal s).2 = none → 
-        Prod.Lex (fun x1 x2 => x1 < x2) (fun x1 x2 => x1 < x2)
-        (termination_metric (search_step goal s).1) (termination_metric s)
+  (termination_metric : state_type → T) :=
+    ∀ s : state_type, (search_step goal s).2 = none →
+    WellFoundedRelation.rel (termination_metric (search_step goal s).1) (termination_metric s)
+    --    Prod.Lex (fun x1 x2 => x1 < x2) (fun x1 x2 => x1 < x2)
+    --    (termination_metric (search_step goal s).1) (termination_metric s)
 
 
 
@@ -169,12 +172,14 @@ abbrev termination_metric_decreasing_proof
 variable {state_type : Type} [has_base_search_state G D state_type]
 variable {goal : V}
 
+
 def search_recurse 
     (priorState : state_type)
     (search_step : search_step_function G D state_type)
-    (termination_metric : state_type → ℕ × ℕ)
+    (termination_metric : state_type → T)
     (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric):
     state_type × Bool :=
+  
   let qq := search_step goal priorState
   let nextState := qq.fst
   let result : Option Bool := qq.snd
@@ -193,7 +198,7 @@ decreasing_by
 lemma search_recurse_obtain_termination_property 
     (priorState : state_type)
     (search_step : search_step_function G D state_type)
-    (termination_metric : state_type → ℕ × ℕ)
+    (termination_metric : state_type → T)
     (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
         -- until here all necessary for calling the search_recurse
     (terminated_with : Bool) -- recursion terminated with
@@ -233,7 +238,7 @@ lemma search_recurse_obtain_base_termination_property
     (goal : V)
     (priorState : state_type)
     (search_step : search_step_function G D state_type)
-    (termination_metric : state_type → ℕ × ℕ)
+    (termination_metric : state_type → T)
     (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
         -- until here all necessary for calling the search_recurse
     (terminated_with : Bool) -- recursion terminated with
@@ -263,7 +268,7 @@ abbrev base_invar_carries_over_step
 lemma search_recurse_lift_invariant 
     (priorState : state_type)
     (search_step : search_step_function G D state_type)
-    (termination_metric : state_type → ℕ × ℕ)
+    (termination_metric : state_type → T)
     (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
         -- until here all necessary for calling the search_recurse
     (invar : state_type → Prop):
@@ -294,7 +299,7 @@ decreasing_by
 lemma search_recurse_lift_invariant_under_return_assumption 
     (priorState : state_type)
     (search_step : search_step_function G D state_type)
-    (termination_metric : state_type → ℕ × ℕ)
+    (termination_metric : state_type → T)
     (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
         -- until here all necessary for calling the search_recurse
     (invar : state_type → Prop)
@@ -331,7 +336,7 @@ decreasing_by
 lemma search_recurse_lift_base_invariant  
     (priorState : state_type)
     (search_step : search_step_function G D state_type)
-    (termination_metric : state_type → ℕ × ℕ)
+    (termination_metric : state_type → T)
     (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
         -- until here all necessary for calling the search_recurse
     (invar : base_search_state G D → Prop):
@@ -356,7 +361,7 @@ abbrev invar_becoming_true_causes_other_invar
 lemma search_recurse_lift_invariant_under_trigger
     (priorState : state_type)
     (search_step : search_step_function G D state_type)
-    (termination_metric : state_type → ℕ × ℕ)
+    (termination_metric : state_type → T)
     (decreasing_proof : termination_metric_decreasing_proof goal search_step termination_metric)
         -- until here all necessary for calling the search_recurse
     (invar_end : state_type → Prop)
@@ -407,7 +412,7 @@ variable {start : V}
 variable {d : D}
 variable {start_state : state_type}
 variable {search_step : search_step_function G D state_type}
-variable {termination_metric : state_type → ℕ × ℕ}
+variable {termination_metric : state_type → T}
 
 
 
