@@ -664,4 +664,29 @@ def dijkstra (start : V) (goal : V): Option (g.Path start goal) :=
 
   WeightedDiGraph.search_exe_with_stack_step (G:=g) (start := start) (goal:=goal) (start_state:=start_state) (termination_metric := dijkstra_termination_metric) dijkstra_step_expand dijkstra_expand_metric_reduction dijkstra_expand_keeps_base_invars h 
 
+
+def dijkstra_last_state (start : V) (goal : V): WeightedDiGraph.base_search_state g (ℕ×ℕ) × Bool :=
+  WeightedDiGraph.search_with_stack_step (goal:=goal) (start_state := WeightedDiGraph.base_search_state_initial start (0,0)) dijkstra_step_expand dijkstra_expand_metric_reduction
+
+
+theorem dijkstra_is_sound (start : V) (goal : V) :
+    (Option.isSome (dijkstra (g:=g) start goal) → (∃ x : (g.Path start goal), x = x)) := by
+  apply WeightedDiGraph.search_with_stack_step_is_sound
+  · apply dijkstra_expand_metric_reduction
+  · apply dijkstra_expand_keeps_base_invars
+  · rfl
+
+
+
+theorem dijkstra_is_complete (start : V) (goal : V):
+    ((∃ x : (g.Path start goal), x = x) → Option.isSome (dijkstra (g:=g) start goal)) := by
+  apply WeightedDiGraph.search_with_stack_step_is_complete
+  · apply dijkstra_expand_metric_reduction
+  · apply dijkstra_expand_keeps_base_invars
+  · rfl
+  · apply dijkstra_expand_keeps_goal_on_stack
+  · apply dijkstra_expand_goal_becomes_visited_puts_it_on_stack
+
+
+
 end NatGraph
