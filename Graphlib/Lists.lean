@@ -2,6 +2,7 @@ import Mathlib.Algebra.Order.Group.Nat
 import Mathlib.Combinatorics.Digraph.Basic
 import Mathlib.Data.Bool.AllAny
 import Mathlib.Data.FinEnum
+import Graphlib.WF
 
 set_option trace.split.failure true
 
@@ -250,3 +251,99 @@ theorem a_a_imp_b_to_a_and_b {a b : Prop} : (a ∧ (a → b)) → (a ∧ b) := b
   and_intros
   · exact a
   · exact a_to_b a 
+
+theorem List.exists_ne_from_ne {α : Type} (n : ℕ) (l1 l2 : List α)(len1 : l1.length = n) (len2 : l2.length = n): 
+    l1 ≠ l2 → ∃ i : Fin n, l1[i] ≠ l2[i] ∧ ∀ j : Fin i, l1[j] = l2[j] := by
+  intro not_eq
+  cases l1 <;> cases l2 <;> try grind
+  rename_i h1 t1 h2 t2
+  by_cases h_eq : h1 = h2
+  · subst h_eq
+    simp [List.length_cons] at len1 len2 
+    have h := List.exists_ne_from_ne (n-1) t1 t2 (by omega) (by omega) (by grind)
+    obtain ⟨ i, ⟨ l_prop, r_prop ⟩ ⟩ := h
+    use ⟨i+1, by grind⟩
+    simp_all
+    intro j
+    by_cases j_zero : j.val = 0
+    · simp_all
+    · specialize r_prop ⟨j - 1, by grind⟩ 
+      grind
+  · use ⟨ 0, by grind ⟩
+    simp_all
+
+theorem Vector.exists_ne_from_ne {α : Type} (n : ℕ) (l1 l2 : Vector α n): 
+    l1 ≠ l2 → ∃ i : Fin n, l1[i] ≠ l2[i] ∧ ∀ j : Fin i, l1[j] = l2[j] := by
+  intro ineq
+  apply List.exists_ne_from_ne
+  · grind
+  · grind
+  · simp_all
+
+theorem List.not_lex_len {α : Type} (n : ℕ) (l1 l2 : List α) (p : α → α → Prop)(len1 : l1.length = n) (len2 : l2.length = n) (x : Fin n)
+(neq : ¬l1[↑x] = l2[↑x])
+(prop : ∀ (x : Fin n), ¬l1[↑x] = l2[↑x] → ¬p l1[↑x] l2[↑x] → ∃ x_1 : Fin x, ¬l1[↑x_1] = l2[↑x_1]):
+Lex p l1 l2 := by
+  cases l1 <;> cases l2 <;> try grind -- remove tauto cases
+  rename_i h1 t1 h2 t2
+  have p0 := prop ⟨x,by grind⟩
+  by_cases x_zero : x.val = 0
+  · specialize prop ⟨0, by grind⟩
+    simp_all
+    apply Lex.rel
+    exact prop
+  · simp_all
+    by_cases h12 : h1 = h2
+    · subst h12
+      apply Lex.cons
+      apply List.not_lex_len (n := n-1) (x := ⟨ x-1, by omega⟩)
+      rotate_left
+      · intro x' not_eq not_p
+        specialize prop ⟨x' + 1, by omega⟩ not_eq not_p
+        obtain ⟨i,p⟩ := prop
+        have i_ne_zero : i.val ≠ 0 := by by_contra; simp_all
+        have fin_p : i.val - 1 < ↑x' := by
+          have pp : i.val < x'.val + 1:= by simp_all
+          omega
+        use ⟨i-1, fin_p⟩
+        repeat rw [List.getElem_cons] at p
+        simp_all
+      · grind
+      · grind
+      · repeat rw [List.getElem_cons] at neq
+        simp_all
+    · apply Lex.rel
+      by_contra
+      specialize prop ⟨ 0, by grind ⟩
+      grind
+
+theorem List.not_Lex {α : Type} (n : ℕ) (p : α → α → Prop) (l1 l2 : _root_.Vector α n): 
+  ¬(Vector.Lex n p l1 l2) →
+    (∀ i : Fin n, l1[i] = l2[i]) ∨ (∃ i : Fin n, l1[i] ≠ l2[i] ∧ (¬ (p l1[i] l2[i])) ∧ ∀ j : Fin i, l1[j] = l2[j]) := by
+    contrapose
+    simp
+    intro x neq prop
+    unfold Vector.Lex
+    have h : l1.toArray.size = n := by grind
+    apply List.not_lex_len
+    · apply neq
+    · intro x' p1 p2
+      specialize prop ⟨ x', by omega⟩
+      simp_all 
+    · grind
+    · grind
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
