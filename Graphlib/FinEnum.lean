@@ -45,3 +45,24 @@ theorem finsetLemma (a : Finset W) (b : Finset W): (b ⊆ a) → (a.card = b.car
   --next b_multiset b_nodup =>
   --simp_all
 
+namespace FinEnum
+
+
+theorem multiset_map_id_attach {α : Type} (a : Multiset α): Multiset.map (fun x => id ↑x) a.attach = a := by
+  simp_all only [id_eq, Multiset.attach_map_val]
+
+theorem len_toList {α : Type} [DecidableEq α] [FinEnum α] : (toList (Finset.univ : Finset α)).length = Fintype.card α := by
+  rw [← List.toFinset_card_of_nodup] 
+  · apply Set.BijOn.finsetCard_eq
+    rotate_left
+    · intro a ; use a
+    · simp_all
+      conv =>
+        left
+        arg 1 
+        ext x
+        rw [← id_eq (a := x.val)] 
+      apply multiset_map_id_attach 
+  · simp
+
+end FinEnum 
