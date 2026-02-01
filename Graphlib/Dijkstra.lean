@@ -329,6 +329,20 @@ lemma dijkstra_expand_keeps_mother_is_adjacent
         simp_all
 
 
+
+lemma dijkstra_mother_options
+    (priorState : dijkstra_search_state  g)
+    (stackHead : V)
+    (stackTail : List V)
+    (x : priorState.visited)
+    (x_still_visited : x.val ∈ (dijkstra_step_expand priorState stackHead stackTail).visited):
+      ((dijkstra_step_expand priorState stackHead stackTail).mother ⟨x.val, x_still_visited⟩) = stackHead ∨
+      (((dijkstra_step_expand priorState stackHead stackTail).mother ⟨x.val, x_still_visited⟩) = (priorState.mother x) ∧ (priorState.mother x) ≠ stackHead)
+      := by 
+        unfold dijkstra_step_expand
+        grind
+
+
 set_option maxHeartbeats 1000000
 
 
@@ -353,7 +367,7 @@ lemma dijkstra_expand_keeps_mother_ordered
     unfold FValueComp.lt
     unfold Nat.instFValueCompProd
     whnf
-    apply toBoolUsing_eq_true
+    --apply toBoolUsing_eq_true
     apply Prod.lex_def.mpr
     apply Classical.or_iff_not_imp_left.mpr
     intro first_dim
@@ -408,6 +422,7 @@ lemma dijkstra_expand_keeps_mother_ordered
       specialize mother_decreasing_prior ⟨a,a_visited⟩ a_not_start
       unfold FValueComp.lt at mother_decreasing_prior
       unfold Nat.instFValueCompProd at mother_decreasing_prior
+      simp at mother_decreasing_prior
       grind
 
     have minvar_2 : ∀ a_visited : a ∈ priorState.visited, (priorState.pathOrder (priorState.mother ⟨a, a_visited⟩)).1 = (priorState.pathOrder a).1 → (priorState.pathOrder (priorState.mother ⟨a, a_visited⟩)).2 < (priorState.pathOrder a).2 := by
@@ -416,6 +431,7 @@ lemma dijkstra_expand_keeps_mother_ordered
       specialize mother_decreasing_prior ⟨a,a_visited⟩ a_not_start
       unfold FValueComp.lt at mother_decreasing_prior
       unfold Nat.instFValueCompProd at mother_decreasing_prior
+      simp at mother_decreasing_prior
       grind
 
     have x_still_visited : ∀ x : priorState.visited, ↑x ∈ (dijkstra_step_expand priorState stackHead stackTail).visited := by 
@@ -423,14 +439,6 @@ lemma dijkstra_expand_keeps_mother_ordered
       unfold dijkstra_step_expand
       grind
     
-    have mother_options : ∀ x : priorState.visited,
-      ((dijkstra_step_expand priorState stackHead stackTail).mother ⟨x.val, x_still_visited x⟩) = stackHead ∨
-      (((dijkstra_step_expand priorState stackHead stackTail).mother ⟨x.val, x_still_visited x⟩) = (priorState.mother x) ∧ (priorState.mother x) ≠ stackHead)
-      := by 
-        intro x
-        unfold dijkstra_step_expand
-        grind
-
     have mother_same_order : ∀ x : priorState.visited, ∀ adj_head_x : g.Adj stackHead x,
       ((dijkstra_step_expand priorState stackHead stackTail).mother ⟨x.val, x_still_visited x⟩) = (priorState.mother x) ∧ (priorState.mother x) ≠ stackHead →
       (dijkstra_step_expand priorState stackHead stackTail).pathOrder x = priorState.pathOrder x := by
@@ -459,7 +467,7 @@ lemma dijkstra_expand_keeps_mother_ordered
         clear first_dim
         by_cases a_visited : a ∈ priorState.visited
         · 
-          specialize mother_options ⟨a, a_visited⟩
+          have mother_options := dijkstra_mother_options priorState stackHead stackTail ⟨ a, a_visited⟩ (x_still_visited ⟨ a, a_visited⟩)
           cases mother_options
           · next mother_head =>
             rw [mother_head]
@@ -482,7 +490,7 @@ lemma dijkstra_expand_keeps_mother_ordered
       · 
         by_cases a_visited : a ∈ priorState.visited
         · intro eq
-          specialize mother_options ⟨a, a_visited⟩
+          have mother_options := dijkstra_mother_options priorState stackHead stackTail ⟨ a, a_visited⟩ (x_still_visited ⟨ a, a_visited⟩)
           cases mother_options
           · next mother_head =>
             rw [mother_head] at ⊢ eq
@@ -698,9 +706,10 @@ theorem dijkstra_is_complete (start : V) (goal : V):
 /--Invars for Dijkstra-/
 
 abbrev dijkstra_invar_on_stack_or_all_neighbours_max_order (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)):=
-  ∀ x : s.visited, ↑x ∉ s.stack → ∀ y : V, (g.Adj x y) → s.pathOrder y ≤ 1 + s.pathOrder x
+  ∀ x : s.visited, ↑x ∉ s.stack → ∀ y : V, (adj : g.Adj x y) → (s.pathOrder y).1 ≤ (s.pathOrder x).1 + g.edgeCost adj 
 
 
+/- Not true for A* any more. Expansions on the path can set the mother to obtain a shorter path. -/
 abbrev dijkstra_path_as_extracted_as_long_as_sort_index (start : V) (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
     ∀ mother_invar : WeightedDiGraph.search_invar_mother_is_visited  s,
     ∀ mother_invar_adj : WeightedDiGraph.search_invar_mother_is_adjacent start s,
@@ -818,6 +827,101 @@ lemma dijkstra_expand_keeps_shortest_path_invar
   sorry
 
 
+lemma dijkstra_expand_does_not_change_paths_lt_head (start u : V) :
+    ∀ mother_invar : WeightedDiGraph.search_invar_mother_is_visited state,
+    ∀ mother_invar_adj : WeightedDiGraph.search_invar_mother_is_adjacent start state,
+    ∀ decreasing_invar : WeightedDiGraph.search_invar_mother_decreasing_path_order start state,
+    ∀ mother_invar' : WeightedDiGraph.search_invar_mother_is_visited (dijkstra_step_expand state head tail),
+    ∀ mother_invar_adj' : WeightedDiGraph.search_invar_mother_is_adjacent start (dijkstra_step_expand state head tail),
+    ∀ decreasing_invar' : WeightedDiGraph.search_invar_mother_decreasing_path_order start (dijkstra_step_expand state head tail),
+    ∀ head_path_order : (dijkstra_step_expand state head tail).pathOrder u ≺ (dijkstra_step_expand state head tail).pathOrder head,
+    ∀ h : u ∈ state.visited, ∀ h' : u ∈ (dijkstra_step_expand state head tail).visited,
+      (WeightedDiGraph.extract_path_to start u state h mother_invar mother_invar_adj decreasing_invar).fst.val.length =
+      (WeightedDiGraph.extract_path_to start u (dijkstra_step_expand state head tail) h' mother_invar' mother_invar_adj'
+          decreasing_invar').fst.val.length := by
+      intro mother_invar mother_invar_adj decreasing_invar mother_invar' mother_invar_adj' decreasing_invar' head_path_order u_visited u_visited'
+      unfold WeightedDiGraph.extract_path_to
+      simp
+      split
+      · simp
+      · unfold WeightedDiGraph.Path.concat
+        dsimp only 
+        repeat rw [WeightedDiGraph.Walk.concat_inc_length_by_one]
+        apply Nat.add_left_cancel_iff.mpr
+        have hh : ((dijkstra_step_expand state head tail).mother ⟨u, u_visited'⟩) = (state.mother ⟨u, u_visited⟩) := by
+          have mother_options := dijkstra_mother_options state head tail ⟨u,u_visited⟩ u_visited'
+          cases mother_options
+          · rename_i neq_u_start eq 
+            rw [eq]
+            unfold WeightedDiGraph.search_invar_mother_decreasing_path_order at decreasing_invar
+            specialize decreasing_invar' ⟨u,u_visited'⟩ neq_u_start
+            rw [eq] at decreasing_invar'
+            simp at decreasing_invar'
+            have eq_u_head := FValueComp.lt_antisymm ((dijkstra_step_expand state head tail).pathOrder head) ((dijkstra_step_expand state head tail).pathOrder u) decreasing_invar' head_path_order
+            rw [eq_u_head] at decreasing_invar'
+            apply absurd decreasing_invar' (FValueComp.lt_irr ((dijkstra_step_expand state head tail).pathOrder u))
+          · grind
+        rw [WeightedDiGraph.extract_path_visited_proof_irrelevant (u_eq_v := hh)]
+        apply dijkstra_expand_does_not_change_paths_lt_head
+        · apply FValueComp.lt_trans
+          · rename_i neq_u_start
+            unfold WeightedDiGraph.search_invar_mother_decreasing_path_order at decreasing_invar
+            specialize decreasing_invar' ⟨u,u_visited'⟩ neq_u_start
+            rw [hh] at decreasing_invar'
+            apply decreasing_invar'
+          · apply head_path_order
+        · unfold dijkstra_step_expand
+          simp
+          left
+          simp_all
+termination_by FValueComp.wf.wrap (state.pathOrder u)
+decreasing_by
+  apply decreasing_invar
+  simp_all
+
+
+lemma dijkstra_expand_does_not_change_paths_to_head (start : V) :
+    ∀ mother_invar : WeightedDiGraph.search_invar_mother_is_visited state,
+    ∀ mother_invar_adj : WeightedDiGraph.search_invar_mother_is_adjacent start state,
+    ∀ decreasing_invar : WeightedDiGraph.search_invar_mother_decreasing_path_order start state,
+    ∀ mother_invar' : WeightedDiGraph.search_invar_mother_is_visited (dijkstra_step_expand state head tail),
+    ∀ mother_invar_adj' : WeightedDiGraph.search_invar_mother_is_adjacent start (dijkstra_step_expand state head tail),
+    ∀ decreasing_invar' : WeightedDiGraph.search_invar_mother_decreasing_path_order start (dijkstra_step_expand state head tail),
+    ∀ h : head ∈ state.visited, ∀ h' : head ∈ (dijkstra_step_expand state head tail).visited,
+      (WeightedDiGraph.extract_path_to start head state h mother_invar mother_invar_adj decreasing_invar).fst.val.length =
+      (WeightedDiGraph.extract_path_to start head (dijkstra_step_expand state head tail) h' mother_invar' mother_invar_adj'
+          decreasing_invar').fst.val.length := by
+      intro mother_invar mother_invar_adj decreasing_invar mother_invar' mother_invar_adj' decreasing_invar' head_visited head_visited'
+      unfold WeightedDiGraph.extract_path_to
+      simp
+      split
+      · simp
+      · unfold WeightedDiGraph.Path.concat
+        dsimp only 
+        repeat rw [WeightedDiGraph.Walk.concat_inc_length_by_one]
+        apply Nat.add_left_cancel_iff.mpr
+        have hh : ((dijkstra_step_expand state head tail).mother ⟨head, head_visited'⟩) = (state.mother ⟨head, head_visited⟩) := by
+          have mother_options := dijkstra_mother_options state head tail ⟨head,head_visited⟩ head_visited'
+          cases mother_options
+          · rename_i neq_head_start eq 
+            unfold dijkstra_step_expand at eq
+            specialize decreasing_invar ⟨head,head_visited⟩ neq_head_start
+            simp_all
+            apply absurd decreasing_invar (FValueComp.lt_irr (state.pathOrder head))
+          · grind
+        rw [WeightedDiGraph.extract_path_visited_proof_irrelevant (u_eq_v := hh)]
+        apply dijkstra_expand_does_not_change_paths_lt_head
+        · rename_i neq_u_start
+          unfold WeightedDiGraph.search_invar_mother_decreasing_path_order at decreasing_invar
+          specialize decreasing_invar' ⟨head,head_visited'⟩ neq_u_start
+          rw [hh] at decreasing_invar'
+          apply decreasing_invar'
+        · unfold dijkstra_step_expand
+          simp
+          left
+          simp_all
+
+
 lemma dijkstra_expand_keeps_extracted_same_length_as_sort_index (start : V) (goal : V)
     (start_visited : WeightedDiGraph.search_invar_start_visited start state)
     (bef_mother_invar : WeightedDiGraph.search_invar_mother_is_visited state)
@@ -830,22 +934,113 @@ lemma dijkstra_expand_keeps_extracted_same_length_as_sort_index (start : V) (goa
           ∧ ¬ head = goal
           ∧ state.stack = head :: tail
         → dijkstra_path_as_extracted_as_long_as_sort_index start (dijkstra_step_expand state head tail) := by
-  sorry
+      intro head tail ⟨ prior_invar,head_ne_goal,compose⟩ 
+      unfold dijkstra_path_as_extracted_as_long_as_sort_index
+      intro mother_invar mother_invar_adj decreasing_invar u u_now_visi
+      constructor
+      · sorry 
+      · unfold WeightedDiGraph.Path.length
+        by_cases u_visited_before : u ∈ state.visited
+        · rw [← dijkstra_expand_does_not_change_paths]
+          rotate_left
+          · exact bef_mother_invar
+          · exact bef_mother_invar_adj
+          · exact bef_decreasing_invar
+          · exact u_visited_before
+          · simp_all [dijkstra_step_expand, bfs_path_as_extracted_as_long_as_sort_index]
+            sorry
+        · have head_visited : head ∈ state.visited := by
+            apply bef_stack_visited_invar 
+            simp_all
+          
+          have adj_head_u : g.Adj head u := by
+            unfold dijkstra_step_expand at u_now_visi
+            grind
+
+          have head_visited_after : head ∈ (dijkstra_step_expand state head tail).visited := by
+            unfold dijkstra_step_expand
+            simp_all
+
+          have qq : (WeightedDiGraph.extract_path_to start u (dijkstra_step_expand state head tail) u_now_visi mother_invar mother_invar_adj decreasing_invar).fst.val.length = 1 + (WeightedDiGraph.extract_path_to start head (dijkstra_step_expand state head tail) head_visited_after mother_invar mother_invar_adj decreasing_invar).fst.val.length := by
+            conv =>
+                left
+                unfold WeightedDiGraph.extract_path_to
+            simp
+            split
+            · next u_is_start =>
+              unfold WeightedDiGraph.search_invar_start_visited at start_visited
+              simp_all
+            · next u_ne_start =>
+              unfold WeightedDiGraph.Path.concat
+              rw [WeightedDiGraph.Walk.concat_inc_length_by_one]
+              apply Nat.add_left_cancel_iff.mpr 
+              apply WeightedDiGraph.extract_path_visited_proof_irrelevant 
+              unfold dijkstra_step_expand
+              simp
+              intro u_visited
+              contradiction
+                
+          have qqq : ((dijkstra_step_expand state head tail).pathOrder u).2 = 1 + ((dijkstra_step_expand state head tail).pathOrder head).2 := by
+            unfold dijkstra_step_expand
+            simp
+            split_ifs <;> try simp_all <;> try omega
+          
+          have qqqq : ((dijkstra_step_expand state head tail).pathOrder head).2 = (state.pathOrder head).2 := by
+            unfold dijkstra_step_expand
+            simp
+            grind
+
+          have qqqqq : (WeightedDiGraph.extract_path_to start head (dijkstra_step_expand state head tail) head_visited_after mother_invar mother_invar_adj decreasing_invar).fst.val.length = (WeightedDiGraph.extract_path_to start head state head_visited bef_mother_invar bef_mother_invar_adj bef_decreasing_invar).fst.val.length := by
+            rw [← dijkstra_expand_does_not_change_paths_to_head]
+
+          rw [qq]
+          rw [qqq]
+          rw [qqqqq]
+          rw [qqqq]
+          apply Nat.add_left_cancel_iff.mpr 
+          unfold dijkstra_path_as_extracted_as_long_as_sort_index at prior_invar 
+          specialize prior_invar bef_mother_invar bef_mother_invar_adj bef_decreasing_invar head head_visited 
+          apply prior_invar.2
+
+
+/--
 
 lemma dijkstra_expand_keeps_on_stack_or_nei_max_order(goal : V)
     (on_stack_or_nei_visited : WeightedDiGraph.search_invar_on_stack_or_all_neighbours_visited state)
-    (stack_shortest : dijkstra_stack_shortest_path start state)
-    (extract_length_invar : dijkstra_path_as_extracted_as_long_as_sort_index start state)
-    (mother_invar : WeightedDiGraph.search_invar_mother_is_visited state)
-    (mother_invar_adj : WeightedDiGraph.search_invar_mother_is_adjacent start state)
-    (decreasing_invar : WeightedDiGraph.search_invar_mother_decreasing_path_order start state)
     :
      ∀ head : V, ∀ tail : List V, 
         dijkstra_invar_on_stack_or_all_neighbours_max_order  state
           ∧ head ≠ goal
           ∧ state.stack = head :: tail
         → dijkstra_invar_on_stack_or_all_neighbours_max_order  (dijkstra_step_expand state head tail) := by
-  sorry
+      unfold dijkstra_invar_on_stack_or_all_neighbours_max_order
+      simp
+      intro head tail prior_invar head_ne_goal compose a a_visited_after a_not_on_stack_after y a_adj_y
+
+      unfold dijkstra_step_expand at a_visited_after a_not_on_stack_after
+      simp at a_visited_after a_not_on_stack_after
+      obtain ⟨ a_not_in_tail, a_visi_if_head_adj ⟩ := a_not_on_stack_after
+      cases a_visited_after
+      · next a_visited_before =>
+        by_cases a_eq_head : a = head
+        · subst a_eq_head
+          by_cases y_visited_before : y ∈ state.visited
+          · unfold dijkstra_step_expand
+            simp [y_visited_before, a_visited_before]
+            split_ifs <;> grind 
+          · unfold dijkstra_step_expand
+            simp [y_visited_before, a_visited_before]
+            grind
+        · by_cases y_visited_before : y ∈ state.visited
+          · unfold dijkstra_step_expand
+            simp [y_visited_before, a_visited_before]
+            split_ifs <;> grind 
+          · unfold dijkstra_step_expand
+            simp [y_visited_before, a_visited_before]
+            split <;> (simp_all ; grind)
+      · next both =>
+        obtain ⟨ head_adj_a, a_ne_visited ⟩ := both
+        grind -- contradictory
 
 
 lemma merge_two_prop {α : Type} (le1 : α → α → Prop) (le2 : α → α → Bool)
@@ -978,7 +1173,6 @@ theorem dijkstra_is_optimal (start : V) (goal : V)
     let final_state := final.1
  
     -- general properties
-    --have h_4_1 : ¬ search_prop_stack_empty final_state := by sorry
     have h_4 : WeightedDiGraph.search_prop_stack_head_is_goal goal final_state := by
       --intro terminated_with_goal_found 
       --unfold search_prop_stack_head_is_goal
