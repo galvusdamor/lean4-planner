@@ -30,17 +30,30 @@ variable {g : NatGraph V}
 
 namespace Nat
 
+@[simp]
+def FValueLT (x y : ℕ × ℕ) : Prop := Prod.Lex (· < ·) (· < ·) x y
+
+@[simp]
+def FValueLT_B (x y : ℕ × ℕ) : Bool := Prod.Lex (· < ·) (· < ·) x y
+
 instance : FValueComp (ℕ × ℕ) where
-  lt (x y : ℕ × ℕ) : Bool := Prod.Lex (· < ·) (· < ·) x y
+  lt := FValueLT
+  lt_B := FValueLT_B
   wf := by
-    simp
+    unfold FValueLT
     apply Prod.Lex.instWellFoundedLTLex.wf
-  lt_irr := by grind
-  lt_trans := by grind
-  lt_antisymm := by grind
+  lt_irr := by unfold FValueLT ; grind
+  lt_trans := by unfold FValueLT ; grind
+  lt_antisymm := by unfold FValueLT ; grind
+  lt_sem_tot := by unfold FValueLT ; grind
+  lt_B_eq := by simp
+
+
+instance : DecidableRel FValueLT := by
+  unfold FValueLT
+  use inferInstance
 
 end Nat
-
 
 
 namespace NatGraph
@@ -117,7 +130,7 @@ def dijkstra_step_expand --[FinEnum V] [DecidableEq V]
 
 
      let new_stack : List V := (stackTail ++ newly_visited_list).mergeSort (fun a b =>
-        new_order a ≤ new_order b) 
+        (new_order a) = (new_order b) || FValueComp.lt_B (new_order a) (new_order b)) 
        
      WeightedDiGraph.base_search_state.mk new_visited new_order new_mother new_stack
 
@@ -316,11 +329,6 @@ lemma dijkstra_expand_keeps_mother_is_adjacent
         simp_all
 
 
--- stack is sorted by the path_order (i.e. distance) value
-abbrev dijkstra_stack_sorted (s : dijkstra_search_state g) :=
-  List.Pairwise (fun u v => s.pathOrder u ≺ s.pathOrder v) s.stack
-
-  
 set_option maxHeartbeats 1000000
 
 
@@ -334,7 +342,7 @@ lemma dijkstra_expand_keeps_mother_ordered
     WeightedDiGraph.search_invar_mother_is_visited priorState ∧
       stackHead ∈ priorState.visited ∧ 
       WeightedDiGraph.search_invar_mother_decreasing_path_order start priorState
-      ∧ WeightedDiGraph.search_invar_mother_is_visited priorState --dijkstra_stack_sorted priorState
+      ∧ WeightedDiGraph.search_invar_mother_is_visited priorState 
       → WeightedDiGraph.search_invar_mother_decreasing_path_order start
           (dijkstra_step_expand priorState stackHead stackTail)
           := by
@@ -687,6 +695,412 @@ theorem dijkstra_is_complete (start : V) (goal : V):
   · apply dijkstra_expand_keeps_goal_on_stack
   · apply dijkstra_expand_goal_becomes_visited_puts_it_on_stack
 
+/--Invars for Dijkstra-/
+
+abbrev dijkstra_invar_on_stack_or_all_neighbours_max_order (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)):=
+  ∀ x : s.visited, ↑x ∉ s.stack → ∀ y : V, (g.Adj x y) → s.pathOrder y ≤ 1 + s.pathOrder x
+
+
+abbrev dijkstra_path_as_extracted_as_long_as_sort_index (start : V) (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
+    ∀ mother_invar : WeightedDiGraph.search_invar_mother_is_visited  s,
+    ∀ mother_invar_adj : WeightedDiGraph.search_invar_mother_is_adjacent start s,
+    ∀ decreasing_invar : WeightedDiGraph.search_invar_mother_decreasing_path_order start s,
+    ∀ u : V, ∀ h : u ∈ s.visited,
+    (WeightedDiGraph.extract_path_to start u s h mother_invar mother_invar_adj decreasing_invar).1.cost = (s.pathOrder u).1 ∧
+    (WeightedDiGraph.extract_path_to start u s h mother_invar mother_invar_adj decreasing_invar).1.length = (s.pathOrder u).2
+
+-- stack is sorted by the path_order (i.e. distance) value
+abbrev dijkstra_stack_sorted (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
+  List.Pairwise (fun u v => (s.pathOrder u = s.pathOrder v) ∨ (s.pathOrder u ≺ s.pathOrder v)) s.stack
+
+
+
+-- 
+abbrev dijkstra_stack_shortest_path (start : V) (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
+  ∀ u ∈ s.visited, u ∉ s.stack ∨ (if ne : s.stack ≠ [] then s.stack.head ne = u else false) →
+    g.cost_is start u (s.pathOrder u).1
+  --∨ (
+  --  -- u could be the head of the stack
+  --  ∀ p : g.Path start u, p.is_cheapest → (p.support ∩ s.stack) \ {u} ≠ ∅
+  --))
+
+
+@[simp]
+abbrev search_invar_start_path_order_zero_zero (start : V) (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
+      s.pathOrder start = (0,0)
+
+
+abbrev dijkstra_all_invar (start : V) (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
+      WeightedDiGraph.search_invar_all_basic start s
+    ∧ dijkstra_stack_shortest_path start s
+    ∧ dijkstra_path_as_extracted_as_long_as_sort_index start s
+    ∧ dijkstra_invar_on_stack_or_all_neighbours_max_order s
+    ∧ dijkstra_stack_sorted s
+    ∧ search_invar_start_path_order_zero_zero start s
+
+
+
+lemma dijkstra_invar_holds_at_init (start : V):
+      dijkstra_all_invar start (WeightedDiGraph.base_search_state_initial (G:=g) start (0,0)) := by
+      constructor
+      · apply WeightedDiGraph.base_search_state_initial_all_basic_invars
+      · and_intros
+        · unfold dijkstra_stack_shortest_path
+          unfold WeightedDiGraph.base_search_state_initial
+          unfold cost_is
+          simp
+          use g.nil_path start
+          unfold WeightedDiGraph.Path.is_cheapest
+          and_intros
+          · apply WeightedDiGraph.Path.cost_nil_zero
+          · simp
+            intro a nodup
+            rw [← WeightedDiGraph.Path.cost]
+            rw [WeightedDiGraph.Path.cost_nil_zero]
+            simp_all
+        · unfold dijkstra_path_as_extracted_as_long_as_sort_index
+          unfold WeightedDiGraph.base_search_state_initial
+          simp
+          intro u u_is_start
+          and_intros
+          · unfold WeightedDiGraph.Walk.cost
+            unfold WeightedDiGraph.extract_path_to
+            simp
+            split
+            · next h=>
+              simp_all
+              subst u_is_start
+              simp_all only [reduceCtorEq]
+            · rfl
+          · unfold WeightedDiGraph.Walk.length
+            unfold WeightedDiGraph.extract_path_to
+            simp
+            split
+            · next h=>
+              simp_all
+              subst u_is_start
+              simp_all only [reduceCtorEq]
+            · rfl
+        · unfold dijkstra_invar_on_stack_or_all_neighbours_max_order
+          unfold WeightedDiGraph.base_search_state_initial
+          simp
+        · unfold dijkstra_stack_sorted
+          unfold WeightedDiGraph.base_search_state_initial
+          simp
+        · unfold search_invar_start_path_order_zero_zero
+          unfold WeightedDiGraph.base_search_state_initial
+          simp
+
+
+section
+variable (state : WeightedDiGraph.base_search_state g (ℕ×ℕ))
+
+lemma dijkstra_expand_keeps_shortest_path_invar
+    (start : V) (goal : V)
+    ----- co-invariants needed for path extraction
+    (mother_invar : WeightedDiGraph.search_invar_mother_is_visited state)
+    (mother_invar_adj : WeightedDiGraph.search_invar_mother_is_adjacent start state)
+    (decreasing_invar : WeightedDiGraph.search_invar_mother_decreasing_path_order start state)
+    (start_visited : WeightedDiGraph.search_invar_start_visited start state)
+    (on_stack_or_nei_visited : WeightedDiGraph.search_invar_on_stack_or_all_neighbours_visited state)
+    (stack_visited_invar : WeightedDiGraph.search_invar_stack_is_visited state)
+    -- new bfs_ specific invars
+    (extract_length_invar : dijkstra_path_as_extracted_as_long_as_sort_index start state)
+    (update_invar : dijkstra_invar_on_stack_or_all_neighbours_max_order state)
+    (stack_sorted : dijkstra_stack_sorted state)
+    (start_path_order : search_invar_start_path_order_zero_zero start state)
+    :
+     ∀ head : V, ∀ tail : List V, 
+        dijkstra_stack_shortest_path start state
+          ∧ ¬ head = goal
+          ∧ state.stack = head :: tail
+        → dijkstra_stack_shortest_path start (dijkstra_step_expand state head tail) := by
+  sorry
+
+
+lemma dijkstra_expand_keeps_extracted_same_length_as_sort_index (start : V) (goal : V)
+    (start_visited : WeightedDiGraph.search_invar_start_visited start state)
+    (bef_mother_invar : WeightedDiGraph.search_invar_mother_is_visited state)
+    (bef_mother_invar_adj : WeightedDiGraph.search_invar_mother_is_adjacent start state)
+    (bef_decreasing_invar : WeightedDiGraph.search_invar_mother_decreasing_path_order start state)
+    (bef_stack_visited_invar : WeightedDiGraph.search_invar_stack_is_visited state)
+    :
+     ∀ head : V, ∀ tail : List V, 
+        dijkstra_path_as_extracted_as_long_as_sort_index start state
+          ∧ ¬ head = goal
+          ∧ state.stack = head :: tail
+        → dijkstra_path_as_extracted_as_long_as_sort_index start (dijkstra_step_expand state head tail) := by
+  sorry
+
+lemma dijkstra_expand_keeps_on_stack_or_nei_max_order(goal : V)
+    (on_stack_or_nei_visited : WeightedDiGraph.search_invar_on_stack_or_all_neighbours_visited state)
+    (stack_shortest : dijkstra_stack_shortest_path start state)
+    (extract_length_invar : dijkstra_path_as_extracted_as_long_as_sort_index start state)
+    (mother_invar : WeightedDiGraph.search_invar_mother_is_visited state)
+    (mother_invar_adj : WeightedDiGraph.search_invar_mother_is_adjacent start state)
+    (decreasing_invar : WeightedDiGraph.search_invar_mother_decreasing_path_order start state)
+    :
+     ∀ head : V, ∀ tail : List V, 
+        dijkstra_invar_on_stack_or_all_neighbours_max_order  state
+          ∧ head ≠ goal
+          ∧ state.stack = head :: tail
+        → dijkstra_invar_on_stack_or_all_neighbours_max_order  (dijkstra_step_expand state head tail) := by
+  sorry
+
+
+lemma merge_two_prop {α : Type} (le1 : α → α → Prop) (le2 : α → α → Bool)
+  (trans : ∀ (a b c : α), le2 a b = true → le2 b c = true → le2 a c = true)
+  (total : ∀ (a b : α), (le2 a b || le2 b a) = true)
+  (le_eq : le1 = (fun x y => le2 x y = true))
+  (l : List α):
+  List.Pairwise le1 (l.mergeSort le2) := by
+    subst le_eq
+    apply List.pairwise_mergeSort
+    all_goals
+      grind
+
+lemma  dijkstra_merge_trans [FValueComp (ℕ×ℕ)] (a b c : ℕ × ℕ)
+  (a_b : a = b || FValueComp.lt_B a b)
+  (b_c : b = c || FValueComp.lt_B b c) : 
+  a = c || FValueComp.lt_B a c := by
+  by_cases a_eq_b : a = b <;> by_cases b_eq_c : b = c
+  · simp_all
+  · simp_all
+  · simp_all
+  · simp_all
+    repeat rw [← FValueComp.lt_B_eq] at a_b b_c ⊢
+    right
+    apply FValueComp.lt_trans
+    · exact a_b
+    · exact b_c
+
+lemma  dijkstra_merge_total [FValueComp (ℕ×ℕ)] (a b: ℕ × ℕ): 
+  (a = b || FValueComp.lt_B a b) || (b = a || FValueComp.lt_B b a) := by
+  by_cases a_eq_b : a = b
+  · grind
+  · simp_all
+    have h := FValueComp.lt_sem_tot a b a_eq_b
+    repeat rw [← FValueComp.lt_B_eq]
+    cases h
+    case neg.inl f => left ; exact f
+    case neg.inr f => right ; right ; exact f
+
+
+lemma dijkstra_expand_keeps_stack_sorted(goal : V)
+    (stack_visited_invar : WeightedDiGraph.search_invar_stack_is_visited state)
+    :
+     ∀ head : V, ∀ tail : List V, 
+        dijkstra_stack_sorted  state
+          ∧ head ≠ goal
+          ∧ state.stack = head :: tail
+        → dijkstra_stack_sorted  (dijkstra_step_expand state head tail) := by
+      intro head tail ⟨ prior_invar,head_ne_goal,compose⟩ 
+      unfold dijkstra_stack_sorted
+      unfold dijkstra_step_expand
+      apply merge_two_prop 
+      · intro a b c a_b b_c
+        apply dijkstra_merge_trans
+        · apply a_b
+        · apply b_c
+      · intro a b
+        apply dijkstra_merge_total
+      · ext x y
+        rw [FValueComp.lt_B_eq]
+        simp
+
+
+lemma dijkstra_expand_start_path_order_zero_carries (start : V) (goal : V)
+    (start_visited : WeightedDiGraph.search_invar_start_visited start state)
+    :
+     ∀ head : V, ∀ tail : List V, 
+        search_invar_start_path_order_zero_zero start state
+          ∧ ¬ head = goal
+          ∧ state.stack = head :: tail
+        → search_invar_start_path_order_zero_zero start (dijkstra_step_expand state head tail) := by
+      intro head tail ⟨ prior_invar,head_ne_goal,compose⟩ 
+      unfold search_invar_start_path_order_zero_zero
+      unfold dijkstra_step_expand
+      simp_all
+
+
+end 
+
+lemma dijkstra_expand_carries_all_dijkstra_invars (start : V) (goal : V):
+      WeightedDiGraph.base_invar_carries_over_expand (dijkstra_step_expand (g:=g)) goal (dijkstra_all_invar (g:=g)  start) := by
+      unfold WeightedDiGraph.base_invar_carries_over_expand
+      intro s head tail ⟨ invar_before, head_ne_goal, compose⟩ 
+      unfold dijkstra_all_invar
+      constructor
+      · apply dijkstra_expand_keeps_base_invars
+        · exact ⟨ invar_before.left, head_ne_goal, compose⟩
+      · and_intros
+        · apply dijkstra_expand_keeps_shortest_path_invar
+          · exact invar_before.left.right.left
+          · exact invar_before.left.right.right.left
+          · exact invar_before.left.right.right.right.left
+          · exact invar_before.left.right.right.right.right.right
+          · exact invar_before.left.right.right.right.right.left
+          · exact invar_before.left.left
+          · exact invar_before.right.right.left
+          · exact invar_before.right.right.right.left
+          · exact invar_before.right.right.right.right.left
+          · exact invar_before.right.right.right.right.right
+          · exact ⟨ invar_before.right.left, head_ne_goal, compose⟩
+        · apply dijkstra_expand_keeps_extracted_same_length_as_sort_index
+          · exact invar_before.left.right.right.right.right.right
+          · exact invar_before.left.right.left
+          · exact invar_before.left.right.right.left
+          · exact invar_before.left.right.right.right.left
+          · exact invar_before.left.left
+          · exact ⟨ invar_before.right.right.left, head_ne_goal, compose⟩
+        · apply dijkstra_expand_keeps_on_stack_or_nei_max_order
+          · exact invar_before.left.right.right.right.right.left
+          · exact invar_before.right.left
+          · exact invar_before.right.right.left
+          · exact invar_before.left.right.left
+          · exact invar_before.left.right.right.left
+          · exact invar_before.left.right.right.right.left
+          · exact ⟨ invar_before.right.right.right.left, head_ne_goal, compose⟩
+        · apply dijkstra_expand_keeps_stack_sorted
+          · exact invar_before.left.left
+          · exact ⟨ invar_before.right.right.right.right.left, head_ne_goal, compose⟩
+        · apply dijkstra_expand_start_path_order_zero_carries
+          · exact invar_before.left.right.right.right.right.right
+          · exact ⟨ invar_before.right.right.right.right.right, head_ne_goal, compose⟩
+
+
+
+/- -/
+theorem dijkstra_is_optimal (start : V) (goal : V)
+    (returned_path : Option.isSome (dijkstra (g:=g) start goal)):
+    ((dijkstra (g:=g) start goal).get returned_path).is_cheapest := by
+    let final : WeightedDiGraph.base_search_state g (ℕ×ℕ) × Bool := WeightedDiGraph.search_with_stack_step (goal:=goal) (start_state := WeightedDiGraph.base_search_state_initial start (0,0)) (dijkstra_step_expand) dijkstra_expand_metric_reduction
+    let final_state := final.1
+ 
+    -- general properties
+    --have h_4_1 : ¬ search_prop_stack_empty final_state := by sorry
+    have h_4 : WeightedDiGraph.search_prop_stack_head_is_goal goal final_state := by
+      --intro terminated_with_goal_found 
+      --unfold search_prop_stack_head_is_goal
+      unfold final_state
+      unfold final
+      unfold WeightedDiGraph.search_with_stack_step
+      simp
+      unfold WeightedDiGraph.search_internal
+      apply WeightedDiGraph.search_recurse_obtain_base_termination_property (G:=g) (D:=ℕ×ℕ) (T:=(Vector (WithTop (ℕ × ℕ)) g.nodeNum) × ℕ) goal (WeightedDiGraph.base_search_state_initial start (0,0)) (property_after_termination := WeightedDiGraph.search_prop_stack_head_is_goal (D:=ℕ×ℕ) goal ) (terminated_with := true) (search_step := WeightedDiGraph.search_stack_step (G:=g) (D:=ℕ×ℕ) (dijkstra_step_expand (g:=g))) dijkstra_termination_metric 
+      · intro s
+        apply WeightedDiGraph.search_stack_step_goal_stack_head_if_terminated
+      · unfold dijkstra at returned_path
+        unfold WeightedDiGraph.search_exe_with_stack_step at returned_path
+        unfold WeightedDiGraph.search_exe at returned_path
+        simp_all
+        apply returned_path
+
+    have t_0 : WeightedDiGraph.search_invar_stack_is_visited final_state := by
+      unfold final_state
+      unfold final
+      unfold WeightedDiGraph.search_with_stack_step
+      simp only []
+      apply WeightedDiGraph.search_returns_with_stack_visited (state_type := WeightedDiGraph.base_search_state g (ℕ×ℕ)) (start_state := WeightedDiGraph.base_search_state_initial start (0,0)) (start := start)
+      · rfl
+      · apply WeightedDiGraph.base_invar_carries_over_stack_step
+        apply dijkstra_expand_keeps_base_invars
+
+    have h_3 : WeightedDiGraph.search_prop_goal_visited goal final_state := by
+      apply t_0
+      unfold WeightedDiGraph.search_prop_stack_head_is_goal at h_4 
+      apply List.eq_cons_of_mem_head? at h_4
+      rw [h_4]
+      simp
+
+    have t_1 : WeightedDiGraph.search_invar_mother_is_visited final_state := by
+      unfold final_state
+      unfold final
+      unfold WeightedDiGraph.search_with_stack_step
+      simp only []
+      apply WeightedDiGraph.search_returns_with_mother_visited (state_type := WeightedDiGraph.base_search_state g (ℕ×ℕ)) (start_state := WeightedDiGraph.base_search_state_initial start (0,0)) (start := start)
+      · rfl
+      · apply WeightedDiGraph.base_invar_carries_over_stack_step
+        apply dijkstra_expand_keeps_base_invars
+
+    have t_2 : WeightedDiGraph.search_invar_mother_is_adjacent start final_state := by
+      unfold final_state
+      unfold final
+      unfold WeightedDiGraph.search_with_stack_step
+      simp only []
+      apply WeightedDiGraph.search_returns_with_mother_adjacent (state_type := WeightedDiGraph.base_search_state g (ℕ×ℕ)) (start_state := WeightedDiGraph.base_search_state_initial start (0,0)) (start := start)
+      · rfl
+      · apply WeightedDiGraph.base_invar_carries_over_stack_step
+        apply dijkstra_expand_keeps_base_invars
+
+    have t_3 : WeightedDiGraph.search_invar_mother_decreasing_path_order start final_state := by
+      unfold final_state
+      unfold final
+      unfold WeightedDiGraph.search_with_stack_step
+      simp only []
+      apply WeightedDiGraph.search_returns_with_mother_decreasing (state_type := WeightedDiGraph.base_search_state g (ℕ×ℕ)) (start_state := WeightedDiGraph.base_search_state_initial start (0,0)) (start := start)
+      · rfl
+      · apply WeightedDiGraph.base_invar_carries_over_stack_step
+        apply dijkstra_expand_keeps_base_invars
+
+
+    -- Dijkstra specific ones
+    have dijkstra_full_invar_at_end : dijkstra_all_invar start final_state := by
+     have right_class : (fun s => dijkstra_all_invar start (WeightedDiGraph.has_base_search_state.to_base_state (G:=g) s)) final_state := by
+      unfold final_state
+      unfold final
+      unfold WeightedDiGraph.search_with_stack_step
+      unfold WeightedDiGraph.search_internal
+      simp
+      apply WeightedDiGraph.search_recurse_lift_base_invariant 
+      constructor
+      · apply dijkstra_invar_holds_at_init
+      · apply WeightedDiGraph.base_invar_carries_over_stack_step
+        apply dijkstra_expand_carries_all_dijkstra_invars 
+     -- needs to be applied, lean4 has problems with they type-class here
+     apply right_class
+
+    have i_1 : dijkstra_stack_shortest_path start final_state := dijkstra_full_invar_at_end.2.1
+
+    have h_2 : dijkstra_path_as_extracted_as_long_as_sort_index start final_state := dijkstra_full_invar_at_end.2.2.1
+
+
+    have h : g.cost_is start goal (final_state.pathOrder goal).1 := by
+     have i_1' := i_1 goal h_3
+     unfold WeightedDiGraph.search_prop_stack_head_is_goal at h_4
+     apply i_1'
+     right
+     obtain ⟨ tail, compose ⟩ := List.head?_eq_some_iff.mp h_4
+     simp_all
+
+
+    unfold dijkstra
+    unfold WeightedDiGraph.search_exe_with_stack_step
+    unfold WeightedDiGraph.search_exe
+    unfold WeightedDiGraph.Path.is_cheapest
+    intro p'
+    unfold WeightedDiGraph.distance_is at h 
+    obtain ⟨p, ⟨ p_path_length, p_is_cheapest ⟩ ⟩  := h
+
+    unfold dijkstra_path_as_extracted_as_long_as_sort_index at h_2
+    have prop := h_2 t_1 t_2 t_3 goal h_3
+    clear h_2
+    unfold final_state at prop
+    unfold final at prop
+    unfold WeightedDiGraph.search_with_stack_step at prop
+    simp_all
+    unfold WeightedDiGraph.has_base_search_state.to_base_state
+    unfold WeightedDiGraph.instHas_base_search_stateBase_search_state
+    rw [prop.1]
+    clear prop t_1 t_2 t_3
+    unfold final_state at p_path_length
+    unfold final at p_path_length
+    unfold WeightedDiGraph.search_with_stack_step at p_path_length
+    simp_all
+    rw [← p_path_length]
+    unfold WeightedDiGraph.Path.is_cheapest at p_is_cheapest
+    specialize p_is_cheapest p'
+    simp_all
 
 
 end NatGraph

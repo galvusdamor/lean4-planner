@@ -10,22 +10,28 @@ import Mathlib.Algebra.Order.Kleene
 -- custom less than predicate on the type of the F-Values
 class FValueComp (D : Type) where
   lt : D → D → Prop -- WellFounded requires prop here. But we know it is actually bool
+  lt_B : D → D → Bool
   wf : WellFounded lt
   lt_irr (x : D) : ¬ lt x x
   lt_trans (x y z : D) : lt x y → lt y z → lt x z
   lt_antisymm (x y : D) : lt x y → lt y x → x = y
+  lt_sem_tot (x y : D) : x ≠ y → lt x y ∨ lt y x
+  lt_B_eq (x y : D) : lt x y = lt_B x y
 
 infix:90 " ≺ " => FValueComp.lt
 
 namespace Nat
 instance : FValueComp ℕ where
   lt (x y : ℕ) : Bool := x < y
+  lt_B (x y : ℕ) : Bool := x < y
   wf := by
     simp
     apply lt_wfRel.wf
   lt_irr := by grind
   lt_trans := by grind
   lt_antisymm := by grind
+  lt_sem_tot := by grind
+  lt_B_eq := by grind
 end Nat 
 
 
@@ -154,6 +160,7 @@ abbrev search_invar_start_visited (start : V) (s : base_search_state G D) :=
 @[simp]
 abbrev search_invar_start_path_order_zero (start : V) (s : base_search_state G ℕ) :=
       s.pathOrder start = 0
+
 
 @[simp]
 abbrev search_invar_all_basic (start : V) (s : base_search_state G D) :=
