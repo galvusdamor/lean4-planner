@@ -27,6 +27,31 @@ def cost {u v : V} : (G.Walk u v) → ℕ
   | WeightedDiGraph.Walk.cons adj rest => (G.edgeCost adj) + cost rest
   | WeightedDiGraph.Walk.nil => 0
 
+@[simp]
+theorem append_cons_inc_cost_by_edge (w : G.Walk u v) (h : G.Adj v v') :
+  (w.append (Walk.cons h Walk.nil)).cost = G.edgeCost h + w.cost := by
+  unfold Walk.append
+  split
+  · repeat unfold Walk.cost
+    simp_all
+  · unfold Walk.cost 
+    conv =>
+      right
+      rw [add_comm]
+      rw [add_assoc]
+      right
+      rw [add_comm]
+    apply Nat.add_left_cancel_iff.mpr
+    apply append_cons_inc_cost_by_edge
+
+
+@[simp]
+theorem concat_inc_cost_by_edge (p : G.Walk u v) (h : G.Adj v w) :
+      (p.concat h).cost = G.edgeCost h + p.cost := by
+  unfold Walk.concat
+  apply append_cons_inc_cost_by_edge
+
+
 end Walk
 
 namespace Path
@@ -48,6 +73,12 @@ theorem cost_nil_zero {u : V} : (G.nil_path u).cost = 0 := by
 theorem cost_nil_walk_zero {u : V} : (G.nil_path u).val.length  = 0 := by
   unfold Walk.length nil_path
   simp_all
+
+
+@[simp]
+theorem concat_inc_cost_by_edge (p : G.Path u v) (h : G.Adj v w) (proof_w_not_in_support : w ∉ p.support) :
+      (p.concat h proof_w_not_in_support).cost = G.edgeCost h + p.cost := by
+  apply Walk.concat_inc_cost_by_edge 
 
 
 
