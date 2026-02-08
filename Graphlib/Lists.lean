@@ -334,16 +334,78 @@ theorem List.not_Lex {α : Type} (n : ℕ) (p : α → α → Prop) (l1 l2 : _ro
     · grind
 
 
+lemma List.mem_of_tail_mem {α : Type} {x : α} {l : List α} (h : x ∈ l.tail):
+    x ∈ l := by
+      cases l
+      · contradiction
+      · grind
+
+
+lemma mergeSort_head {α : Type} (le : α → α → Bool) 
+  (trans : ∀ (a b c : α), le a b = true → le b c = true → le a c = true)
+  (total : ∀ (a b : α), (le a b || le b a) = true)
+  (l : List α)
+  (l_ne_nil : (l.mergeSort le) ≠ []):
+  ∀ x ∈ (l.mergeSort le).tail, le ((l.mergeSort le).head l_ne_nil) x := by
+    intro x x_in_l_tail
+    have pw := List.pairwise_mergeSort trans total l
+    let ms := (l.mergeSort le)
+    have ms_eq_l_ms : ms = (l.mergeSort le) := by rfl
+    rw [← ms_eq_l_ms] at pw
+    let head := (l.mergeSort le).head l_ne_nil
+    cases comp : ms
+    · contradiction
+    case cons h t =>
+      rw [comp] at pw
+      apply List.pairwise_cons.mp at pw
+      have p := pw.1 x
+      have t_eq_tail : t = (l.mergeSort le).tail := by grind
+      have x_in_t : x ∈ t := by
+        rw [t_eq_tail]
+        exact x_in_l_tail
+      specialize p x_in_t
+      grind
+
+
+lemma mergeSort_head_from_head {α : Type} {le : α → α → Bool} 
+  {trans : ∀ (a b c : α), le a b = true → le b c = true → le a c = true}
+  {total : ∀ (a b : α), (le a b || le b a) = true}
+  {l : List α}
+  {l_ne_nil : (l.mergeSort le) ≠ []}
+  {y : α}:
+  (l.mergeSort le).head l_ne_nil = y → 
+  ∀ x ∈ (l.mergeSort le).tail, le y x := by
+    intro y_eq x x_in_tail
+    rw [← y_eq]
+    apply mergeSort_head
+    · exact trans
+    · exact total
+    · exact x_in_tail
+
+
+lemma mergeSort_head_from_head_unsorted {α : Type} {le : α → α → Bool} 
+  {trans : ∀ (a b c : α), le a b = true → le b c = true → le a c = true}
+  {total : ∀ (a b : α), (le a b || le b a) = true}
+  {l : List α}
+  {l_ne_nil : (l.mergeSort le) ≠ []}
+  {y : α}:
+  (l.mergeSort le).head l_ne_nil = y → 
+  ∀ x ∈ l, x = y ∨ le y x := by
+    intro y_eq x x_in_tail
+    rw [← y_eq]
+    by_cases x_head : x = y
+    · left ; simp_all
+    · right
+      apply mergeSort_head
+      · exact trans
+      · exact total
+      · rw [←List.mem_mergeSort (le := le)] at x_in_tail
+        rw [←List.cons_head_tail (l:=l.mergeSort le)] at x_in_tail
+        · simp_all
+        · exact l_ne_nil
 
 
 
-
-
-
-
-
-
-
-
+theorem mod_pon {a b : Prop} (h : a) : (a → b) → b := by grind 
 
 

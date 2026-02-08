@@ -51,6 +51,37 @@ theorem concat_inc_cost_by_edge (p : G.Walk u v) (h : G.Adj v w) :
   unfold Walk.concat
   apply append_cons_inc_cost_by_edge
 
+@[simp]
+theorem cost_nil_zero {u : V} : (Walk.nil : G.Walk u u).cost = 0 := by unfold cost ; rfl 
+
+theorem contains_subwalk_cost {u v w : V} (p : G.Walk u v) (w_in_walk : w ∈ p.support) (w_ne_v : w ≠ v):
+    ∃ p' : G.Walk u w, p'.cost ≤ p.cost ∧ p'.support <+: p.support := by
+    by_cases u_eq_w : u = w
+    · let w' : G.Walk u u := Walk.nil
+      use u_eq_w ▸ w'
+      subst u_eq_w
+      rw [cost_nil_zero]
+      simp_all
+      unfold support
+      grind
+    · cases p
+      · unfold support at w_in_walk
+        simp_all -- contradictory
+      · next a b c =>
+        unfold support at w_in_walk
+        simp_all
+        cases w_in_walk
+        · grind
+        · next w_in_c =>
+          obtain ⟨p',length_le⟩ := contains_subwalk_cost c w_in_c w_ne_v
+          use (Walk.cons b p')
+          unfold cost
+          constructor
+          · grind
+          · unfold support
+            grind 
+
+
 
 end Walk
 
@@ -86,6 +117,17 @@ def is_cheapest {u v : V} (p : G.Path u v) : Prop :=
   ∀ p' : G.Path u v, p.cost ≤ p'.cost
 
 
+theorem contains_subpath_cost {u v w : V} (p : G.Path u v) (w_in_path : w ∈ p.support) (w_ne_v : w ≠ v):
+    ∃ p' : G.Path u w, p'.cost ≤ p.cost := by
+    obtain ⟨w',len,supp⟩ := p.val.contains_subwalk_cost w_in_path w_ne_v 
+    have p_nodup : w'.support.Nodup := by
+      apply List.Nodup.sublist (l₂ := p.support)
+      · apply List.IsPrefix.sublist
+        exact supp
+      · exact p.prop
+    use ⟨ w', p_nodup⟩
+    unfold cost
+    apply len
 
 end Path
 
