@@ -257,11 +257,7 @@ lemma run_walk_through_state_not_on_stack_yields_all_visited
           have nei_start := on_stack_or_nei_visited start start_visited
           cases nei_start
           · next start_in_stack =>
-            have start_eq_w : start = w := by
-              apply all_not_on_stack
-              · simp!
-              · exact start_in_stack
-            grind
+            simp_all
           · next all_start_nei_visited =>
             apply all_start_nei_visited
             exact start_adj_w

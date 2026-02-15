@@ -78,8 +78,7 @@ theorem contains_subwalk_cost {u v w : V} (p : G.Walk u v) (w_in_walk : w ∈ p.
           unfold cost
           constructor
           · grind
-          · unfold support
-            grind 
+          · simp_all
 
 
 

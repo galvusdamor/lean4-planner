@@ -141,6 +141,11 @@ theorem goal_in_support {u v : V} (p: G.Walk u v): v ∈ p.support := by
   · simp
 
 @[simp]
+theorem start_in_support {u v : V} (p: G.Walk u v): u ∈ p.support := by
+  unfold support
+  split <;> simp
+
+@[simp]
 theorem support_ne_nil {u v : V} (p : G.Walk u v): p.support ≠ [] := by
   unfold support
   cases p <;> simp_all
@@ -150,6 +155,12 @@ theorem cons_support {x u v w: V} (p: G.Walk v w) (h : G.Adj u v ): x ∈ (Walk.
   intro x_in_cons_supp
   unfold support at x_in_cons_supp
   grind
+
+@[simp]
+theorem support_cons {u v w: V} (p: G.Walk v w) (h : G.Adj u v): (Walk.cons h p).support = u :: p.support:= by
+  conv =>
+   left
+   unfold support 
 
 theorem support_last {u v : V} (p : G.Walk u v):
     p.support = p.support.dropLast ++ [v] := by
@@ -306,8 +317,7 @@ theorem contains_subwalk {u v w : V} (p : G.Walk u v) (w_in_walk : w ∈ p.suppo
           unfold length
           constructor
           · grind
-          · unfold support
-            grind 
+          · simp_all
 
 
 end Walk
@@ -401,8 +411,6 @@ def concat (p : G.Path u v) (h : G.Adj v w) (proof_w_not_in_support : w ∉ p.va
     apply notEq
     rw  [h]
   ⟨ path_walk, path_nodup ⟩ 
-
-
 
 
 /-- Definition of `Shortest Path` -/
@@ -541,11 +549,9 @@ lemma support_Drop_Until_Suffix (w : G.Walk u v) (u : V) (u_in_supp : u ∈ w.su
     unfold dropUntil
     split
     · simp
-      unfold support
-      simp_all
       rename_i h_1
       subst h_1
-      simp_all only [List.suffix_rfl]
+      simp_all only [support_cons, List.suffix_rfl]
     · conv =>
         right
         unfold support
