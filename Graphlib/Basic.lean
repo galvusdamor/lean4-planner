@@ -293,6 +293,9 @@ theorem split_at_end (p : G.Walk u v) (not_nil : u ≠ v):
       · simp [length]
     apply p.split_at_end_length_one len_ne_zero
 
+def support_of_append {u v w : V} (uv : G.Walk u v) (vw : G.Walk v w):
+    (uv.append vw).support = uv.support ++ vw.support.tail := by sorry
+
 theorem contains_subwalk {u v w : V} (p : G.Walk u v) (w_in_walk : w ∈ p.support) (w_ne_v : w ≠ v):
     ∃ p' : G.Walk u w, p'.length < p.length ∧ p'.support <+: p.support := by
     by_cases u_eq_w : u = w
@@ -412,6 +415,17 @@ def concat (p : G.Path u v) (h : G.Adj v w) (proof_w_not_in_support : w ∉ p.va
     rw  [h]
   ⟨ path_walk, path_nodup ⟩ 
 
+def append {u v w : V} (uv : G.Path u v) (vw : G.Path v w) (h : ∀ a ∈ uv.val.support, ∀ b ∈ vw.val.support.tail, a ≠ b): G.Path u w :=
+  let uwWalk : G.Walk u w := uv.val.append vw.val
+  have noDup : List.Nodup uwWalk.support := by
+    unfold uwWalk
+    rw [Walk.support_of_append]
+    apply List.nodup_append.mpr
+    and_intros
+    · exact uv.prop
+    · grind
+    · exact h
+  ⟨ uwWalk, noDup ⟩
 
 /-- Definition of `Shortest Path` -/
 def is_shortest {u v : V} (p : G.Path u v) : Prop :=
