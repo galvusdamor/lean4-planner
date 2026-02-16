@@ -1619,24 +1619,32 @@ lemma dijkstra_expand_keeps_shortest_path_invar
                 have w_ne_mem_stack : w ∉ state.stack := by specialize all_visited_not_mem_stack w w_in_supp w_ne_v ; exact all_visited_not_mem_stack.left
                
 
-                have w'_not_mem_support : w' ∉ path_to_head.val.support := by
-                  sorry
+                --have w'_not_mem_support : w' ∉ path_to_head.val.support := by
+                --  sorry
               
-                have w'_w_nodup : (∀ a ∈ (path_to_head.concat adj_head_w' w'_not_mem_support).val.support, ∀ b ∈ path_w'_w.val.support.tail, a ≠ b) := by sorry
+                --have w'_w_nodup : (∀ a ∈ (path_to_head.concat adj_head_w' w'_not_mem_support).val.support, ∀ b ∈ path_w'_w.val.support.tail, a ≠ b) := by sorry
                 
 
-                let path_start_head_w' := path_to_head.concat adj_head_w' w'_not_mem_support
-                let path_start_head_w'_w := path_start_head_w'.append path_w'_w w'_w_nodup
+                let walk_start_head_w' := path_to_head.val.concat adj_head_w' 
+                let walk_start_head_w'_w := walk_start_head_w'.append path_w'_w.val
                 
-                have w'_v_nodup : (∀ a ∈ path_start_head_w'.val.support, ∀ b ∈ p.val.support.tail, a ≠ b) := by sorry
-                let path_start_head_w'_v := path_start_head_w'.append p w'_v_nodup
+                --have w'_v_nodup : (∀ a ∈ path_start_head_w'.val.support, ∀ b ∈ p.val.support.tail, a ≠ b) := by sorry
+                let walk_start_head_w'_v := walk_start_head_w'.append p.val
 
-                have path_start_head_w'_w_length : path_start_head_w'_w.val.cost = (state.pathOrder head).1 + edgeCost adj_head_w' + path_w'_w.val.cost := by sorry
+                have path_start_head_w'_length : walk_start_head_w'.cost = (state.pathOrder head).1 + edgeCost adj_head_w' := by
+                  unfold walk_start_head_w'
+                  simp_all [add_comm]
 
-                have path_start_head_w'_v_length : path_start_head_w'_v.val.cost = path_start_head_w'.val.cost + p.val.cost := by sorry
-                have path_start_head_w'_length : path_start_head_w'.val.cost = (state.pathOrder head).1 + edgeCost adj_head_w' := by sorry 
+                have path_start_head_w'_w_length : walk_start_head_w'_w.cost = (state.pathOrder head).1 + edgeCost adj_head_w' + path_w'_w.val.cost := by
+                  unfold walk_start_head_w'_w
+                  simp_all
+                have path_start_head_w'_v_length : walk_start_head_w'_v.cost = walk_start_head_w'.cost + p.val.cost := by 
+                  unfold walk_start_head_w'_v
+                  simp_all
 
-                have w_order_eq : (state.pathOrder w).1 ≤ path_start_head_w'_w.val.cost := by
+
+
+                have w_order_eq : (state.pathOrder w).1 ≤ walk_start_head_w'_w.cost := by
                   unfold dijkstra_stack_shortest_path at prior_invar
                   specialize prior_invar w w_visited
                   unfold cost_is at prior_invar
@@ -1645,24 +1653,28 @@ lemma dijkstra_expand_keeps_shortest_path_invar
                   unfold Path.is_cheapest at cheapest
                   simp at cheapest
                   obtain ⟨ _, cheapest ⟩ := cheapest
-                  specialize cheapest path_start_head_w'_w
+                  -- argument: from the walk, we can get a shorter path and even that is longer than pathOrder w
+                  obtain ⟨ p', p'_leq_w'⟩ := walk_start_head_w'_w.cheaper_path_exists 
+
+                  specialize cheapest p' p'.prop
                   rw [cost_eq_order] at cheapest
-                  apply cheapest
-                  grind
+                  apply le_trans
+                  · apply cheapest
+                  · apply p'_leq_w'
 
                 have v_updated_from_w : (state.pathOrder v).1 ≤ (state.pathOrder w).1 + edgeCost w_adj_v := by
                   unfold dijkstra_invar_on_stack_or_all_neighbours_max_order at update_invar
                   specialize update_invar ⟨ w, w_visited ⟩  w_ne_mem_stack v w_adj_v
                   exact update_invar
 
-                --conv at p_lt_ph_e => left ; unfold Path.cost
-
                 have v_not_in_supp : v ∉ path_to_head.val.support := by grind 
                 let p_start_v : g.Path start v := path_to_head.concat adj_head_v v_not_in_supp
-                have p_start_v_cost : p_start_v.val.cost = path_to_head.val.cost + edgeCost adj_head_v := by sorry
+                have p_start_v_cost : p_start_v.val.cost = path_to_head.val.cost + edgeCost adj_head_v := by
+                  unfold p_start_v
+                  unfold Path.concat
+                  simp_all [add_comm]
 
-
-                have t_1 : (state.pathOrder v).1 ≤ path_start_head_w'_w.val.cost + edgeCost w_adj_v := by omega
+                have t_1 : (state.pathOrder v).1 ≤ walk_start_head_w'_w.cost + edgeCost w_adj_v := by omega
                 have t_2 : (state.pathOrder v).1 ≤ (state.pathOrder head).1 + edgeCost adj_head_w' + path_w'_w.val.cost + edgeCost w_adj_v := by omega
                 have t_3 : (state.pathOrder v).1 ≤ (state.pathOrder head).1 + p.val.cost + edgeCost adj_head_w' := by omega
                 unfold Path.cost at p_h_w_lt_e
@@ -1681,9 +1693,6 @@ lemma dijkstra_expand_keeps_shortest_path_invar
           -- second case: the mother of v is not head, but the mother that it had before
           -- (i.e. update from head did not change anything)
           · sorry
-
-      
-/--
         · unfold dijkstra_step_expand at v_visited_after
           simp at v_visited_after
           simp [v_visited] at v_visited_after
