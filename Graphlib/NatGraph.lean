@@ -44,6 +44,10 @@ theorem append_cons_inc_cost_by_edge (w : G.Walk u v) (h : G.Adj v v') :
     apply Nat.add_left_cancel_iff.mpr
     apply append_cons_inc_cost_by_edge
 
+@[simp]
+theorem append_cost (w : G.Walk u v) (w' : G.Walk v v') :
+  (w.append w').cost = w.cost + w'.cost := by
+    sorry
 
 @[simp]
 theorem concat_inc_cost_by_edge (p : G.Walk u v) (h : G.Adj v w) :
@@ -79,6 +83,50 @@ theorem contains_subwalk_cost {u v w : V} (p : G.Walk u v) (w_in_walk : w ∈ p.
           constructor
           · grind
           · simp_all
+
+
+
+@[simp]
+theorem dropUntilMakesCheaper (p : G.Walk u v) (f : V) (h : f ∈ p.support):
+  (p.dropUntil f h).cost ≤ p.cost := by
+  induction p with
+  | nil =>
+    unfold cost dropUntil
+    split
+    · next nil_eq_cons =>
+      simp at nil_eq_cons
+      exfalso
+      apply walk_trans (V:=V)
+      apply nil_eq_cons
+    · simp
+  | cons _ p' ih => 
+    unfold dropUntil
+    split
+    · rename_i h_2
+      subst h_2
+      simp_all only [le_refl]
+    · trans
+      · apply ih
+      · simp!
+
+
+theorem cost_bypass_le (p : G.Walk u v) : p.bypass.cost ≤ p.cost:= by
+  induction p with
+  | nil =>
+    unfold bypass cost
+    rfl
+  | cons f_adj_t p' ih =>
+    unfold bypass
+    simp_all
+    split
+    · conv =>
+        right
+        unfold cost
+      trans
+      · apply dropUntilMakesCheaper
+      · grind
+    · unfold cost 
+      grind
 
 
 
@@ -130,6 +178,18 @@ theorem contains_subpath_cost {u v w : V} (p : G.Path u v) (w_in_path : w ∈ p.
 
 end Path
 
+namespace Walk
+
+theorem cheaper_path_exists (w : G.Walk u v):
+  ∃ p : G.Path u v, p.cost ≤ w.cost := by
+  let w' : G.Walk u v := w.bypass
+  have nodup : w'.support.Nodup := by unfold w' ; apply bypass_isPath
+  use ⟨ w', nodup ⟩
+  unfold Path.cost
+  apply cost_bypass_le
+
+
+end Walk
 
 end WeightedDiGraph
 
