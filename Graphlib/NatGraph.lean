@@ -191,6 +191,7 @@ theorem cheaper_path_exists (w : G.Walk u v):
 
 end Walk
 
+
 end WeightedDiGraph
 
 namespace NatGraph
