@@ -1583,7 +1583,10 @@ lemma dijkstra_expand_keeps_shortest_path_invar
                   rw [cost_eq_order] at cheapest
                   apply cheapest
 
-                have v_updated_from_w : (state.pathOrder v).1 ≤ (state.pathOrder w).1 + edgeCost w_adj_v := by sorry
+                have v_updated_from_w : (state.pathOrder v).1 ≤ (state.pathOrder w).1 + edgeCost w_adj_v := by
+                  unfold dijkstra_invar_on_stack_or_all_neighbours_max_order at update_invar
+                  specialize update_invar ⟨ w, w_visited ⟩  w_ne_mem_stack v w_adj_v
+                  exact update_invar
 
                 conv at p_lt_ph_e => left ; unfold Path.cost
       
