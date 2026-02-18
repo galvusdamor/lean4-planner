@@ -1036,7 +1036,17 @@ lemma dijkstra_new_head_cost_lt_other_on_stack_now
 
 
 lemma split_1 (p : g.Path a b) (w : V) (w_in_supp : w ∈ p.val.support) (w_ne_a : w ≠ a): 
-    ∃ u : V, ∃ au : g.Path a u, g.Adj u w := by sorry
+    ∃ u : V, ∃ au : g.Path a u, g.Adj u w := by
+        -- Get a sub-path from a to w
+  by_cases w_eq_b : w = b
+  · -- w = b: use split_at_end on p itself
+    subst w_eq_b
+    obtain ⟨u, au, adj_u_w, _, _⟩ := p.split_at_end (Ne.symm w_ne_a)
+    exact ⟨u, au, adj_u_w⟩
+  · -- w ≠ b: use contains_subpath to get path a → w, then split_at_end
+    obtain ⟨p_aw, _⟩ := WeightedDiGraph.Path.contains_subpath p w_in_supp w_eq_b
+    obtain ⟨u, au, adj_u_w, _, _⟩ := p_aw.split_at_end (Ne.symm w_ne_a)
+    exact ⟨u, au, adj_u_w⟩
 
 
 
@@ -1337,8 +1347,14 @@ lemma dijkstra_path_head_adj_new_head_is_cheapest {start : V}
                     specialize shortest_path path_head_f_q'
                     rw [← is]
                     have new_path_cost : path_head_f_q'.cost = path_to_head.cost + f + p_q'.cost := by
-                      unfold path_head_f_q'
-                      sorry
+                      have h1 : path_head_f_q'.val.cost = path_head_f.val.cost + p_q'.val.cost := by
+                        unfold path_head_f_q' Path.append
+                        simp [Walk.append_cost]
+                      have h2 : path_head_f.val.cost = path_to_head.val.cost + f := by
+                        unfold path_head_f Path.concat
+                        simp [Walk.concat_inc_cost_by_edge, f, edgeCost, add_comm]
+                      unfold Path.cost at *
+                      omega
                     rw [new_path_cost] at shortest_path
                     rw [←ph_eq_dh]
                     apply shortest_path
@@ -1589,6 +1605,7 @@ lemma dijkstra_expand_keeps_shortest_path_invar
               · exact stack_visited_invar
               · exact on_stack_or_nei_visited
               · exact update_invar
+              · exact start_path_order
               · exact prior_invar
               · exact compose
               · exact head_was_visited_before
@@ -1734,7 +1751,14 @@ lemma dijkstra_expand_keeps_shortest_path_invar
                   grind
           -- second case: the mother of v is not head, but the mother that it had before
           -- (i.e. update from head did not change anything)
-          · sorry
+          --· sorry
+-- second case: the mother of v is not head, but the mother that it had before
+          -- (i.e. update from head did not change anything)
+          · obtain ⟨mother_same, mother_ne_head⟩ := ‹_›
+            have pathOrder_unchanged : (dijkstra_step_expand state head tail).pathOrder v = state.pathOrder v := by
+              unfold dijkstra_step_expand at mother_same ⊢
+              grind
+            sorry
         · unfold dijkstra_step_expand at v_visited_after
           simp at v_visited_after
           simp [v_visited] at v_visited_after
@@ -1770,6 +1794,7 @@ lemma dijkstra_expand_keeps_shortest_path_invar
             · exact stack_visited_invar
             · exact on_stack_or_nei_visited
             · exact update_invar
+            · exact start_path_order
             · exact prior_invar
             · exact compose
             · exact head_was_visited_before

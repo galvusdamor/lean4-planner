@@ -294,7 +294,15 @@ theorem split_at_end (p : G.Walk u v) (not_nil : u ≠ v):
     apply p.split_at_end_length_one len_ne_zero
 
 def support_of_append {u v w : V} (uv : G.Walk u v) (vw : G.Walk v w):
-    (uv.append vw).support = uv.support ++ vw.support.tail := by sorry
+    (uv.append vw).support = uv.support ++ vw.support.tail := by 
+  induction uv with
+  | nil =>
+    cases vw with
+    | nil => simp [append, support]
+    | cons h p =>
+      simp [append, support]
+  | cons h p ih =>
+    simp [append, support, ih]
 
 theorem contains_subwalk {u v w : V} (p : G.Walk u v) (w_in_walk : w ∈ p.support) (w_ne_v : w ≠ v):
     ∃ p' : G.Walk u w, p'.length < p.length ∧ p'.support <+: p.support := by

@@ -47,7 +47,10 @@ theorem append_cons_inc_cost_by_edge (w : G.Walk u v) (h : G.Adj v v') :
 @[simp]
 theorem append_cost (w : G.Walk u v) (w' : G.Walk v v') :
   (w.append w').cost = w.cost + w'.cost := by
-    sorry
+  induction w with
+  | nil => simp [Walk.append, Walk.cost]
+  | cons h p ih =>
+    simp [Walk.append, Walk.cost, ih, Nat.add_assoc]
 
 @[simp]
 theorem concat_inc_cost_by_edge (p : G.Walk u v) (h : G.Adj v w) :
