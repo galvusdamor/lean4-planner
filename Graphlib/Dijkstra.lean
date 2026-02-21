@@ -1104,7 +1104,7 @@ lemma dijkstra_path_head_adj_new_head_is_cheapest {start : V}
         unfold Path.cost
         convert p'_is_cheaper
         unfold Path.concat
-        simp_all only [Walk.start_in_support, search_invar_stack_is_visited, List.mem_cons, forall_eq_or_imp, true_and,search_invar_on_stack_or_all_neighbours_visited, Subtype.forall, not_or, and_imp, Walk.goal_in_support,Path.cost_same, ne_eq, Path.support, «Prop».bot_eq_false, imp_false, not_and, not_forall, Classical.not_imp,decide_not, Bool.decide_and, List.all_eq_true, Bool.and_eq_true, Bool.not_eq_eq_eq_not, Bool.not_true,decide_eq_false_iff_not, Walk.concat_inc_cost_by_edge]
+        simp_all only [Walk.start_in_support, search_invar_stack_is_visited, List.mem_cons, forall_eq_or_imp, true_and,search_invar_on_stack_or_all_neighbours_visited, Subtype.forall, not_or, and_imp, Walk.goal_in_support,Path.cost_same, ne_eq, Path.support, «Prop».bot_eq_false, imp_false, not_and, not_forall, decide_not, Bool.decide_and, List.all_eq_true, Bool.and_eq_true, Bool.not_eq_eq_eq_not, Bool.not_true,decide_eq_false_iff_not, Walk.concat_inc_cost_by_edge]
         rw [add_comm]
       -- we set the pathCost of v to exactly this value
       have v_after_eq_e_sh: ((dijkstra_step_expand state head tail).pathOrder v).1 = e + path_to_head.cost := by
@@ -2020,9 +2020,6 @@ lemma dijkstra_expand_keeps_shortest_path_invar
 
 
 
-/--
-
- 
 
 lemma dijkstra_expand_keeps_on_path_order_diff(start goal : V)
     (stack_visited_invar : WeightedDiGraph.search_invar_stack_is_visited state)
