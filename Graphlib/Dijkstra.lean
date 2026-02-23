@@ -769,6 +769,10 @@ abbrev dijkstra_stack_shortest_path (start : V) (s : WeightedDiGraph.base_search
 abbrev search_invar_start_path_order_zero_zero (start : V) (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
       s.pathOrder start = (0,0)
 
+@[simp]
+abbrev search_invar_start_not_mem_tail (start : V) (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
+      start ∉ s.stack.tail
+
 
 abbrev dijkstra_all_invar (start : V) (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
       WeightedDiGraph.search_invar_all_basic start s
@@ -777,6 +781,7 @@ abbrev dijkstra_all_invar (start : V) (s : WeightedDiGraph.base_search_state g (
     ∧ dijkstra_invar_on_stack_or_all_neighbours_max_order s
     ∧ dijkstra_stack_sorted s
     ∧ search_invar_start_path_order_zero_zero start s
+    ∧ search_invar_start_not_mem_tail start s
 
 
 
@@ -813,6 +818,9 @@ lemma dijkstra_invar_holds_at_init (start : V):
         · unfold search_invar_start_path_order_zero_zero
           unfold WeightedDiGraph.base_search_state_initial
           simp
+        · unfold search_invar_start_not_mem_tail
+          unfold WeightedDiGraph.base_search_state_initial
+          simp
 
 
 section
@@ -831,6 +839,27 @@ lemma dijkstra_expand_start_path_order_zero_carries (start : V) (goal : V)
       unfold search_invar_start_path_order_zero_zero
       unfold dijkstra_step_expand
       simp_all
+
+
+lemma dijkstra_expand_start_not_mem_tail_carries (start : V) (goal : V)
+    (start_visited : WeightedDiGraph.search_invar_start_visited start state)
+    (start_zero_zero : search_invar_start_path_order_zero_zero start state)
+    :
+     ∀ head : V, ∀ tail : List V, 
+        search_invar_start_not_mem_tail start state
+          ∧ ¬ head = goal
+          ∧ state.stack = head :: tail
+        → search_invar_start_not_mem_tail start (dijkstra_step_expand state head tail) := by
+      intro head tail ⟨ prior_invar,head_ne_goal,compose⟩ 
+      unfold search_invar_start_not_mem_tail
+      unfold search_invar_start_path_order_zero_zero at start_zero_zero
+      unfold dijkstra_step_expand
+      simp_all
+      intro start_in
+      apply List.mem_of_mem_tail at start_in
+      simp at start_in
+      grind
+
 
 lemma dijkstra_expand_keeps_shortest_path_invar_start
     (start : V) (goal : V)
@@ -1000,7 +1029,7 @@ lemma dijkstra_new_head_cost_lt_other_on_stack_now
   (head : V) (tail : List V) 
   (u : V) (u_on_stack_after : u ∈ (dijkstra_step_expand state head tail).stack)
   (v : V) (after_not_nil : (dijkstra_step_expand state head tail).stack ≠ [])
-  (adj_head_v : g.Adj head v)
+  --(adj_head_v : g.Adj head v)
   (v_head_after : (dijkstra_step_expand state head tail).stack.head after_not_nil = v):
   ((dijkstra_step_expand state head tail).pathOrder v).1 ≤ ((dijkstra_step_expand state head tail).pathOrder u).1 := by
     unfold dijkstra_step_expand at v_head_after
@@ -1048,6 +1077,267 @@ lemma split_1 (p : g.Path a b) (w : V) (w_in_supp : w ∈ p.val.support) (w_ne_a
     obtain ⟨u, au, adj_u_w, _, _⟩ := p_aw.split_at_end (Ne.symm w_ne_a)
     exact ⟨u, au, adj_u_w⟩
 
+omit [DecidableEq V] in 
+private lemma track_walk_not_on_stack
+  (on_stack_or_nei_visited : search_invar_on_stack_or_all_neighbours_visited state)
+  (start_visited : search_invar_start_visited start state)
+  (w_w : g.Walk start w)
+  (w_nodup : w_w.support.Nodup)
+  (no_pw_mem_on_stack : ∀ x ∈ w_w.support, x ∉ state.stack):
+    ∀ x ∈ w_w.support, x ∈ state.visited := by
+      cases w_w
+      case nil =>
+        intro x x_in_nil_supp
+        simp_all
+      case cons w' h p =>
+        intro x x_in_supp
+        unfold  Walk.support at x_in_supp
+        apply List.mem_cons.mp at x_in_supp
+        cases x_in_supp
+        case inl x_is_start =>
+          grind
+        case inr x_in_p_support =>
+          have p_nodup : p.support.Nodup := by
+            unfold Walk.support at w_nodup
+            apply List.nodup_cons.mp at w_nodup
+            exact w_nodup.2
+          apply track_walk_not_on_stack (w_w := p)
+          · exact on_stack_or_nei_visited
+          · unfold search_invar_start_visited at ⊢ start_visited
+            unfold search_invar_on_stack_or_all_neighbours_visited at on_stack_or_nei_visited
+            have start_not_on_stack : start ∉ state.stack := by
+              apply no_pw_mem_on_stack
+              unfold Walk.support
+              simp
+            specialize on_stack_or_nei_visited ⟨start, start_visited ⟩ 
+            simp_all
+          · exact p_nodup
+          · intro y y_in_pp_supp
+            apply no_pw_mem_on_stack
+            unfold Walk.support
+            apply List.mem_cons.mpr
+            right
+            apply y_in_pp_supp
+          · apply x_in_p_support
+
+omit [DecidableEq V] in
+private lemma track_path_not_on_stack
+  (on_stack_or_nei_visited : search_invar_on_stack_or_all_neighbours_visited state)
+  (start_visited : search_invar_start_visited start state)
+  (p_w : g.Path start w)
+  (no_pw_mem_on_stack : ∀ x ∈ p_w.support, x ∉ state.stack):
+    ∀ x ∈ p_w.support, x ∈ state.visited := by
+      intro x x_in_supp
+      apply track_walk_not_on_stack (w_w := p_w.val)
+      · apply on_stack_or_nei_visited
+      · apply start_visited
+      · exact p_w.prop
+      · intro y y_in_pw_supp
+        apply no_pw_mem_on_stack
+        apply y_in_pw_supp
+      · apply x_in_supp
+
+
+--have v_after_eq_e_sh: ((dijkstra_step_expand state head tail).pathOrder v).1 = e + path_to_head.cost := by
+--(mother_and_edge_smaller_order_before : (state.pathOrder the_mother).1 + edgeCost adj_mother_v ≤ (state.pathOrder v).1)
+--path_mother.cost + e ≤ ((dijkstra_step_expand state head tail).pathOrder v).1
+
+/--
+  The node v is the head of the stack after this expansion.
+  I.e. it is smaller than all other nodes on the stack, after the expansion.
+  v has a mother (the_mother). There is a path from start to the_mother, that is a shortest path.
+  the_mother is visited, but is not on the stack or was the head.
+  Notably, this implies that the pathOrder of the_mother is the cost of that path.
+
+
+  In addition, we have a path p' that is supposedly shorter than the path start->the_mother->v
+  Now, p' contains a first node u that is still on the stack (this lemma only treats this case, if not use other lemma)
+  We can now consider the sub-path of p' from start to u
+
+-/
+private lemma dijkstra_shorter_path_first_on_stack_not_head {start : V}
+(the_mother : V)
+(v : V)
+(u : V)
+--(mother_invar : search_invar_mother_is_visited state)
+--(mother_invar_adj : search_invar_mother_is_adjacent start state)
+--(decreasing_invar : search_invar_mother_decreasing_path_order start state)
+(start_visited : search_invar_start_visited start state)
+(on_stack_or_nei_visited : search_invar_on_stack_or_all_neighbours_visited state)
+--(stack_visited_invar : search_invar_stack_is_visited state)
+--(path_order_diff : dijkstra_path_order_diff_by_edge_cost start state)
+(update_invar : dijkstra_invar_on_stack_or_all_neighbours_max_order state)
+--(stack_sorted : dijkstra_stack_sorted state)
+--(start_path_order : search_invar_start_path_order_zero_zero start state)
+(start_not_mem_tail : search_invar_start_not_mem_tail start state)
+(head : V)
+(tail : List V)
+(prior_invar : dijkstra_stack_shortest_path start state)
+(compose : state.stack = head :: tail)
+--  (v_visited_after : v ∈ (dijkstra_step_expand state head tail).visited)
+  --(head_was_visited_before : head ∈ state.visited)
+  --(path_to_head : g.Path start head)
+  --(ph_eq_dh : path_to_head.cost = (state.pathOrder head).1)
+  --(support_visited : ∀ u ∈ path_to_head.val.support, u ∈ state.visited)
+  --(v_not_start : v ≠ start)
+--  (stack_not_empty_after : ¬(dijkstra_step_expand state head tail).stack = [])
+  --(head_after_is_v : (dijkstra_step_expand state head tail).stack.head stack_not_empty_after = v)
+--(v_visited : v ∈ state.visited)
+--(mother_visited : the_mother ∈ state.visited)
+--(mother_not_on_stack_or_head : the_mother ∉ state.stack ∨ the_mother = head)
+--  (the_mother_is : the_mother = state.mother ⟨v, v_visited⟩)
+--  (mother_same : (dijkstra_step_expand state head tail).mother ⟨v, v_visited_after⟩ = the_mother)
+--  (mother_ne_head : the_mother ≠ head)
+--  (pathOrder_unchanged : (dijkstra_step_expand state head tail).pathOrder v = state.pathOrder v)
+(adj_mother_v : g.Adj the_mother v)
+--  (mother_and_edge_smaller_order_before : (state.pathOrder the_mother).1 + edgeCost adj_mother_v ≤ (state.pathOrder v).1)
+--  (pathOrder_mother_decreases : ((dijkstra_step_expand state head tail).pathOrder the_mother).1 ≤ (state.pathOrder the_mother).1)
+
+--- there is a path from start to the_mother
+(path_mother : Path start the_mother)
+--(path_mother_is : path_mother = (extract_path_to start the_mother state mother_visited mother_invar mother_invar_adj decreasing_invar).fst)
+----
+(v_not_in_mother_path : v ∉ path_mother.val.support)
+(path_mother_v : Path start v)
+(path_mother_v_is : path_mother_v = path_mother.concat adj_mother_v v_not_in_mother_path)
+------ p' is the supposedly shorter path
+(p' : g.Path start v)
+(p'_cheaper : p'.val.cost < path_mother_v.val.cost)
+--
+(u_in_support : u ∈ p'.val.support)
+(u_on_stack : u ∈ state.stack)
+(u_ne_v : u ≠ v)
+(prior_not_on_stack : ((List.takeWhile (fun x => decide (x ≠ u)) p'.support).all fun x => decide (x ∉ state.stack)) = true)
+(u_visited : u ∈ state.visited)
+(su : g.Path start u)
+(cheaper : su.cost ≤ p'.cost)
+(u_ne_head : head ≠ u)
+(mother_plus_e_le_u : path_mother.cost + g.edgeCost adj_mother_v ≤ (state.pathOrder u).1 )
+:
+⊥ := by
+  let e := g.edgeCost adj_mother_v
+  obtain ⟨su, cheaper, supp_subseq⟩ := p'.contains_subpath_cost u_in_support u_ne_v
+  
+  -- u cannot be the start node (as u has to be on the stack and cannot be head)
+  have u_ne_start : start ≠ u := by
+    by_contra
+    subst this
+    --simp_all
+    simp [*] at u_on_stack
+    cases u_on_stack
+    · grind
+    · next start_in_tail =>
+      unfold search_invar_start_not_mem_tail at start_not_mem_tail 
+      grind
+  
+  -- this allows us to consider the predecessor of u on the path su - which we call w
+  obtain ⟨ w,p_w,adj_w_u,u_not_earlier_in_path,su_compose⟩ := su.split_at_end u_ne_start
+ 
+  have no_pw_mem_on_stack : ∀ x ∈ p_w.support, x ∉ state.stack := by
+    intro x x_in_support
+    unfold Path.support at prior_not_on_stack supp_subseq
+    rw [su_compose] at supp_subseq
+    simp at supp_subseq
+    unfold List.IsPrefix at supp_subseq
+    obtain ⟨ t, compose ⟩ := supp_subseq
+    rw [← compose] at prior_not_on_stack
+    rw [List.append_assoc] at prior_not_on_stack
+    rw [List.takeWhile_append_of_pos] at prior_not_on_stack
+    · rw [List.all_append] at prior_not_on_stack
+      apply Bool.and_elim_left at prior_not_on_stack
+      apply List.all_iff_forall_prop.mp at prior_not_on_stack
+      apply prior_not_on_stack
+      apply x_in_support
+    · grind
+  
+  -- w now has to not be part of the stack (as u was the first node to be on the stack!)
+  have w_not_on_stack : w ∉ state.stack := by
+    apply no_pw_mem_on_stack
+    apply Walk.goal_in_support
+
+  have w_visited : w ∈ state.visited := by
+    apply track_path_not_on_stack (p_w := p_w)
+    · exact on_stack_or_nei_visited
+    · exact start_visited
+    · exact no_pw_mem_on_stack
+    · apply Path.goal_in_support
+  
+  let f := edgeCost adj_w_u 
+  have p_w_le_su : p_w.cost + f = su.cost := by
+    conv => right ; unfold Path.cost
+    rw [su_compose]
+    unfold f
+    rw [add_comm]
+    rw [Walk.concat_inc_cost_by_edge]
+    rfl
+  -- Eq 8
+  have du_le_sq_f : (state.pathOrder u).1 ≤ p_w.cost + f := by
+    unfold dijkstra_stack_shortest_path at prior_invar
+    specialize prior_invar w w_visited
+    --simp_all
+    unfold cost_is at prior_invar
+    rw [or_imp] at prior_invar
+    obtain ⟨prior_invar, _ ⟩ := prior_invar
+    specialize prior_invar w_not_on_stack
+    obtain ⟨ sp, cost_is_order,is_cheapest ⟩ := prior_invar
+    unfold Path.is_cheapest at is_cheapest
+    specialize is_cheapest p_w
+    conv at is_cheapest => right ; unfold Path.cost
+    have w_sp : (state.pathOrder w).1 ≤ p_w.val.cost := by omega
+    apply le_trans
+    rotate_left
+    · apply add_le_add_left
+      apply w_sp
+    · unfold dijkstra_invar_on_stack_or_all_neighbours_max_order at update_invar 
+      specialize update_invar ⟨ w, w_visited ⟩ w_not_on_stack u adj_w_u
+      omega
+
+  --have dh_le_sw_f : (state.pathOrder head).1 ≤ p_w.cost + f := by omega
+  
+  -- Eq 9: from head already optimal
+  --have ph_le_sw_f : path_to_head.cost ≤ p_w.cost + f := by omega
+  --have ph_e_le_sw_f_e : path_to_head.cost + e ≤ p_w.cost + f + e := by omega
+  --have su_lt_sw_f_e : su.cost < p_w.cost + f + e := by omega
+  
+  --have xxx : (state.pathOrder the_mother).1 = path_mother.cost := by sorry
+  --have xxxx : (state.pathOrder the_mother).1 + e = path_mother_v.cost := by sorry
+
+  have p'_lt_mp_plus_e : p'.cost < path_mother.cost + e := by
+    unfold Path.cost
+    convert p'_cheaper
+    rw [path_mother_v_is]
+    unfold Path.concat
+    simp [Walk.concat_inc_cost_by_edge]
+    grind
+
+  --have updated_value_at_most :  ≤ ((dijkstra_step_expand state head tail).pathOrder v).1 := by
+  --  -- due to update on mother
+  --  unfold dijkstra_path_order_diff_by_edge_cost at path_order_diff
+  --  specialize path_order_diff mother_invar_adj v v_visited v_not_start
+  --  sorry
+  --  --unfold the_mother
+  --  --grind
+  --   --unfold dijkstra_invar_on_stack_or_all_neighbours_max_order at update_invar
+  --  --cases mother_not_on_stack_or_head
+  --  --case inl mother_not_on_stack =>
+  --  --  specialize update_invar ⟨ the_mother, mother_visited ⟩ mother_not_on_stack v adj_mother_v
+  --  --  sorry
+  --  --· sorry
+  --
+  --have updated_value_le_other : ((dijkstra_step_expand state head tail).pathOrder v).1 ≤ ((dijkstra_step_expand state head tail).pathOrder u).1 := by
+  --  -- due to v being head of stack after
+  --  sorry
+  --
+  --have later_value_le : ((dijkstra_step_expand state head tail).pathOrder u).1 ≤ (state.pathOrder u).1 := by
+  --  unfold dijkstra_step_expand
+  --  simp
+  --  grind
+
+  have p'_lt_du : p'.cost < (state.pathOrder u).1 := by omega
+  have p'_lt_sw_f : p'.cost < p_w.cost + f := by omega
+
+  omega 
+
 
 
 lemma dijkstra_path_head_adj_new_head_is_cheapest {start : V}
@@ -1057,6 +1347,7 @@ lemma dijkstra_path_head_adj_new_head_is_cheapest {start : V}
     (update_invar : dijkstra_invar_on_stack_or_all_neighbours_max_order state)
     (start_path_order : search_invar_start_path_order_zero_zero start state)
     (prior_invar : dijkstra_stack_shortest_path start state)
+    (start_not_mem_tail : search_invar_start_not_mem_tail start state)
     -- execution of current step
     {head : V} {tail : List V}
     (compose : state.stack = head :: tail)
@@ -1151,61 +1442,65 @@ lemma dijkstra_path_head_adj_new_head_is_cheapest {start : V}
           --have dh_le_du : (state.pathOrder head).1 ≤ (state.pathOrder u).1 := by 
 
           --have su_lt_sh_e : su.cost < path_to_head.cost + e := by omega
-     
-          have u_ne_start : start ≠ u := by
-            by_contra
-            subst this
-            simp_all
-          
+          apply dijkstra_shorter_path_first_on_stack_not_head (the_mother:=head) (v:=v) (u:=u) (start:=start) <;> try assumption
+          · rfl
+          · exact cheaper.1
+          · grind
 
-          obtain ⟨ w,p_w,adj_w_u,u_not_earlier_in_path,su_compose⟩ := su.split_at_end u_ne_start
+          --have u_ne_start : start ≠ u := by
+          --  by_contra
+          --  subst this
+          --  simp_all?
+          --
 
-          --obtain ⟨w,p_w,adj_w_u⟩ := split_1 p' u u_in_support (Ne.symm u_ne_start)
-          --obtain ⟨w,p_w,adj_w_u⟩ := split_1 p' u u_in_support (Ne.symm u_ne_start)
+          --obtain ⟨ w,p_w,adj_w_u,u_not_earlier_in_path,su_compose⟩ := su.split_at_end u_ne_start
 
-          -- w is the predecessor of u on p'
-          --have w : V := by 
-          --have p_w : g.Path start w := by 
-          --have adj_w_u : g.Adj w u := by 
-          have w_not_on_stack : w ∉ state.stack := by sorry
-          have w_visited : w ∈ state.visited := by sorry
-          let f := edgeCost adj_w_u 
-          have p_w_le_su : p_w.cost + f = su.cost := by
-            conv => right ; unfold Path.cost
-            rw [su_compose]
-            unfold f
-            rw [add_comm]
-            rw [Walk.concat_inc_cost_by_edge]
-            rfl
-          -- Eq 8
-          have du_le_sq_f : (state.pathOrder u).1 ≤ p_w.cost + f := by
-            unfold dijkstra_stack_shortest_path at prior_invar
-            specialize prior_invar w w_visited
-            simp_all
-            unfold cost_is at prior_invar
-            obtain ⟨ sp, cost_is_order,is_cheapest ⟩ := prior_invar
-            unfold Path.is_cheapest at is_cheapest
-            specialize is_cheapest p_w
-            conv at is_cheapest => right ; unfold Path.cost
-            have w_sp : (state.pathOrder w).1 ≤ p_w.val.cost := by omega
-            apply le_trans
-            rotate_left
-            · apply add_le_add_right
-              apply w_sp
-            · specialize update_invar w w_visited w_not_on_stack.left w_not_on_stack.right u adj_w_u
-              omega
+          ----obtain ⟨w,p_w,adj_w_u⟩ := split_1 p' u u_in_support (Ne.symm u_ne_start)
+          ----obtain ⟨w,p_w,adj_w_u⟩ := split_1 p' u u_in_support (Ne.symm u_ne_start)
 
-          --have dh_le_sw_f : (state.pathOrder head).1 ≤ p_w.cost + f := by omega
-          
-          -- Eq 9: from head already optimal
-          --have ph_le_sw_f : path_to_head.cost ≤ p_w.cost + f := by omega
-          --have ph_e_le_sw_f_e : path_to_head.cost + e ≤ p_w.cost + f + e := by omega
-          --have su_lt_sw_f_e : su.cost < p_w.cost + f + e := by omega
-          
-          have p'_lt_du : p'.cost < (state.pathOrder u).1 := by omega
-          have p'_lt_sw_f : p'.cost < p_w.cost + f := by omega
+          ---- w is the predecessor of u on p'
+          ----have w : V := by 
+          ----have p_w : g.Path start w := by 
+          ----have adj_w_u : g.Adj w u := by 
+          --have w_not_on_stack : w ∉ state.stack := by sorry
+          --have w_visited : w ∈ state.visited := by sorry
+          --let f := edgeCost adj_w_u 
+          --have p_w_le_su : p_w.cost + f = su.cost := by
+          --  conv => right ; unfold Path.cost
+          --  rw [su_compose]
+          --  unfold f
+          --  rw [add_comm]
+          --  rw [Walk.concat_inc_cost_by_edge]
+          --  rfl
+          ---- Eq 8
+          --have du_le_sq_f : (state.pathOrder u).1 ≤ p_w.cost + f := by
+          --  unfold dijkstra_stack_shortest_path at prior_invar
+          --  specialize prior_invar w w_visited
+          --  simp_all
+          --  unfold cost_is at prior_invar
+          --  obtain ⟨ sp, cost_is_order,is_cheapest ⟩ := prior_invar
+          --  unfold Path.is_cheapest at is_cheapest
+          --  specialize is_cheapest p_w
+          --  conv at is_cheapest => right ; unfold Path.cost
+          --  have w_sp : (state.pathOrder w).1 ≤ p_w.val.cost := by omega
+          --  apply le_trans
+          --  rotate_left
+          --  · apply add_le_add_right
+          --    apply w_sp
+          --  · specialize update_invar w w_visited w_not_on_stack.left w_not_on_stack.right u adj_w_u
+          --    omega
 
-          omega 
+          ----have dh_le_sw_f : (state.pathOrder head).1 ≤ p_w.cost + f := by omega
+          --
+          ---- Eq 9: from head already optimal
+          ----have ph_le_sw_f : path_to_head.cost ≤ p_w.cost + f := by omega
+          ----have ph_e_le_sw_f_e : path_to_head.cost + e ≤ p_w.cost + f + e := by omega
+          ----have su_lt_sw_f_e : su.cost < p_w.cost + f + e := by omega
+          --
+          --have p'_lt_du : p'.cost < (state.pathOrder u).1 := by omega
+          --have p'_lt_sw_f : p'.cost < p_w.cost + f := by omega
+
+          --omega 
         · simp at u_ne_head
 
           have su_ge_ph : su.cost ≥ path_to_head.cost := by
@@ -1300,12 +1595,12 @@ lemma dijkstra_path_head_adj_new_head_is_cheapest {start : V}
                   have q_order_ge_v_order_after : ((dijkstra_step_expand state head tail).pathOrder q).1 ≥ ((dijkstra_step_expand state head tail).pathOrder v).1 := by
                     apply dijkstra_new_head_cost_lt_other_on_stack_now
                     · exact q_on_stack_after
-                    · exact adj_head_v
                     · apply head_after_is_v
 
                   obtain ⟨ wq, cheaper⟩ := p_path.contains_subpath_cost q_in_supp q_ne_v
 
                   have f_wq_lt_e : f + wq.cost < e := by
+                    obtain ⟨ cheaper , _ ⟩ := cheaper
                     conv at cheaper =>
                       right
                       unfold p_path Path.cost
@@ -1379,7 +1674,6 @@ lemma dijkstra_path_head_adj_new_head_is_cheapest {start : V}
                 have w_order_ge_v_order_after : ((dijkstra_step_expand state head tail).pathOrder w).1 ≥ ((dijkstra_step_expand state head tail).pathOrder v).1 := by
                   apply dijkstra_new_head_cost_lt_other_on_stack_now
                   · exact w_on_stack_after
-                  · exact adj_head_v
                   · apply head_after_is_v
                 have f_ge_e : f ≥ e := by
                   unfold dijkstra_step_expand at w_order_ge_v_order_after
@@ -1430,6 +1724,124 @@ lemma dijkstra_path_head_adj_new_head_is_cheapest {start : V}
         simp_all
 
 
+
+
+lemma dijkstra_path_mother_adj_new_head_is_cheapest {start : V}
+    (mother_invar : search_invar_mother_is_visited state)
+    (mother_invar_adj : search_invar_mother_is_adjacent start state)
+    (decreasing_invar : search_invar_mother_decreasing_path_order start state)
+    (start_visited : search_invar_start_visited start state)
+    (on_stack_or_nei_visited : search_invar_on_stack_or_all_neighbours_visited state)
+    (stack_visited_invar : search_invar_stack_is_visited state)
+    (path_order_diff : dijkstra_path_order_diff_by_edge_cost start state)
+    (update_invar : dijkstra_invar_on_stack_or_all_neighbours_max_order state)
+    (stack_sorted : dijkstra_stack_sorted state)
+    (start_path_order : search_invar_start_path_order_zero_zero start state)
+    (start_not_mem_tail : search_invar_start_not_mem_tail start state)
+    (head : V)
+    (tail : List V)
+    (prior_invar : dijkstra_stack_shortest_path start state)
+    (compose : state.stack = head :: tail)
+    (v : V)
+    (v_visited_after : v ∈ (dijkstra_step_expand state head tail).visited)
+    (head_was_visited_before : head ∈ state.visited)
+    (path_to_head : g.Path start head ) -- := (extract_path_to start head state head_was_visited_before mother_invar mother_invar_adj decreasing_invar).fst)
+    (ph_eq_dh : path_to_head.cost = (state.pathOrder head).1)
+    (support_visited : ∀ u ∈ path_to_head.val.support, u ∈ state.visited)
+    (v_not_start : v ≠ start)
+    (stack_not_empty_after : ¬(dijkstra_step_expand state head tail).stack = [])
+    (head_after_is_v : (dijkstra_step_expand state head tail).stack.head stack_not_empty_after = v)
+    (v_visited : v ∈ state.visited)
+    (the_mother : V)
+    (the_mother_is : the_mother = state.mother ⟨v, v_visited⟩)
+    (mother_same : (dijkstra_step_expand state head tail).mother ⟨v, v_visited_after⟩ = the_mother)
+    (mother_ne_head : the_mother ≠ head)
+    (mother_visited : the_mother ∈ state.visited)
+    (pathOrder_unchanged : (dijkstra_step_expand state head tail).pathOrder v = state.pathOrder v)
+    (adj_mother_v : g.Adj the_mother v)
+    (mother_and_edge_smaller_order_before : (state.pathOrder the_mother).1 + edgeCost adj_mother_v ≤ (state.pathOrder v).1)
+    (pathOrder_mother_decreases : ((dijkstra_step_expand state head tail).pathOrder the_mother).1 ≤ (state.pathOrder the_mother).1)
+    (mother_not_on_stack : the_mother ∉ state.stack)
+    (path_mother : Path start the_mother)
+    (path_mother_is : path_mother = (extract_path_to start the_mother state mother_visited mother_invar mother_invar_adj decreasing_invar).fst)
+    (v_not_in_mother_path : v ∉ path_mother.val.support)
+    (path_mother_v : Path start v)
+    (path_mother_v_is : path_mother_v = path_mother.concat adj_mother_v v_not_in_mother_path)
+    (p' : g.Path start v)
+    (p'_cheaper : p'.val.cost < path_mother_v.val.cost):
+    ⊥ := by
+    
+
+      -- we can run along p' until we find a first node in p' that is still on the stack (before the expansion)
+      -- or (second case) no node is on the stack, but then all nodes are visited
+      have p'_elem_on_stack_or_v_visited :
+        -- possibly stronger: the all elements are also visited!
+        (∃ u ∈ p'.val.support, u ∈ state.stack ∧ u ≠ v ∧ (p'.support.takeWhile (· ≠ u)).all (· ∉ state.stack)) ∨
+          (v ∈ state.visited ∧ ∀ u ∈ p'.val.support, u ≠ v → u ∉ state.stack ∧ u ∈ state.visited) := 
+        run_path_through_state_yields_node_on_stack_or_all_visited start v v_not_start p' state start_visited on_stack_or_nei_visited
+
+      cases p'_elem_on_stack_or_v_visited
+      · next u_in_support_on_stack =>
+        -- first node in p that is on the stack: call it u
+        -- all nodes before u are not on the stack, i.e. paths to them are shortest paths.
+        obtain ⟨u, ⟨u_in_support, ⟨ u_on_stack, u_ne_v, prior_not_on_stack⟩ ⟩ ⟩ := u_in_support_on_stack
+        have u_visited : u ∈ state.visited := by grind 
+        -- extract path from start to this node u
+        -- su is not longer than p' itself
+        obtain ⟨su, cheaper⟩ := p'.contains_subpath_cost u_in_support u_ne_v
+        
+        by_cases u_ne_head : head ≠ u
+        · 
+          apply dijkstra_shorter_path_first_on_stack_not_head (the_mother:=the_mother) (v:=v) (u:=u) (start:=start) <;> try assumption
+          · exact cheaper.1
+          · 
+            have h1 : path_mother.cost + edgeCost adj_mother_v ≤ (state.pathOrder v).1:= by
+              convert mother_and_edge_smaller_order_before
+              apply eq_of_le_of_ge
+              · rw [path_mother_is]
+                apply dijkstra_path_extracted_not_longer_than_path_order
+                exact path_order_diff
+              · unfold dijkstra_stack_shortest_path at prior_invar
+                specialize prior_invar the_mother mother_visited
+                simp [mother_not_on_stack] at prior_invar
+                unfold cost_is at prior_invar
+                obtain ⟨ p, ⟨order, is_cheapest⟩ ⟩ := prior_invar
+                rw [← order]
+                unfold Path.is_cheapest at is_cheapest
+                exact is_cheapest path_mother 
+            have h2 : path_mother.cost + edgeCost adj_mother_v ≤ ((dijkstra_step_expand state head tail).pathOrder v).1 := by
+              rw [pathOrder_unchanged]
+              apply h1
+
+            have h3 : ((dijkstra_step_expand state head tail).pathOrder v).1 ≤ ((dijkstra_step_expand state head tail).pathOrder u).1 := by
+              apply dijkstra_new_head_cost_lt_other_on_stack_now
+              · unfold dijkstra_step_expand
+                simp
+                rw [compose] at u_on_stack
+                rw [List.mem_cons] at u_on_stack
+                cases u_on_stack
+                case inl u_eq_head =>
+                  apply absurd u_eq_head.symm u_ne_head 
+                case inr u_tail =>
+                  left ; assumption
+              · apply head_after_is_v
+            have h4 : ((dijkstra_step_expand state head tail).pathOrder u).1 ≤ (state.pathOrder u).1 := by
+              unfold dijkstra_step_expand
+              simp
+              grind
+
+            have h5 : ((dijkstra_step_expand state head tail).pathOrder v).1 ≤ (state.pathOrder u).1 := by omega
+
+            omega
+        · simp at u_ne_head
+          rename head = u => u_eq_head
+          sorry
+
+      -- 2. case: all nodes in p' are visited and all but v are not on the stack
+      ·
+        -- path is completely explored, so we have the update invar along it
+        sorry
+
 set_option maxHeartbeats 2000000000
 
 lemma dijkstra_expand_keeps_shortest_path_invar
@@ -1447,6 +1859,7 @@ lemma dijkstra_expand_keeps_shortest_path_invar
     (update_invar : dijkstra_invar_on_stack_or_all_neighbours_max_order state)
     (stack_sorted : dijkstra_stack_sorted state)
     (start_path_order : search_invar_start_path_order_zero_zero start state)
+    (start_not_mem_tail : search_invar_start_not_mem_tail start state)
     :
      ∀ head : V, ∀ tail : List V, 
         dijkstra_stack_shortest_path start state
@@ -1601,20 +2014,20 @@ lemma dijkstra_expand_keeps_shortest_path_invar
               simp_all
               unfold e edgeCost at v_order_eq_head_plus_edge
               split_ifs at v_order_eq_head_plus_edge <;> grind
-            · apply dijkstra_path_head_adj_new_head_is_cheapest
-              · apply start_visited
-              · exact stack_visited_invar
-              · exact on_stack_or_nei_visited
-              · exact update_invar
-              · exact start_path_order
-              · exact prior_invar
-              · exact compose
-              · exact head_was_visited_before
-              · exact ph_eq_dh
-              · exact v_not_start
-              · exact head_after_is_v
-              · exact v_order_eq_head_plus_edge
-              · exact support_visited
+            · apply dijkstra_path_head_adj_new_head_is_cheapest <;> try assumption
+              --· apply start_visited
+              --· exact stack_visited_invar
+              --· exact on_stack_or_nei_visited
+              --· exact update_invar
+              --· exact start_path_order
+              --· exact prior_invar
+              --· exact compose
+              --· exact head_was_visited_before
+              --· exact ph_eq_dh
+              --· exact v_not_start
+              --· exact head_after_is_v
+              --· exact v_order_eq_head_plus_edge
+              --· exact support_visited
               · intro p_start_v ⟨p_lt_ph_e,v_visited,cond3⟩
                 obtain ⟨ w,path_start_w,w_adj_v,v_not_earlier_in_path,p_start_v_compose⟩ := p_start_v.split_at_end (Ne.symm v_not_start)
                 
@@ -1963,7 +2376,16 @@ lemma dijkstra_expand_keeps_shortest_path_invar
                   unfold Path.cost at is_cheapest p_cost
                   convert is_cheapest
                   exact p_cost.symm
-            · sorry
+            · rename_i h 
+              obtain ⟨ mother_remains, mother_ne_head ⟩ := h
+              unfold Path.is_cheapest
+              intro p'
+              by_contra p'_cheaper; simp at p'_cheaper
+
+              apply dijkstra_path_mother_adj_new_head_is_cheapest (start:=start) (v:=v) (p':=p') (path_mother:=path_mother) <;> try assumption
+              · rfl
+              · unfold path_mother ; rfl
+              · unfold path_mother_v ; rfl
         · unfold dijkstra_step_expand at v_visited_after
           simp at v_visited_after
           simp [v_visited] at v_visited_after
@@ -1994,20 +2416,7 @@ lemma dijkstra_expand_keeps_shortest_path_invar
             -- selected apth to v is (path_to_head ; <head,v>)
             -- 
             -- Now: Assume there is a shorter path to v: p'
-            apply dijkstra_path_head_adj_new_head_is_cheapest
-            · apply start_visited
-            · exact stack_visited_invar
-            · exact on_stack_or_nei_visited
-            · exact update_invar
-            · exact start_path_order
-            · exact prior_invar
-            · exact compose
-            · exact head_was_visited_before
-            · exact ph_eq_dh
-            · exact v_not_start
-            · exact head_after_is_v
-            · exact v_order_eq_head_plus_edge
-            · exact support_visited
+            apply dijkstra_path_head_adj_new_head_is_cheapest <;> try assumption
             · grind
             · grind
     · simp at v_not_start
@@ -2167,7 +2576,8 @@ lemma dijkstra_expand_carries_all_dijkstra_invars (start : V) (goal : V):
           · exact invar_before.right.right.left
           · exact invar_before.right.right.right.left
           · exact invar_before.right.right.right.right.left
-          · exact invar_before.right.right.right.right.right
+          · exact invar_before.right.right.right.right.right.left
+          · exact invar_before.right.right.right.right.right.right
           · exact ⟨ invar_before.right.left, head_ne_goal, compose⟩
         · apply dijkstra_expand_keeps_on_path_order_diff 
           · exact invar_before.left.left
@@ -2181,7 +2591,11 @@ lemma dijkstra_expand_carries_all_dijkstra_invars (start : V) (goal : V):
           · exact ⟨ invar_before.right.right.right.right.left, head_ne_goal, compose⟩
         · apply dijkstra_expand_start_path_order_zero_carries
           · exact invar_before.left.right.right.right.right.right
-          · exact ⟨ invar_before.right.right.right.right.right, head_ne_goal, compose⟩
+          · exact ⟨ invar_before.right.right.right.right.right.left, head_ne_goal, compose⟩
+        · apply dijkstra_expand_start_not_mem_tail_carries 
+          · exact invar_before.left.right.right.right.right.right
+          · exact invar_before.right.right.right.right.right.left
+          · exact ⟨ invar_before.right.right.right.right.right.right, head_ne_goal, compose⟩
 
 
 
