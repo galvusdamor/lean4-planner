@@ -168,7 +168,7 @@ def is_cheapest {u v : V} (p : G.Path u v) : Prop :=
 
 
 theorem contains_subpath_cost {u v w : V} (p : G.Path u v) (w_in_path : w ∈ p.support) (w_ne_v : w ≠ v):
-    ∃ p' : G.Path u w, p'.cost ≤ p.cost := by
+    ∃ p' : G.Path u w, p'.cost ≤ p.cost ∧ p'.support <+: p.support := by
     obtain ⟨w',len,supp⟩ := p.val.contains_subwalk_cost w_in_path w_ne_v 
     have p_nodup : w'.support.Nodup := by
       apply List.Nodup.sublist (l₂ := p.support)
@@ -176,8 +176,11 @@ theorem contains_subpath_cost {u v w : V} (p : G.Path u v) (w_in_path : w ∈ p.
         exact supp
       · exact p.prop
     use ⟨ w', p_nodup⟩
-    unfold cost
-    apply len
+    constructor
+    · unfold cost
+      apply len
+    · unfold Path.support
+      apply supp
 
 end Path
 
