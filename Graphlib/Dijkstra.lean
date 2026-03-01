@@ -1767,6 +1767,7 @@ lemma dijkstra_path_mother_adj_new_head_is_cheapest {start : V}
     (v_not_in_mother_path : v ∉ path_mother.val.support)
     (path_mother_v : Path start v)
     (path_mother_v_is : path_mother_v = path_mother.concat adj_mother_v v_not_in_mother_path)
+    (path_explored_contra : ∀ p : g.Path start v, (p.cost < (path_mother.concat adj_mother_v v_not_in_mother_path).cost ∧ v ∈ state.visited ∧ ∀ u ∈ p.support, u ≠ v → u ∉ state.stack ∧ u ∈ state.visited) → ⊥)
     (p' : g.Path start v)
     (p'_cheaper : p'.val.cost < path_mother_v.val.cost):
     ⊥ := by
@@ -1838,9 +1839,11 @@ lemma dijkstra_path_mother_adj_new_head_is_cheapest {start : V}
           sorry
 
       -- 2. case: all nodes in p' are visited and all but v are not on the stack
-      ·
+      · next h =>
         -- path is completely explored, so we have the update invar along it
-        sorry
+        have v_visited := h.left
+        specialize path_explored_contra p'
+        simp_all
 
 set_option maxHeartbeats 2000000000
 
@@ -2381,11 +2384,56 @@ lemma dijkstra_expand_keeps_shortest_path_invar
               unfold Path.is_cheapest
               intro p'
               by_contra p'_cheaper; simp at p'_cheaper
+              have pm_eq_dm : path_mother.val.cost = (state.pathOrder the_mother).1 := by sorry
 
               apply dijkstra_path_mother_adj_new_head_is_cheapest (start:=start) (v:=v) (p':=p') (path_mother:=path_mother) <;> try assumption
               · rfl
               · unfold path_mother ; rfl
               · unfold path_mother_v ; rfl
+              · intro p_start_v ⟨p_lt_ph_e,v_visited,cond3⟩
+                obtain ⟨ w,path_start_w,w_adj_v,v_not_earlier_in_path,p_start_v_compose⟩ := p_start_v.split_at_end (Ne.symm v_not_start)
+                
+                have w_ne_v : w ≠ v := by
+                  by_contra w_eq_v
+                  rw [← w_eq_v] at v_not_earlier_in_path
+                  have w_in_supp : w ∈ path_start_w.val.support := Path.goal_in_support path_start_w
+                  contradiction
+
+
+                have p_start_v_cost : p_start_v.val.cost = edgeCost w_adj_v + path_start_w.val.cost := by
+                  rw [p_start_v_compose] ; simp
+               
+                have w_in_supp : w ∈ p_start_v.val.support := by rw [p_start_v_compose] ; simp
+                have w_visited : w ∈ state.visited := by specialize cond3 w w_in_supp w_ne_v ; exact cond3.right
+                have w_ne_mem_stack : w ∉ state.stack := by specialize cond3 w w_in_supp w_ne_v ; exact cond3.left
+                
+                have w_order_eq : (state.pathOrder w).1 ≤ path_start_w.val.cost := by
+                  unfold dijkstra_stack_shortest_path at prior_invar
+                  specialize prior_invar w w_visited
+                  simp_all
+                  unfold cost_is at prior_invar
+                  obtain ⟨sp, ⟨ cost_eq_order, cheapest⟩ ⟩ := prior_invar
+                  unfold Path.is_cheapest at cheapest
+                  specialize cheapest path_start_w
+                  rw [cost_eq_order] at cheapest
+                  apply cheapest
+
+                have v_updated_from_w : (state.pathOrder v).1 ≤ (state.pathOrder w).1 + edgeCost w_adj_v := by
+                  unfold dijkstra_invar_on_stack_or_all_neighbours_max_order at update_invar
+                  specialize update_invar ⟨ w, w_visited ⟩  w_ne_mem_stack v w_adj_v
+                  exact update_invar
+
+                conv at p_lt_ph_e => left ; unfold Path.cost
+      
+
+                have t_1 : (state.pathOrder v).1 ≤ path_start_w.val.cost + edgeCost w_adj_v := by omega
+                have t_2 : (state.pathOrder v).1 ≤ p_start_v.val.cost := by omega
+                have t_3 : (state.pathOrder v).1 < (path_mother.concat adj_mother_v v_not_in_mother_path).cost := by omega
+                unfold Path.concat at t_3
+                simp at t_3
+                unfold Path.cost at ph_eq_dh
+                rw [pm_eq_dm] at t_3
+                omega
         · unfold dijkstra_step_expand at v_visited_after
           simp at v_visited_after
           simp [v_visited] at v_visited_after
