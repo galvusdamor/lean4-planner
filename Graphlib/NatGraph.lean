@@ -155,6 +155,19 @@ theorem cost_nil_walk_zero {u : V} : (G.nil_path u).val.length  = 0 := by
   unfold Walk.length nil_path
   simp_all
 
+@[simp]
+theorem cost_empty_zero {u : V} (p : G.Path u u) : p.cost = 0 := by
+  unfold cost 
+  unfold Walk.cost
+  cases compose : p.val
+  · simp
+  case cons w h p' =>
+    have u_in_p' : u ∈ p'.support := by simp
+    have p_prop := p.prop
+    unfold List.Nodup at p_prop
+    rw [compose] at p_prop
+    apply List.pairwise_cons.mp at p_prop
+    grind
 
 @[simp]
 theorem concat_inc_cost_by_edge (p : G.Path u v) (h : G.Adj v w) (proof_w_not_in_support : w ∉ p.support) :
