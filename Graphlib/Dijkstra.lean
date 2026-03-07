@@ -2048,12 +2048,17 @@ lemma dijkstra_path_mother_adj_new_head_is_cheapest {start : V}
                     exact prior_invar
 
                 -- entire path is visited and not on the stack (now all nodes on p' except for head itself)
-                · sorry -- path was fully on stack and fully visited
+                · rename_i h
+                  obtain ⟨v_visited,all_except_v_not_on_stack_and_visited⟩ := h 
+                  sorry -- path was fully on not stack and fully visited
               ·
                 apply dijkstra_shorter_path_with_optimal_node_and_adj_on_stack (p:=path_mother_v) (p':=p')  (p'_u:=s_u.val) (u:=head) (u':=u')  <;> try assumption
                 · by_contra head_in_tail 
                   have head_after_on_stack : head ∈ (dijkstra_step_expand state head tail).stack := by
                     unfold dijkstra_step_expand ; simp ; grind
+                  
+                  -- strange impossible case: head is twice on the stack. This should be impossible.
+                  -- unclear how.
                   sorry
                 · simp at u'_not_on_stac
                   exact u'_not_on_stac
@@ -2068,8 +2073,33 @@ lemma dijkstra_path_mother_adj_new_head_is_cheapest {start : V}
                   simp at prior_invar
                   exact prior_invar
             · -- u' will be on stack afterwards
-              -- as u' ≠ v, it must have a larger path order than v, i.e. the update from head cause a value larger than the length of path_mover_v -- which contradicts shortestpath
-              sorry
+              -- as u' ≠ v, it must have a path order ≥v, i.e. the update from head cause a value larger than the length of path_mover_v -- which contradicts shortestpath
+              have u'_on_stack_after : u' ∈ (dijkstra_step_expand state head tail).stack := by
+                unfold dijkstra_step_expand ; simp ; grind
+              
+              have u'_larger_order : ((dijkstra_step_expand state head tail).pathOrder v).1 ≤ ((dijkstra_step_expand state head tail).pathOrder u').1 := by
+                apply dijkstra_new_head_cost_lt_other_on_stack_now <;> try assumption
+              
+              --have x2 : s_u.val.cost + edgeCost adj_head_u' + u'_v.val.cost < ((dijkstra_step_expand state head tail).pathOrder u').1 := by omega
+              
+
+              have updated_from_head : ((dijkstra_step_expand state head tail).pathOrder u').1 ≤ (state.pathOrder head).1 + edgeCost adj_head_u' := by
+                unfold dijkstra_step_expand ; simp ; grind
+
+              have head_optimal : s_u.val.cost ≥ (state.pathOrder head).1 := by
+                specialize prior_invar head head_was_visited_before
+                rename_i stack_compose
+                rw [stack_compose] at prior_invar
+                simp at prior_invar
+                unfold cost_is at prior_invar
+                obtain ⟨p,p_cost,is_cheapest⟩ := prior_invar
+                unfold Path.is_cheapest at is_cheapest
+                specialize is_cheapest s_u
+                rw [p_cost] at is_cheapest
+                unfold Path.cost at is_cheapest
+                exact is_cheapest
+
+              omega
           · simp at v_not_u' ; subst v_not_u'
             -- p' goes to head and then immediately to v
             have u'_v_cost_zero : u'_v.cost = 0 := by apply WeightedDiGraph.Path.cost_empty_zero
@@ -2641,7 +2671,8 @@ lemma dijkstra_expand_keeps_shortest_path_invar
               unfold Path.is_cheapest
               intro p'
               by_contra p'_cheaper; simp at p'_cheaper
-              have pm_eq_dm : path_mother.val.cost = (state.pathOrder the_mother).1 := by sorry
+              have pm_eq_dm : path_mother.val.cost = (state.pathOrder the_mother).1 := by
+                sorry
 
               apply dijkstra_path_mother_adj_new_head_is_cheapest (start:=start) (v:=v) (p':=p') (path_mother:=path_mother) <;> try assumption
               · rfl
