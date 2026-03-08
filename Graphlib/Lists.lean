@@ -405,10 +405,12 @@ lemma mergeSort_head_from_head_unsorted {α : Type} {le : α → α → Bool}
         · exact l_ne_nil
 
 
-lemma mergeSort_count {α : Type} [BEq α] {le : α → α → Bool} 
+lemma mergeSort_count {α : Type} [BEq α] [LawfulBEq α] {le : α → α → Bool} 
   {l : List α}
   {y : α}:
-  (l.mergeSort le).count y = l.count y := by sorry
+  (l.mergeSort le).count y = l.count y := by
+    apply List.Perm.count
+    apply List.mergeSort_perm
 
 
 theorem mod_pon {a b : Prop} (h : a) : (a → b) → b := by grind 
