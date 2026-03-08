@@ -3,6 +3,7 @@ import Mathlib.Algebra.Order.Group.Nat
 import Mathlib.Combinatorics.Digraph.Basic
 import Mathlib.Data.Bool.AllAny
 import Mathlib.Data.FinEnum
+import Init.Data.List.Basic
 
 import Graphlib.Lists
 
@@ -662,19 +663,152 @@ theorem shorter_path_exists (w : G.Walk u v):
 
 end Walk
 
+
+lemma Walk.append_support_prefix {a b c: V} (w : G.Walk a b) (w' : G.Walk b c):
+    w.support <+: (w.append w').support := by
+    cases compose : w
+    · unfold Walk.support Walk.append
+      split <;> simp 
+    case cons a' h p =>
+      unfold Walk.support Walk.append
+      simp
+      apply Walk.append_support_prefix
+
+lemma Walk.concat_support_prefix {a b c: V} (w : G.Walk a b) (adj : G.Adj b c):
+    w.support <+: (w.concat adj).support := by
+    unfold Walk.concat
+    apply Walk.append_support_prefix
+
+lemma Walk.append_support_suffix {a b c: V} (w : G.Walk a b) (w' : G.Walk b c):
+    w'.support <:+ (w.append w').support := by
+    cases compose : w
+    · unfold Walk.support Walk.append
+      split <;> simp 
+    case cons a' h p =>
+      conv =>
+        right ; unfold Walk.support Walk.append
+      simp
+      apply List.suffix_cons_iff.mpr
+      right
+      apply Walk.append_support_suffix
+
+
+
+lemma Walk.recompose {s v u: V} (p : G.Walk s v) (u_on_p : u ∈ p.support) (u_ne_v : u ≠ v):
+  ∃ u' : V, ∃ s_u : G.Walk s u, ∃ adj_u_u' : G.Adj u u', ∃ u'_v : G.Walk u' v,
+    p = (s_u.concat adj_u_u').append u'_v := by
+    cases compose : p
+    · rw [compose] at u_on_p
+      unfold Walk.support at u_on_p
+      simp at u_on_p
+      contradiction
+    case cons w h p' =>
+      by_cases s_eq_u : s = u
+      · subst s_eq_u
+        use w
+        use Walk.nil
+        use h
+        use p'
+        unfold Walk.concat Walk.append Walk.append 
+        simp 
+      · have u_on_p' : u ∈ p'.support := by
+          rw [compose] at u_on_p
+          unfold Walk.support at u_on_p
+          apply List.mem_cons.mp at u_on_p
+          cases u_on_p
+          case inl h =>
+            apply absurd h.symm s_eq_u
+          case inr h =>
+            exact h
+        obtain ⟨u',w_u,adj_w_u',u'_v,prop⟩ := Walk.recompose p' u_on_p' u_ne_v
+        use u'
+        use (Walk.cons h w_u)
+        use adj_w_u'
+        use u'_v
+        rw [prop]
+        conv =>
+          right
+          unfold Walk.concat
+          left
+          unfold Walk.append
+        rfl
+
+
 /-- given an s v path and a node u on that path and the fact that u is not v, we can split the path into three parts:
     1) the path from s to u, the edge u u', and a path from u' to v-/
 lemma Path.recompose {s v u: V} (p : G.Path s v) (u_on_p : u ∈ p.support) (u_ne_v : u ≠ v):
     ∃ u' : V, ∃ s_u : G.Path s u, ∃ adj_u_u' : G.Adj u u', ∃ u'_v : G.Path u' v,
       ∃ u'_supp : u' ∉ s_u.val.support,
       ∃ u'_v_path_supp : (∀ a ∈ (s_u.concat adj_u_u' u'_supp).val.support, ∀ b ∈ u'_v.val.support.tail, a ≠ b),
-      p = (s_u.concat adj_u_u' u'_supp).append u'_v u'_v_path_supp := by sorry
+      p = (s_u.concat adj_u_u' u'_supp).append u'_v u'_v_path_supp := by
+        obtain ⟨ u', w_s_u, adj_u_u', w_u'_v, compose⟩ := p.val.recompose u_on_p u_ne_v
+        use u'
+        have s_u_nodup : w_s_u.support.Nodup := by
+          apply List.Sublist.nodup ; rotate_left
+          · exact p.prop
+          · rw [compose]
+            apply List.IsPrefix.sublist
+            apply List.IsPrefix.trans ; rotate_left
+            · apply Walk.append_support_prefix
+            · apply Walk.concat_support_prefix
+        use ⟨w_s_u,s_u_nodup⟩ 
+        use adj_u_u'
+        have u'_v_nodup : w_u'_v.support.Nodup := by
+          apply List.Sublist.nodup ; rotate_left
+          · exact p.prop
+          · rw [compose]
+            apply List.IsSuffix.sublist
+            apply Walk.append_support_suffix
+        use ⟨w_u'_v, u'_v_nodup⟩ 
+        have u'_supp : u' ∉ w_s_u.support := by
+          by_contra u'_in_w_s_u
+          obtain ⟨walk,prop⟩ := p 
+          simp at compose
+          rw [compose] at prop
+          rw [Walk.support_of_append] at prop
+          apply List.nodup_append.mp at prop
+          obtain ⟨prop,_,_⟩ := prop
+          unfold Walk.concat at prop
+          rw [Walk.support_of_append] at prop
+          apply List.nodup_append.mp at prop
+          obtain ⟨_,_,prop⟩ := prop
+          specialize prop u' u'_in_w_s_u u'
+          simp at prop
+        use u'_supp
+        have u'_v_path_supp : ∀ a ∈ (concat ⟨w_s_u, s_u_nodup⟩ adj_u_u' u'_supp).val.support, ∀ b ∈ w_u'_v.support.tail, a ≠ b := by
+          intro a a_in b b_in
+          obtain ⟨ walk, prop ⟩ := p
+          simp at compose
+          rw [compose] at prop
+          rw [Walk.support_of_append] at prop
+          apply List.nodup_append.mp at prop
+          obtain ⟨ _,_,prop ⟩ := prop
+          specialize prop a a_in b b_in
+          exact prop
+        use u'_v_path_supp
+        unfold Path.concat Path.append
+        simp
+        ext
+        rw [compose]
 
 lemma Walk.internal_contact_to_cons_walk {s v u : V}
   (s_u : G.Walk s u)
   (adj_u_u' : G.Adj u u')
   (u'_v : G.Walk u' v):
-  (s_u.concat adj_u_u').append u'_v = s_u.append (Walk.cons adj_u_u' u'_v) := by sorry
+  (s_u.concat adj_u_u').append u'_v = s_u.append (Walk.cons adj_u_u' u'_v) := by
+    cases compose : s_u
+    · unfold Walk.concat Walk.append
+      unfold Walk.append
+      simp only
+    case cons w h p =>
+      unfold Walk.concat
+      conv => left ; left ; unfold Walk.append
+      conv => right ; unfold Walk.append
+      nth_rw 1 [Walk.append] 
+      congr 1
+      conv => right ; rw [← Walk.internal_contact_to_cons_walk] 
+      unfold Walk.concat
+      rfl
 
 
 end WeightedDiGraph
