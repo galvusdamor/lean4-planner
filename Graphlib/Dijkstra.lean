@@ -2274,7 +2274,6 @@ lemma dijkstra_expand_keeps_shortest_path_invar
     (path_order_diff : dijkstra_path_order_diff_by_edge_cost start state)
     --(extract_length_invar : dijkstra_path_as_extracted_as_long_as_sort_index start state)
     (update_invar : dijkstra_invar_on_stack_or_all_neighbours_max_order state)
-    (stack_sorted : dijkstra_stack_sorted state)
     (start_path_order : search_invar_start_path_order_zero_zero start state)
     (start_not_mem_tail : search_invar_start_not_mem_tail start state)
     (stack_nodup : search_invar_stack_nodup state)
@@ -2801,7 +2800,18 @@ lemma dijkstra_expand_keeps_shortest_path_invar
               intro p'
               by_contra p'_cheaper; simp at p'_cheaper
               have pm_eq_dm : path_mother.val.cost = (state.pathOrder the_mother).1 := by
-                sorry
+                apply eq_of_le_of_ge
+                · apply dijkstra_path_extracted_not_longer_than_path_order
+                  assumption
+                · specialize prior_invar the_mother mother_visited
+                  simp [mother_not_on_stack] at prior_invar
+                  unfold cost_is at prior_invar
+                  obtain ⟨opti_p, opti_cost, is_cheapest ⟩ := prior_invar
+                  unfold Path.is_cheapest at is_cheapest
+                  specialize is_cheapest path_mother
+                  rw [opti_cost] at is_cheapest
+                  unfold Path.cost at is_cheapest
+                  omega
 
               apply dijkstra_path_mother_adj_new_head_is_cheapest (start:=start) (v:=v) (p':=p') (path_mother:=path_mother) <;> try assumption
               · rfl
