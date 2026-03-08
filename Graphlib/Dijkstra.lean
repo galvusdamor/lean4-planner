@@ -1733,6 +1733,11 @@ lemma Path.recompose {s v u: V} (p : g.Path s v) (u_on_p : u ∈ p.support):
       ∃ u'_v_path_supp : (∀ a ∈ (s_u.concat adj_u_u' u'_supp).val.support, ∀ b ∈ u'_v.val.support.tail, a ≠ b),
       p = (s_u.concat adj_u_u' u'_supp).append u'_v u'_v_path_supp := by sorry
 
+lemma Walk.internal_contact_to_cons_walk {s v u : V}
+  (s_u : g.Walk s u)
+  (adj_u_u' : g.Adj u u')
+  (u'_v : g.Walk u' v):
+  (s_u.concat adj_u_u').append u'_v = s_u.append (Walk.cons adj_u_u' u'_v) := by sorry
 
 private lemma dijkstra_shorter_path_with_optimal_node_and_adj_on_stack
   {s v : V}
@@ -1928,7 +1933,11 @@ lemma dijkstra_path_mother_adj_new_head_is_cheapest {start : V}
           rename head = u => u_eq_head
           subst u_eq_head 
           obtain ⟨u',s_u,adj_head_u',u'_v,supp1,supp2,compose⟩  := Path.recompose p' u_in_support
-          have compose_early_split : p'.val = s_u.val.append (Walk.cons adj_head_u' u'_v) := by sorry
+          have compose_early_split : p'.val = s_u.val.append (Walk.cons adj_head_u' u'_v) := by
+            rw [compose]
+            unfold Path.concat Path.append
+            simp
+            apply Walk.internal_contact_to_cons_walk
           
           have u'_ne_start : u' ≠ start := by
             by_contra
