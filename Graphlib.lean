@@ -3,5 +3,6 @@
 import Graphlib.Basic
 import Graphlib.DFS2
 import Graphlib.BFS
+import Graphlib.AStar
 import Graphlib.Dijkstra
 import Graphlib.Planning
