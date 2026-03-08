@@ -1780,20 +1780,6 @@ lemma dijkstra_path_head_adj_new_head_is_cheapest {start : V}
 
 
 
-/-- given an s v path and a node u on that path and the fact that u is not v, we can split the path into three parts:
-    1) the path from s to u, the edge u u', and a path from u' to v-/
-lemma Path.recompose {s v u: V} (p : g.Path s v) (u_on_p : u ∈ p.support) (u_ne_v : u ≠ v):
-    ∃ u' : V, ∃ s_u : g.Path s u, ∃ adj_u_u' : g.Adj u u', ∃ u'_v : g.Path u' v,
-      ∃ u'_supp : u' ∉ s_u.val.support,
-      ∃ u'_v_path_supp : (∀ a ∈ (s_u.concat adj_u_u' u'_supp).val.support, ∀ b ∈ u'_v.val.support.tail, a ≠ b),
-      p = (s_u.concat adj_u_u' u'_supp).append u'_v u'_v_path_supp := by sorry
-
-lemma Walk.internal_contact_to_cons_walk {s v u : V}
-  (s_u : g.Walk s u)
-  (adj_u_u' : g.Adj u u')
-  (u'_v : g.Walk u' v):
-  (s_u.concat adj_u_u').append u'_v = s_u.append (Walk.cons adj_u_u' u'_v) := by sorry
-
 private lemma dijkstra_shorter_path_with_optimal_node_and_adj_on_stack
   {s v : V}
   (p : g.Path s v)
