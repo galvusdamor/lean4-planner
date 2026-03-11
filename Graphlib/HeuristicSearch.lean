@@ -62,6 +62,34 @@ namespace NatGraph
 open WeightedDiGraph
 
 
+lemma hsearch_merge_trans [FValueComp (ℕ×ℕ)] (a b c : ℕ × ℕ)
+  (a_b : a = b || FValueComp.lt_B a b)
+  (b_c : b = c || FValueComp.lt_B b c) : 
+  a = c || FValueComp.lt_B a c := by
+  by_cases a_eq_b : a = b <;> by_cases b_eq_c : b = c
+  · simp_all
+  · simp_all
+  · simp_all
+  · simp_all
+    repeat rw [← FValueComp.lt_B_eq] at a_b b_c ⊢
+    right
+    apply FValueComp.lt_trans
+    · exact a_b
+    · exact b_c
+
+lemma hsearch_merge_total [FValueComp (ℕ×ℕ)] (a b: ℕ × ℕ): 
+  (a = b || FValueComp.lt_B a b) || (b = a || FValueComp.lt_B b a) := by
+  by_cases a_eq_b : a = b
+  · grind
+  · simp_all
+    have h := FValueComp.lt_sem_tot a b a_eq_b
+    repeat rw [← FValueComp.lt_B_eq]
+    cases h
+    case neg.inl f => left ; exact f
+    case neg.inr f => right ; right ; exact f
+
+
+
 -----------------------------------------------------------------------
 ------ astar implementation and proof ------
 
@@ -666,5 +694,111 @@ lemma hsearch_expand_keeps_base_invars:
     · exact compose 
   · apply hsearch_expand_keeps_start_visited
     exact i6
+
+
+/-- The differene in path order between a node an its mother corresponds to the cost of the edge between them. The mother however might have an even *lower* path order if it has been updated, but that update has not been propagated to the child yet -/
+abbrev hsearch_path_order_diff_by_edge_cost (start : V) (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
+    ∀ mother_invar_adj : WeightedDiGraph.search_invar_mother_is_adjacent start s,
+    ∀ u : V, (h : u ∈ s.visited) → (ne_start : u ≠ start) →
+      (s.pathOrder u).1 ≥ (s.pathOrder (s.mother ⟨u,h⟩)).1 + 
+        g.edgeCost (mother_invar_adj ⟨u,h⟩ ne_start)
+
+
+
+
+lemma hsearch_path_extracted_not_longer_than_path_order (start : V) (s : WeightedDiGraph.base_search_state g (ℕ×ℕ))
+    (mother_invar : search_invar_mother_is_visited  s)
+    (mother_invar_adj : search_invar_mother_is_adjacent start s)
+    (decreasing_invar : search_invar_mother_decreasing_path_order start s)
+    (diff_invar : hsearch_path_order_diff_by_edge_cost start s)
+    (u : V)
+    (u_visited : u ∈ s.visited):
+    (WeightedDiGraph.extract_path_to start u s u_visited mother_invar mother_invar_adj decreasing_invar).1.cost ≤ (s.pathOrder u).1 := by
+    by_cases u_ne_start : u ≠ start
+    · unfold extract_path_to
+      simp
+      split
+      · rename_i u_eq_start
+        contradiction
+      · have d := diff_invar mother_invar_adj u u_visited u_ne_start
+        apply le_trans
+        rotate_left
+        · apply d
+        · simp_all
+          rw [← Path.cost_same]
+          rw [Path.concat_inc_cost_by_edge]
+          conv =>
+            right
+            rw [add_comm]
+          unfold edgeCost
+          apply Nat.add_le_add_left
+          apply hsearch_path_extracted_not_longer_than_path_order
+          apply diff_invar
+    · simp at u_ne_start
+      subst u_ne_start
+      unfold extract_path_to
+      simp_all
+termination_by FValueComp.wf.wrap (s.pathOrder u)
+decreasing_by
+  apply decreasing_invar
+  simp_all
+
+section
+variable (state : WeightedDiGraph.base_search_state g (ℕ×ℕ))
+
+
+lemma hsearch_expand_keeps_on_path_order_diff(start goal : V)
+    (stack_visited_invar : WeightedDiGraph.search_invar_stack_is_visited state)
+    (mother_invar_adj : search_invar_mother_is_adjacent start state)
+    (mother_invar : search_invar_mother_is_visited state)
+    :
+     ∀ head : V, ∀ tail : List V, 
+        hsearch_path_order_diff_by_edge_cost start state
+          ∧ head ≠ goal
+          ∧ state.stack = head :: tail
+        → hsearch_path_order_diff_by_edge_cost start (hsearch_step_expand h_zero state head tail) := by
+  intro head tail ⟨prior_diff,head_ne_goal,compose⟩ 
+  unfold hsearch_path_order_diff_by_edge_cost
+  intro now_mother_adj_invar u u_now_visited head_ne_start
+  by_cases u_visited : u ∈ state.visited
+  · 
+    have mother_options := hsearch_mother_options h_zero state head tail ⟨u,u_visited⟩ u_now_visited
+    cases mother_options
+    case pos.inl mother_head =>
+      simp at mother_head
+      conv =>
+        right
+        arg 1
+        rw [mother_head]
+      unfold hsearch_step_expand at ⊢ mother_head
+      unfold hsearch_path_order_diff_by_edge_cost at prior_diff
+      specialize prior_diff mother_invar_adj u
+      
+      by_cases adj_head_u : g.Adj head u <;> by_cases adj_head_head : g.Adj head head <;> (simp_all ; try grind)
+    case pos.inr ne_mother =>
+      obtain ⟨mother_same,mother_ne_head⟩ := ne_mother
+      simp at mother_same
+      conv =>
+        right
+        arg 1
+        rw [mother_same]
+      unfold hsearch_path_order_diff_by_edge_cost at prior_diff
+      specialize prior_diff mother_invar_adj u
+      unfold search_invar_mother_is_visited at mother_invar
+      specialize mother_invar ⟨u,u_visited⟩
+      unfold hsearch_step_expand
+      unfold hsearch_step_expand at mother_same
+      by_cases adj_head_u : g.Adj head u <;> by_cases adj_head_mother : g.Adj head (state.mother ⟨u, u_visited⟩) <;> (simp_all ; try grind)
+  · have adj_head_u : g.Adj head u := by
+      unfold hsearch_step_expand at u_now_visited
+      simp_all
+    unfold hsearch_step_expand
+    simp_all
+    by_cases adj_head_head : g.Adj head head
+    · simp_all
+      split <;> simp_all
+    · simp_all
+
+end
 
 end NatGraph

@@ -43,32 +43,6 @@ open WeightedDiGraph
 def h_zero (_ : V) : ℕ := 0 
 
 
-lemma  dijkstra_merge_trans [FValueComp (ℕ×ℕ)] (a b c : ℕ × ℕ)
-  (a_b : a = b || FValueComp.lt_B a b)
-  (b_c : b = c || FValueComp.lt_B b c) : 
-  a = c || FValueComp.lt_B a c := by
-  by_cases a_eq_b : a = b <;> by_cases b_eq_c : b = c
-  · simp_all
-  · simp_all
-  · simp_all
-  · simp_all
-    repeat rw [← FValueComp.lt_B_eq] at a_b b_c ⊢
-    right
-    apply FValueComp.lt_trans
-    · exact a_b
-    · exact b_c
-
-lemma  dijkstra_merge_total [FValueComp (ℕ×ℕ)] (a b: ℕ × ℕ): 
-  (a = b || FValueComp.lt_B a b) || (b = a || FValueComp.lt_B b a) := by
-  by_cases a_eq_b : a = b
-  · grind
-  · simp_all
-    have h := FValueComp.lt_sem_tot a b a_eq_b
-    repeat rw [← FValueComp.lt_B_eq]
-    cases h
-    case neg.inl f => left ; exact f
-    case neg.inr f => right ; right ; exact f
-
 
 
 def dijkstra (start : V) (goal : V): Option (g.Path start goal) :=
@@ -105,13 +79,6 @@ theorem dijkstra_is_complete (start : V) (goal : V):
 abbrev dijkstra_invar_on_stack_or_all_neighbours_max_order (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)):=
   ∀ x : s.visited, ↑x ∉ s.stack → ∀ y : V, (adj : g.Adj x y) → (s.pathOrder y).1 ≤ (s.pathOrder x).1 + g.edgeCost adj 
 
-/-- The differene in path order between a node an its mother corresponds to the cost of the edge between them. The mother however might have an even *lower* path order if it has been updated, but that update has not been propagated to the child yet -/
-abbrev dijkstra_path_order_diff_by_edge_cost (start : V) (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
-    ∀ mother_invar_adj : WeightedDiGraph.search_invar_mother_is_adjacent start s,
-    ∀ u : V, (h : u ∈ s.visited) → (ne_start : u ≠ start) →
-      (s.pathOrder u).1 ≥ (s.pathOrder (s.mother ⟨u,h⟩)).1 + 
-        g.edgeCost (mother_invar_adj ⟨u,h⟩ ne_start)
-
 /-- The differene in path order between a node an its mother corresponds to the difference in path length between them. The mother however might have an even *lower* path order if it has been updated, but that update has not been propagated to the child yet -/
 abbrev dijkstra_path_order_diff_by_one (start : V) (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
     ∀ u : V, (h : u ∈ s.visited) → (ne_start : u ≠ start) →
@@ -146,7 +113,7 @@ abbrev search_invar_stack_nodup (s : WeightedDiGraph.base_search_state g (ℕ×�
 abbrev dijkstra_all_invar (start : V) (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
       WeightedDiGraph.search_invar_all_basic start s
     ∧ dijkstra_stack_shortest_path start s
-    ∧ dijkstra_path_order_diff_by_edge_cost start s
+    ∧ hsearch_path_order_diff_by_edge_cost start s
     ∧ dijkstra_invar_on_stack_or_all_neighbours_max_order s
     ∧ dijkstra_stack_sorted s
     ∧ search_invar_start_path_order_zero_zero start s
@@ -173,7 +140,7 @@ lemma dijkstra_invar_holds_at_init (start : V):
             rw [← WeightedDiGraph.Path.cost]
             rw [WeightedDiGraph.Path.cost_nil_zero]
             simp_all
-        · unfold dijkstra_path_order_diff_by_edge_cost
+        · unfold hsearch_path_order_diff_by_edge_cost
           unfold WeightedDiGraph.base_search_state_initial
           simp
           intro u u_is_start u_ne_start
@@ -310,43 +277,6 @@ lemma dijkstra_expand_keeps_shortest_path_invar_start
         rw [Path.cost_nil_zero]
         simp
 
-lemma dijkstra_path_extracted_not_longer_than_path_order (start : V) (s : WeightedDiGraph.base_search_state g (ℕ×ℕ))
-    (mother_invar : search_invar_mother_is_visited  s)
-    (mother_invar_adj : search_invar_mother_is_adjacent start s)
-    (decreasing_invar : search_invar_mother_decreasing_path_order start s)
-    (diff_invar : dijkstra_path_order_diff_by_edge_cost start s)
-    (u : V)
-    (u_visited : u ∈ s.visited):
-    (WeightedDiGraph.extract_path_to start u s u_visited mother_invar mother_invar_adj decreasing_invar).1.cost ≤ (s.pathOrder u).1 := by
-    by_cases u_ne_start : u ≠ start
-    · unfold extract_path_to
-      simp
-      split
-      · rename_i u_eq_start
-        contradiction
-      · have d := diff_invar mother_invar_adj u u_visited u_ne_start
-        apply le_trans
-        rotate_left
-        · apply d
-        · simp_all
-          rw [← Path.cost_same]
-          rw [Path.concat_inc_cost_by_edge]
-          conv =>
-            right
-            rw [add_comm]
-          unfold edgeCost
-          apply Nat.add_le_add_left
-          apply dijkstra_path_extracted_not_longer_than_path_order
-          apply diff_invar
-    · simp at u_ne_start
-      subst u_ne_start
-      unfold extract_path_to
-      simp_all
-termination_by FValueComp.wf.wrap (s.pathOrder u)
-decreasing_by
-  apply decreasing_invar
-  simp_all
-
 
 
 lemma dijkstra_new_head_cost_lt_other_on_stack_before
@@ -385,11 +315,11 @@ lemma dijkstra_new_head_cost_lt_other_on_stack_before
           intro u_not_in_tail
           contradiction
       · intro a b c ab bc
-        apply dijkstra_merge_trans
+        apply hsearch_merge_trans
         · apply ab
         · apply bc
       · intro a b
-        apply dijkstra_merge_total
+        apply hsearch_merge_total
     · simp at u_neq_v
       subst u_neq_v
       clear v_head_after
@@ -431,11 +361,11 @@ lemma dijkstra_new_head_cost_lt_other_on_stack_now
         unfold hsearch_step_expand at u_on_stack_after
         simp_all
     · intro a b c ab bc
-      apply dijkstra_merge_trans
+      apply hsearch_merge_trans
       · apply ab
       · apply bc
     · intro a b
-      apply dijkstra_merge_total
+      apply hsearch_merge_total
 
 
 
@@ -1143,7 +1073,7 @@ lemma dijkstra_path_mother_adj_new_head_is_cheapest {start : V}
     (start_visited : search_invar_start_visited start state)
     (on_stack_or_nei_visited : search_invar_on_stack_or_all_neighbours_visited state)
     (stack_visited_invar : search_invar_stack_is_visited state)
-    (path_order_diff : dijkstra_path_order_diff_by_edge_cost start state)
+    (path_order_diff : hsearch_path_order_diff_by_edge_cost start state)
     (update_invar : dijkstra_invar_on_stack_or_all_neighbours_max_order state)
     (start_not_mem_tail : search_invar_start_not_mem_tail start state)
     (stack_nodup : search_invar_stack_nodup state)
@@ -1187,7 +1117,7 @@ lemma dijkstra_path_mother_adj_new_head_is_cheapest {start : V}
         convert mother_and_edge_smaller_order_before
         apply eq_of_le_of_ge
         · rw [path_mother_is]
-          apply dijkstra_path_extracted_not_longer_than_path_order
+          apply hsearch_path_extracted_not_longer_than_path_order
           exact path_order_diff
         · unfold dijkstra_stack_shortest_path at prior_invar
           specialize prior_invar the_mother mother_visited
@@ -1268,7 +1198,7 @@ lemma dijkstra_expand_keeps_shortest_path_invar
     (on_stack_or_nei_visited : WeightedDiGraph.search_invar_on_stack_or_all_neighbours_visited state)
     (stack_visited_invar : WeightedDiGraph.search_invar_stack_is_visited state)
     -- new bfs_ specific invars
-    (path_order_diff : dijkstra_path_order_diff_by_edge_cost start state)
+    (path_order_diff : hsearch_path_order_diff_by_edge_cost start state)
     --(extract_length_invar : dijkstra_path_as_extracted_as_long_as_sort_index start state)
     (update_invar : dijkstra_invar_on_stack_or_all_neighbours_max_order state)
     (start_path_order : search_invar_start_path_order_zero_zero start state)
@@ -1299,7 +1229,7 @@ lemma dijkstra_expand_keeps_shortest_path_invar
     have ph_eq_dh : path_to_head.cost = (state.pathOrder head).1 := by
       unfold dijkstra_stack_shortest_path at prior_invar
       apply eq_of_le_of_ge
-      · apply dijkstra_path_extracted_not_longer_than_path_order
+      · apply hsearch_path_extracted_not_longer_than_path_order
         exact path_order_diff
       · specialize prior_invar head head_was_visited_before
         simp_all
@@ -1482,7 +1412,7 @@ lemma dijkstra_expand_keeps_shortest_path_invar
               grind
 
             have mother_and_edge_smaller_order_before : (state.pathOrder the_mother).1 + edgeCost adj_mother_v ≤ (state.pathOrder v).1 := by
-              unfold dijkstra_path_order_diff_by_edge_cost at path_order_diff
+              unfold hsearch_path_order_diff_by_edge_cost at path_order_diff
               specialize path_order_diff mother_invar_adj v v_visited v_not_start
               unfold the_mother
               grind
@@ -1526,8 +1456,8 @@ lemma dijkstra_expand_keeps_shortest_path_invar
                             unfold FValueComp.lt_B Nat.instFValueCompProd at r
                             simp at r
                             grind
-                  · intros; apply dijkstra_merge_trans <;> assumption
-                  · intros; apply dijkstra_merge_total
+                  · intros; apply hsearch_merge_trans <;> assumption
+                  · intros; apply hsearch_merge_total
 
                 have mother_now_geq_v_bef :((hsearch_step_expand h_zero state head tail).pathOrder the_mother).1 ≥ (state.pathOrder v).1 := by grind
 
@@ -1612,8 +1542,8 @@ lemma dijkstra_expand_keeps_shortest_path_invar
                           clear r
                           unfold the_mother at p
                           omega
-                  · intros; apply dijkstra_merge_trans <;> assumption
-                  · intros; apply dijkstra_merge_total
+                  · intros; apply hsearch_merge_trans <;> assumption
+                  · intros; apply hsearch_merge_total
     
                 · have mother_smaller_order_before : (state.pathOrder the_mother).1 < (state.pathOrder v).1 := by omega
                   have mother_now_smaller_order_before : ((hsearch_step_expand h_zero state head tail).pathOrder the_mother).1 < ((hsearch_step_expand h_zero state head tail).pathOrder v).1 := by grind
@@ -1652,14 +1582,14 @@ lemma dijkstra_expand_keeps_shortest_path_invar
               rw [Path.concat_inc_cost_by_edge]
               apply eq_of_le_of_ge
               · have original_path_order_diff := path_order_diff
-                unfold dijkstra_path_order_diff_by_edge_cost at path_order_diff
+                unfold hsearch_path_order_diff_by_edge_cost at path_order_diff
                 specialize path_order_diff mother_invar_adj v v_visited v_not_start
                 apply le_trans ; rotate_left
                 · apply path_order_diff
                 · nth_rewrite 1 [add_comm]
                   apply add_le_add_left
                   unfold path_mother
-                  apply dijkstra_path_extracted_not_longer_than_path_order
+                  apply hsearch_path_extracted_not_longer_than_path_order
                   exact original_path_order_diff
               · unfold dijkstra_invar_on_stack_or_all_neighbours_max_order at update_invar
                 specialize update_invar ⟨ the_mother, mother_visited ⟩ mother_not_on_stack v adj_mother_v
@@ -1684,7 +1614,7 @@ lemma dijkstra_expand_keeps_shortest_path_invar
               by_contra p'_cheaper; simp at p'_cheaper
               have pm_eq_dm : path_mother.val.cost = (state.pathOrder the_mother).1 := by
                 apply eq_of_le_of_ge
-                · apply dijkstra_path_extracted_not_longer_than_path_order
+                · apply hsearch_path_extracted_not_longer_than_path_order
                   assumption
                 · specialize prior_invar the_mother mother_visited
                   simp [mother_not_on_stack] at prior_invar
@@ -1787,57 +1717,6 @@ lemma dijkstra_expand_keeps_shortest_path_invar
 
 
 
-lemma dijkstra_expand_keeps_on_path_order_diff(start goal : V)
-    (stack_visited_invar : WeightedDiGraph.search_invar_stack_is_visited state)
-    (mother_invar_adj : search_invar_mother_is_adjacent start state)
-    (mother_invar : search_invar_mother_is_visited state)
-    :
-     ∀ head : V, ∀ tail : List V, 
-        dijkstra_path_order_diff_by_edge_cost start state
-          ∧ head ≠ goal
-          ∧ state.stack = head :: tail
-        → dijkstra_path_order_diff_by_edge_cost start (hsearch_step_expand h_zero state head tail) := by
-  intro head tail ⟨prior_diff,head_ne_goal,compose⟩ 
-  unfold dijkstra_path_order_diff_by_edge_cost
-  intro now_mother_adj_invar u u_now_visited head_ne_start
-  by_cases u_visited : u ∈ state.visited
-  · 
-    have mother_options := hsearch_mother_options h_zero state head tail ⟨u,u_visited⟩ u_now_visited
-    cases mother_options
-    case pos.inl mother_head =>
-      simp at mother_head
-      conv =>
-        right
-        arg 1
-        rw [mother_head]
-      unfold hsearch_step_expand at ⊢ mother_head
-      unfold dijkstra_path_order_diff_by_edge_cost at prior_diff
-      specialize prior_diff mother_invar_adj u
-      
-      by_cases adj_head_u : g.Adj head u <;> by_cases adj_head_head : g.Adj head head <;> (simp_all ; try grind)
-    case pos.inr ne_mother =>
-      obtain ⟨mother_same,mother_ne_head⟩ := ne_mother
-      simp at mother_same
-      conv =>
-        right
-        arg 1
-        rw [mother_same]
-      unfold dijkstra_path_order_diff_by_edge_cost at prior_diff
-      specialize prior_diff mother_invar_adj u
-      unfold search_invar_mother_is_visited at mother_invar
-      specialize mother_invar ⟨u,u_visited⟩
-      unfold hsearch_step_expand
-      unfold hsearch_step_expand at mother_same
-      by_cases adj_head_u : g.Adj head u <;> by_cases adj_head_mother : g.Adj head (state.mother ⟨u, u_visited⟩) <;> (simp_all ; try grind)
-  · have adj_head_u : g.Adj head u := by
-      unfold hsearch_step_expand at u_now_visited
-      simp_all
-    unfold hsearch_step_expand
-    simp_all
-    by_cases adj_head_head : g.Adj head head
-    · simp_all
-      split <;> simp_all
-    · simp_all
 
 lemma dijkstra_expand_keeps_on_stack_or_nei_max_order(goal : V)
     (on_stack_or_nei_visited : WeightedDiGraph.search_invar_on_stack_or_all_neighbours_visited state)
@@ -1877,17 +1756,6 @@ lemma dijkstra_expand_keeps_on_stack_or_nei_max_order(goal : V)
         grind -- contradictory
 
 
-lemma merge_two_prop {α : Type} (le1 : α → α → Prop) (le2 : α → α → Bool)
-  (trans : ∀ (a b c : α), le2 a b = true → le2 b c = true → le2 a c = true)
-  (total : ∀ (a b : α), (le2 a b || le2 b a) = true)
-  (le_eq : le1 = (fun x y => le2 x y = true))
-  (l : List α):
-  List.Pairwise le1 (l.mergeSort le2) := by
-    subst le_eq
-    apply List.pairwise_mergeSort
-    all_goals
-      grind
-
 
 lemma dijkstra_expand_keeps_stack_sorted(goal : V)
     :
@@ -1901,11 +1769,11 @@ lemma dijkstra_expand_keeps_stack_sorted(goal : V)
       unfold hsearch_step_expand
       apply merge_two_prop 
       · intro a b c a_b b_c
-        apply dijkstra_merge_trans
+        apply hsearch_merge_trans
         · apply a_b
         · apply b_c
       · intro a b
-        apply dijkstra_merge_total
+        apply hsearch_merge_total
       · ext x y
         rw [FValueComp.lt_B_eq]
         simp
@@ -1937,7 +1805,7 @@ lemma dijkstra_expand_carries_all_dijkstra_invars (start : V) (goal : V):
           · exact invar_before.right.right.right.right.right.right.left
           · exact invar_before.right.right.right.right.right.right.right
           · exact ⟨ invar_before.right.left, head_ne_goal, compose⟩
-        · apply dijkstra_expand_keeps_on_path_order_diff 
+        · apply hsearch_expand_keeps_on_path_order_diff 
           · exact invar_before.left.left
           · exact invar_before.left.right.right.left
           · exact invar_before.left.right.left
@@ -2071,7 +1939,7 @@ theorem dijkstra_is_optimal (start : V) (goal : V)
     obtain ⟨p, ⟨ p_path_length, p_is_cheapest ⟩ ⟩  := h
 
     --unfold dijkstra_path_as_extracted_as_long_as_sort_index at h_2
-    have prop := dijkstra_path_extracted_not_longer_than_path_order start final_state t_1 t_2 t_3 dijkstra_full_invar_at_end.2.2.1
+    have prop := hsearch_path_extracted_not_longer_than_path_order start final_state t_1 t_2 t_3 dijkstra_full_invar_at_end.2.2.1
     unfold final_state at prop
     unfold final at prop
     unfold WeightedDiGraph.search_with_stack_step at prop
