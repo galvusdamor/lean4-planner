@@ -333,14 +333,6 @@ theorem List.not_Lex {α : Type} (n : ℕ) (p : α → α → Prop) (l1 l2 : _ro
     · grind
     · grind
 
-
-lemma List.mem_of_tail_mem {α : Type} {x : α} {l : List α} (h : x ∈ l.tail):
-    x ∈ l := by
-      cases l
-      · contradiction
-      · grind
-
-
 lemma mergeSort_head {α : Type} (le : α → α → Bool) 
   (trans : ∀ (a b c : α), le a b = true → le b c = true → le a c = true)
   (total : ∀ (a b : α), (le a b || le b a) = true)
@@ -411,8 +403,4 @@ lemma mergeSort_count {α : Type} [BEq α] [LawfulBEq α] {le : α → α → Bo
   (l.mergeSort le).count y = l.count y := by
     apply List.Perm.count
     apply List.mergeSort_perm
-
-
-theorem mod_pon {a b : Prop} (h : a) : (a → b) → b := by grind 
-
 
