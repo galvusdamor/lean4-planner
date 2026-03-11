@@ -195,6 +195,49 @@ theorem contains_subpath_cost {u v w : V} (p : G.Path u v) (w_in_path : w ∈ p.
     · unfold Path.support
       apply supp
 
+
+theorem non_cheapest_path_has_cheaper {u v : V} (p : G.Path u v): 
+  ¬ is_cheapest p → ∃ p' : G.Path u v, p'.cost < p.cost := by
+  unfold is_cheapest
+  simp
+
+theorem non_cheapest_path_has_cheaper_cheapest {u v : V} (p : G.Path u v): 
+  ¬ is_cheapest p → ∃ p' : G.Path u v, is_cheapest p' ∧ p'.cost < p.cost := by
+  intro prop
+  --unfold is_cheapest
+  obtain ⟨p',p'_cheaper⟩ := non_cheapest_path_has_cheaper p prop
+  by_cases is_cheapest p'
+  case pos cheapest =>
+    grind
+  case neg not_cheapest =>
+    obtain ⟨p'',p''_cheapest, p''_lt⟩ := non_cheapest_path_has_cheaper_cheapest p' not_cheapest
+    use p''
+    constructor
+    · exact p''_cheapest
+    · apply lt_trans
+      · exact p''_lt
+      · exact p'_cheaper
+termination_by p.cost
+
+
+
+theorem sufficient_cheapest_path_cheaper {u v : V} (p : G.Path u v):
+    (∀ p' : G.Path u v, is_cheapest p' → p'.cost ≥ p.cost) →
+      is_cheapest p := by
+  intro prop
+  unfold is_cheapest
+  intro p'
+  by_cases is_cheapest p'
+  case pos cheapest =>
+    exact prop p' cheapest
+  case neg not_cheapest =>
+    obtain ⟨p'', p''_cheapest, p''_cheaper ⟩ := non_cheapest_path_has_cheaper_cheapest p' not_cheapest
+    apply le_trans
+    · exact prop p'' p''_cheapest
+    · apply p''_cheapest p'
+
+
+
 end Path
 
 namespace Walk
@@ -238,5 +281,18 @@ lemma cost_ge_lt (u v : V) (d1 d2: ℕ) :
     · exact d2_le_d1
     · exact ge_d1 p p_nodup
 
+
+lemma cost_v_v (v : V) : G.cost_is v v 0 := by
+  unfold cost_is
+  use G.nil_path v
+  unfold WeightedDiGraph.Path.is_cheapest
+  constructor
+  · simp_all only [WeightedDiGraph.Path.cost_same]
+    rfl
+  · intro p' 
+    simp_all only [WeightedDiGraph.Path.cost_same]
+    apply le_trans (b:=0)
+    · rfl
+    · apply zero_le
 
 end NatGraph
