@@ -396,6 +396,17 @@ lemma mergeSort_head_from_head_unsorted {α : Type} {le : α → α → Bool}
         · simp_all
         · exact l_ne_nil
 
+lemma merge_two_prop {α : Type} (le1 : α → α → Prop) (le2 : α → α → Bool)
+  (trans : ∀ (a b c : α), le2 a b = true → le2 b c = true → le2 a c = true)
+  (total : ∀ (a b : α), (le2 a b || le2 b a) = true)
+  (le_eq : le1 = (fun x y => le2 x y = true))
+  (l : List α):
+  List.Pairwise le1 (l.mergeSort le2) := by
+    subst le_eq
+    apply List.pairwise_mergeSort
+    all_goals
+      grind
+
 
 lemma mergeSort_count {α : Type} [BEq α] [LawfulBEq α] {le : α → α → Bool} 
   {l : List α}
