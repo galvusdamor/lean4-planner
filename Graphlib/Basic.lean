@@ -331,6 +331,10 @@ theorem contains_subwalk {u v w : V} (p : G.Walk u v) (w_in_walk : w ∈ p.suppo
           · grind
           · simp_all
 
+theorem split_at {u v w : V} (p : G.Walk u v) (w_in_walk : w ∈ p.support):
+    ∃ uw : G.Walk u w, ∃ wv : G.Walk w v, uw.append wv = p := by
+    sorry
+
 
 end Walk
 
