@@ -358,6 +358,7 @@ theorem astar_is_optimal (start : V) (goal : V)
     have prop := hsearch_path_extracted_not_longer_than_path_order start final_state t_1 t_2 t_3 (by sorry)
 
     have has_astar_invar : astar_invar start final_state := by sorry
+    have has_astar_path_invar : astar_path_invar start goal final_state := by sorry
     have xx := astar_open_node_with_lower_f heur start goal final_state is_admissible has_astar_invar
 
 
@@ -366,7 +367,7 @@ theorem astar_is_optimal (start : V) (goal : V)
     --unfold Path.is_cheapest
     intro p' p'_cheapest
 
-    specialize xx p' p'_cheapest
+    specialize xx has_astar_path_invar p' p'_cheapest
 
     obtain ⟨v', v'_on_p', v'_open,cost⟩ := xx 
 
