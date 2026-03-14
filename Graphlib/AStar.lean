@@ -100,6 +100,9 @@ abbrev astar_path_invar (start : V) (goal : V) (s : WeightedDiGraph.base_search_
   --∀ p : g.Path start goal, p.is_cheapest → ∃ v' ∈ p.support, (node_open s v')
   ∀ p : g.Path start goal, ∃ v' ∈ p.support, (node_open s v')
 
+abbrev astar_goal_invar (goal : V) (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
+  goal ∈ s.visited → goal ∈ s.stack
+
 
 omit [DecidableEq V] in
 lemma astar_invar_holds_at_init (start : V):
@@ -142,9 +145,80 @@ lemma astar_expand_keeps_stack_sorted (goal : V)
         rw [FValueComp.lt_B_eq]
         simp
 
+lemma astar_expand_keeps_goal_invar (goal : V)
+    :
+     ∀ head : V, ∀ tail : List V, 
+        astar_goal_invar goal state
+          ∧ head ≠ goal
+          ∧ state.stack = head :: tail
+        → astar_goal_invar goal (hsearch_step_expand heur state head tail) := by
+  intro head tail ⟨ prior_invar, head_ne_goal, stack_compose ⟩
+  unfold astar_goal_invar at prior_invar ⊢
+  intro goal_visited
+  unfold hsearch_step_expand at goal_visited ⊢ 
+  simp at goal_visited ⊢ 
+  cases goal_visited
+  case inl goal_mem_tail =>
+    left
+    grind
+  case inr _t =>
+    right
+    exact _t
 
-lemma astar_expand_keeps_path_invar (goal : V)
-    (on_stack_or_nei_visited : search_invar_on_stack_or_all_neighbours_visited state)
+
+lemma astar_expand_path_one_on_stack {head : V} {tail : List V} (goal v : V) (v_goal : g.Walk v goal) (v_visited : v ∈ state.visited) (v_not_on_stack : v ∉ state.stack)
+  (stack_compose : state.stack = head :: tail)
+  (on_stack_or_nei_visited : search_invar_on_stack_or_all_neighbours_visited state)
+  (goal_invar : astar_goal_invar goal state)
+  (head_not_mem_v_goal : head ∉ v_goal.support)
+  :
+  ∃ v' ∈ v_goal.support, v' ∈ (hsearch_step_expand heur state head tail).stack := by
+    cases compose : v_goal
+    · apply goal_invar at v_visited
+      apply absurd v_visited v_not_on_stack
+    case cons w adj_v_w w_goal =>
+      have w_visited : w ∈ state.visited := by
+        specialize on_stack_or_nei_visited ⟨ v, v_visited ⟩
+        grind
+      
+      rw [compose] at head_not_mem_v_goal
+      rw [Walk.support_cons] at head_not_mem_v_goal
+      simp only [List.mem_cons, not_or] at head_not_mem_v_goal
+      obtain ⟨head_ne_v,head_not_mem_w_goal ⟩ := head_not_mem_v_goal
+      
+      have w_ne_head : w ≠ head := by
+        by_contra
+        have head_mem_supp : head ∈ w_goal.support := by
+          subst this
+          apply Walk.start_in_support w_goal
+        contradiction
+      by_cases w_on_stack : w ∈ state.stack
+      · have w_mem_tail : w ∈ tail := by
+          rw [stack_compose] at w_on_stack
+          grind
+        use w
+        constructor
+        · simp
+        · unfold hsearch_step_expand
+          simp
+          left
+          exact w_mem_tail
+      ·
+        obtain ⟨v',proof⟩ := by
+          apply astar_expand_path_one_on_stack goal (v:=w) <;> try assumption
+
+        use v'
+        constructor
+        · simp
+          right
+          exact proof.1
+        · exact proof.2
+
+
+lemma astar_expand_keeps_path_invar {start : V} (goal : V)
+  (on_stack_or_nei_visited : search_invar_on_stack_or_all_neighbours_visited state)
+  (goal_invar : astar_goal_invar goal state)
+  (stack_visited : search_invar_stack_is_visited state)
     :
      ∀ head : V, ∀ tail : List V, 
         astar_path_invar start goal state
@@ -160,30 +234,83 @@ lemma astar_expand_keeps_path_invar (goal : V)
     rw [stack_compose] at was_open
     cases was_open
     case head =>
-      have head_visited : head ∈ state.visited := by sorry
+      have head_visited : head ∈ state.visited := by
+        apply stack_visited head
+        rw [stack_compose]
+        simp
       obtain ⟨start_head, head_goal, compose⟩ := p.val.split_at v'_in_p
-      have head_goal_nodup : head_goal.support.Nodup := by sorry
+      have head_goal_nodup : head_goal.support.Nodup := by
+        have p_nodup := p.prop
+        rw [←compose] at p_nodup
+        rw [Walk.support_of_append] at p_nodup
+        rw [Walk.support_last (p:=start_head)] at p_nodup
+        unfold List.Nodup at p_nodup ⊢
+        rw [List.append_assoc] at p_nodup
+        rw [List.pairwise_append] at p_nodup
+        have x := p_nodup.2.1
+        convert x
+        cases head_goal
+        · simp
+          grind
+        · simp
 
-
-      -- TODO: more complicated, we have to run through the path at the next time -- or equivalently, we have to start at the next node
-      --obtain ⟨head',nil_path,adj_head_u',u'_v,supp1,supp2,compose⟩  := Path.recompose ⟨ head_goal, head_goal_nodup⟩ (u:=head) (by simp) head_ne_goal 
-
-      cases head_goal
+      cases head_goal_compose : head_goal
       case nil =>
         contradiction -- (goal ≠ goal)
       case cons head' adj_head_head' head'_goal =>
-        sorry
-        --have run_path := run_path_through_state_yields_node_on_stack_or_all_visited head goal (Ne.symm head_ne_goal) ⟨head_goal, head_goal_nodup⟩ state head_visited on_stack_or_nei_visited
-        --
-        --cases run_path
-        --case inl first_open =>
-        --  obtain ⟨ u, u_in_support, u_on_stack, u_not_goal, prop ⟩ := first_open
-        --  use u
-        --  constructor
-        --  · sorry -- follows as subpath of u_in_support
-        --  · sorry
-        --case inr all_not_on_stack =>
-        --  sorry
+        have head_ne_head' : head ≠ head' := by
+          rw [head_goal_compose] at head_goal_nodup
+          simp at head_goal_nodup
+          have head_not_mem_head'_goal := head_goal_nodup.1
+          by_contra
+          subst this
+          have head_mem_head'_goal : head ∈ head'_goal.support := by
+            apply Walk.start_in_support
+
+          contradiction
+        have head'_in_p : head' ∈ p.support := by
+          unfold Path.support
+          rw [← compose]
+          rw [Walk.support_of_append] 
+          rw [List.mem_append]
+          right
+          rw [head_goal_compose]
+          simp
+        by_cases head'_on_stack : head' ∈ tail
+        · use head'
+          constructor
+          · exact head'_in_p 
+          · unfold hsearch_step_expand
+            simp
+            left
+            exact head'_on_stack
+        · by_cases head'_visited : head' ∈ state.visited
+          ·
+            obtain ⟨ v', proof ⟩ := by
+              apply astar_expand_path_one_on_stack (goal := goal) (v:=head') <;> try assumption
+              · rw [stack_compose]
+                grind
+              · rw [head_goal_compose] at head_goal_nodup
+                simp at head_goal_nodup
+                exact head_goal_nodup.1
+            use v'
+            constructor
+            · unfold Path.support
+              rw [← compose]
+              rw [Walk.support_of_append]
+              rw [List.mem_append]
+              right
+              rw [head_goal_compose]
+              simp
+              exact proof.1
+            · exact proof.2
+          · use head'
+            constructor
+            · exact head'_in_p
+            · unfold hsearch_step_expand
+              simp
+              right
+              grind
     case tail v'_in_tail =>
       use v'
       constructor
