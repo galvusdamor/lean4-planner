@@ -237,7 +237,6 @@ theorem sufficient_cheapest_path_cheaper {u v : V} (p : G.Path u v):
     · apply p''_cheapest p'
 
 
-
 end Path
 
 namespace Walk
@@ -253,6 +252,38 @@ theorem cheaper_path_exists (w : G.Walk u v):
 
 end Walk
 
+namespace Path
+/-
+PROBLEM
+A subpath (prefix) of a cheapest path is itself cheapest.
+
+PROVIDED SOLUTION
+By contradiction. Suppose q : g.Path u w with ¬(⟨uw, nodup⟩.cost ≤ q.cost), i.e. q.cost < uw.cost. Form walk q.val.append wv. Its cost is q.cost + wv.cost (by Walk.append_cost). Since uw.cost + wv.cost = (uw.append wv).cost = p.val.cost (using compose and Walk.append_cost), we have q.cost + wv.cost < uw.cost + wv.cost = p.val.cost. By Walk.cheaper_path_exists, obtain p' : g.Path u v with p'.cost ≤ (q.val.append wv).cost < p.cost. This contradicts p_cheapest p'.
+-/
+lemma subpath_of_cheapest_is_cheapest {u v w : V}
+    (p : G.Path u v) (uw : G.Walk u w) (wv : G.Walk w v)
+    (compose : uw.append wv = p.val)
+    (nodup : uw.support.Nodup)
+    (p_cheapest : p.is_cheapest) :
+    Path.is_cheapest (⟨uw, nodup⟩ : G.Path u w) := by
+      intro q
+      by_contra hq
+      -- Let's construct the walk $q.append wv$ and show that its cost is strictly less than $p$'s cost.
+      have h_walk_cost : (q.val.append wv).cost < p.val.cost := by
+        simp [cost_same, not_le] at hq
+        apply lt_of_lt_of_eq ; rotate_left
+        · rw [← compose]
+        · repeat rw [Walk.append_cost ]
+          apply add_lt_add_left
+          exact hq
+      -- By `Walk.cheaper_path_exists`, there exists a path `p'` with `p'.cost ≤ (q.val.append wv).cost`.
+      obtain ⟨p', hp'⟩ : ∃ p' : G.Path u v, p'.cost ≤ (q.val.append wv).cost := by
+        exact Walk.cheaper_path_exists (q.val.append wv)
+      
+      exact not_lt_of_ge ( p_cheapest p' ) ( lt_of_le_of_lt hp' h_walk_cost )
+
+
+end Path
 
 end WeightedDiGraph
 

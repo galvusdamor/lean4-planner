@@ -346,11 +346,10 @@ lemma walk_more_costly_than_chapest (start v : V) (d : ℕ)
     · exact w'_cheaper
 
 
+
+omit [DecidableEq V] in
 lemma astar_open_node_with_lower_f (start goal : V) (s : WeightedDiGraph.base_search_state g (ℕ×ℕ))
   (is_admissible : g.admissible heur goal)
-  -- invariant: goal has not been removed ... I.e. every path still has a node on the stack
-  -- this is a strange invariant as the expansion will actually break it!
-  -- actually not! as we only have to prove the invar iff head ≠ goal
   (has_astar_invar : astar_invar start s)
   (has_path_invar : astar_path_invar start goal s)
   :
@@ -366,10 +365,10 @@ lemma astar_open_node_with_lower_f (start goal : V) (s : WeightedDiGraph.base_se
   unfold node_closed at has_astar_invar
   simp [v'_open] at has_astar_invar
   obtain ⟨start_v', v'_goal, compose⟩ := p.val.split_at v'_in_p
-  have start_v'_nodup : start_v'.support.Nodup := by sorry -- from subpath
-  -- Theorem: subpaths of cheapest paths are cheapest
-  -- needs the subpath argument for nodup
-  have start_v'_cheapest : Path.is_cheapest ⟨start_v', start_v'_nodup⟩ := by sorry
+  have start_v'_nodup : start_v'.support.Nodup :=
+    Walk.nodup_prefix_of_append_nodup start_v' v'_goal (compose ▸ p.prop)
+  have start_v'_cheapest : Path.is_cheapest ⟨start_v', start_v'_nodup⟩ :=
+    Path.subpath_of_cheapest_is_cheapest p start_v' v'_goal compose start_v'_nodup p_cheapest
   
   specialize has_astar_invar start_v' start_v'_nodup start_v'_cheapest
 
@@ -385,7 +384,9 @@ lemma astar_open_node_with_lower_f (start goal : V) (s : WeightedDiGraph.base_se
     exact v''_in_support
   · exact v''_open
   · unfold Path.cost 
-    have v''_in_p : v'' ∈ p.support := by sorry 
+    have v''_in_p : v'' ∈ p.support := by
+      unfold Path.support
+      exact Walk.mem_support_prefix_of_append start_v' v'_goal compose v'' v''_in_support
     obtain ⟨start_v'', v''_goal, compose⟩ := p.val.split_at v''_in_p
 
     rw [←compose]
@@ -398,7 +399,8 @@ lemma astar_open_node_with_lower_f (start goal : V) (s : WeightedDiGraph.base_se
       unfold cost_ge at is_admissible
   
       -- subwalk of p
-      have v''_goal_nodup : v''_goal.support.Nodup := by sorry
+      have v''_goal_nodup : v''_goal.support.Nodup :=
+        Walk.nodup_suffix_of_append_nodup start_v'' v''_goal (compose ▸ p.prop)
       specialize is_admissible ⟨v''_goal, v''_goal_nodup⟩ 
       apply is_admissible
 

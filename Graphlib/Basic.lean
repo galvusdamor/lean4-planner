@@ -305,6 +305,61 @@ def support_of_append {u v w : V} (uv : G.Walk u v) (vw : G.Walk v w):
   | cons h p ih =>
     simp [append, support, ih]
 
+
+/-- If `v'' ∈ uw.support` and `uw.append wv = full`, then `v'' ∈ full.support`. -/
+lemma mem_support_prefix_of_append {u v w : V}
+    (uw : G.Walk u w) (wv : G.Walk w v) {full : G.Walk u v}
+    (compose : uw.append wv = full)
+    (v'' : V) (hv : v'' ∈ uw.support) :
+    v'' ∈ full.support := by
+      -- Rewrite `full.support` using `Walk.support_of_append` and `compose`, then apply `List.mem_append_left` to `hv`.
+      simp only [← compose, Walk.support_of_append]
+      apply List.mem_append_left
+      exact hv
+
+
+/-
+PROBLEM
+The prefix of a walk whose full concatenation has `Nodup` support also has `Nodup` support.
+
+PROVIDED SOLUTION
+Rewrite the nodup hypothesis using Walk.support_of_append to get uw.support ++ wv.support.tail is Nodup. Then extract nodup of the left part using List.Nodup.of_append_left or similar.
+-/
+lemma nodup_prefix_of_append_nodup {u v w : V}
+    (uw : G.Walk u w) (wv : G.Walk w v)
+    (h : (uw.append wv).support.Nodup) : uw.support.Nodup := by
+      -- Rewrite the nodup hypothesis using `Walk.support_of_append` to get `uw.support ++ wv.support.tail` is nodup. Then extract nodup of the left part using `List.Nodup.of_append_left`.
+      rw [Walk.support_of_append] at h
+      apply List.Nodup.of_append_left
+      exact h
+
+/-
+PROBLEM
+The suffix of a walk whose full concatenation has `Nodup` support also has `Nodup` support.
+
+PROVIDED SOLUTION
+By induction on uw. Base case (nil): uw.append wv = wv so h is directly wv.support.Nodup. Inductive case (cons): uw = cons adj rest, so (cons adj rest).append wv = cons adj (rest.append wv). The support is u :: (rest.append wv).support. Nodup of u :: (rest.append wv).support gives Nodup of (rest.append wv).support. Apply the inductive hypothesis to rest and wv.
+-/
+lemma nodup_suffix_of_append_nodup {u v w : V}
+    (uw : G.Walk u w) (wv : G.Walk w v)
+    (h : (uw.append wv).support.Nodup) : wv.support.Nodup := by
+      -- By definition of `support`, we know that `(uw.append wv).support = uw.support ++ wv.support.tail`.
+      have h_support_append : (uw.append wv).support = uw.support ++ wv.support.tail := by
+        exact Walk.support_of_append uw wv
+      cases wv <;> simp_all +decide [ List.nodup_append ];
+      · exact List.nodup_singleton _;
+      · cases uw 
+        · by_contra
+          have x := h.2.2 u
+          simp at x
+          specialize x u this
+          contradiction
+        · by_contra
+          have x := h.2.2 w
+          simp at x
+          specialize x w this
+          contradiction
+
 theorem contains_subwalk {u v w : V} (p : G.Walk u v) (w_in_walk : w ∈ p.support) (w_ne_v : w ≠ v):
     ∃ p' : G.Walk u w, p'.length < p.length ∧ p'.support <+: p.support := by
     by_cases u_eq_w : u = w
@@ -331,9 +386,24 @@ theorem contains_subwalk {u v w : V} (p : G.Walk u v) (w_in_walk : w ∈ p.suppo
           · grind
           · simp_all
 
+/-
+PROVIDED SOLUTION
+By induction on p. Base case (nil): w ∈ nil.support means w = u, so use nil and nil. Inductive case (cons adj rest : Walk u v with u -adj-> m then rest : Walk m v): w ∈ (cons adj rest).support means w = u or w ∈ rest.support. If w = u, use nil and (cons adj rest). If w ∈ rest.support, use the IH on rest to get mw and wv with mw.append wv = rest, then use (cons adj mw) and wv.
+-/
 theorem split_at {u v w : V} (p : G.Walk u v) (w_in_walk : w ∈ p.support):
     ∃ uw : G.Walk u w, ∃ wv : G.Walk w v, uw.append wv = p := by
-    sorry
+    have h_length : ∀ {u v : V}, ∀ p : G.Walk u v, ∀ w ∈ p.support, ∃ uw : G.Walk u w, ∃ wv : G.Walk w v, uw.append wv = p := by
+      intros u v p w hw
+      induction p generalizing w
+      · cases hw
+        · exists Walk.nil, Walk.nil
+        · contradiction
+      · rename_i h p w_in_walk
+        cases hw;
+        · exact ⟨ Walk.nil, Walk.cons h p, by rfl ⟩
+        · obtain ⟨ uw, wv, hw ⟩ := w_in_walk _ ‹_›
+          use cons h uw, wv; aesop;
+    exact h_length p w w_in_walk
 
 
 end Walk
