@@ -406,10 +406,14 @@ lemma astar_open_node_with_lower_f (start goal : V) (s : WeightedDiGraph.base_se
 
 
 
+omit [DecidableEq V] in
 @[simp]
 theorem admissible_heur_zero_for_goal
     (is_admissible : g.admissible heur goal):
-    heur goal = 0 := by sorry
+    heur goal = 0 := by
+      specialize is_admissible goal (nil_path goal) 
+      rw [Path.cost_nil_zero] at is_admissible
+      simp_all only [ge_iff_le, nonpos_iff_eq_zero]
 
 /- -/
 theorem astar_is_optimal (start : V) (goal : V)
