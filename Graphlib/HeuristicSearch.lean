@@ -756,13 +756,13 @@ lemma hsearch_expand_keeps_on_path_order_diff(start goal : V)
         hsearch_path_order_diff_by_edge_cost start state
           ∧ head ≠ goal
           ∧ state.stack = head :: tail
-        → hsearch_path_order_diff_by_edge_cost start (hsearch_step_expand h_zero state head tail) := by
+        → hsearch_path_order_diff_by_edge_cost start (hsearch_step_expand heur state head tail) := by
   intro head tail ⟨prior_diff,head_ne_goal,compose⟩ 
   unfold hsearch_path_order_diff_by_edge_cost
   intro now_mother_adj_invar u u_now_visited head_ne_start
   by_cases u_visited : u ∈ state.visited
   · 
-    have mother_options := hsearch_mother_options h_zero state head tail ⟨u,u_visited⟩ u_now_visited
+    have mother_options := hsearch_mother_options heur state head tail ⟨u,u_visited⟩ u_now_visited
     cases mother_options
     case pos.inl mother_head =>
       simp at mother_head
@@ -798,6 +798,52 @@ lemma hsearch_expand_keeps_on_path_order_diff(start goal : V)
     · simp_all
       split <;> simp_all
     · simp_all
+
+
+abbrev hsearch_invar_on_stack_or_all_neighbours_max_order (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)):=
+  ∀ x : s.visited, ↑x ∉ s.stack → ∀ y : V, (adj : g.Adj x y) → (s.pathOrder y).1 ≤ (s.pathOrder x).1 + g.edgeCost adj 
+
+
+lemma hsearch_expand_keeps_on_stack_or_nei_max_order(goal : V)
+    (on_stack_or_nei_visited : WeightedDiGraph.search_invar_on_stack_or_all_neighbours_visited state)
+    :
+     ∀ head : V, ∀ tail : List V, 
+        hsearch_invar_on_stack_or_all_neighbours_max_order  state
+          ∧ head ≠ goal
+          ∧ state.stack = head :: tail
+        → hsearch_invar_on_stack_or_all_neighbours_max_order  (hsearch_step_expand heur state head tail) := by
+      unfold hsearch_invar_on_stack_or_all_neighbours_max_order
+      simp
+      intro head tail prior_invar head_ne_goal compose a a_visited_after a_not_on_stack_after y a_adj_y
+
+      unfold hsearch_step_expand at a_visited_after a_not_on_stack_after
+      simp at a_visited_after a_not_on_stack_after
+      obtain ⟨ a_not_in_tail, a_visi_if_head_adj ⟩ := a_not_on_stack_after
+      cases a_visited_after
+      · next a_visited_before =>
+        by_cases a_eq_head : a = head
+        · subst a_eq_head
+          by_cases y_visited_before : y ∈ state.visited
+          · unfold hsearch_step_expand
+            simp [y_visited_before, a_visited_before]
+            split_ifs <;> grind 
+          · unfold hsearch_step_expand
+            simp [y_visited_before, a_visited_before]
+            grind
+        · by_cases y_visited_before : y ∈ state.visited
+          · unfold hsearch_step_expand
+            simp [y_visited_before, a_visited_before]
+            split_ifs <;> grind 
+          · unfold hsearch_step_expand
+            simp [y_visited_before, a_visited_before]
+            split <;> (simp_all ; grind)
+      · next both =>
+        obtain ⟨ head_adj_a, a_ne_visited ⟩ := both
+        grind -- contradictory
+
+
+
+
 
 end
 

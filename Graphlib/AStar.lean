@@ -358,67 +358,6 @@ lemma optimal_cost_le_pathOrder
   convert hw₂ _;
   exact hw₁.symm
 
-/-- For a closed node in the state, all its neighbours have pathOrder.1 ≤ pathOrder.1 + edgeCost.
-    This captures that when a node was last expanded, its neighbours were updated. -/
-abbrev closed_neighbor_pathOrder_bound (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
-  ∀ v : V, node_closed s v → ∀ w : V, (adj : g.Adj v w) →
-    (s.pathOrder w).1 ≤ (s.pathOrder v).1 + g.edgeCost adj
-
-/-
-PROVIDED SOLUTION
-At the initial state, the only visited node is start, and start is on the stack. So there are no closed nodes (closed = visited and not on stack). The universally quantified statement is vacuously true.
--/
-lemma closed_neighbor_bound_init :
-    closed_neighbor_pathOrder_bound (WeightedDiGraph.base_search_state_initial (G:=g) start (0,0)) := by
-  intro v hv w adj
-  exfalso
-  simp [WeightedDiGraph.base_search_state_initial, node_closed] at hv
-
-/-
-PROVIDED SOLUTION
-After expanding head:
-- head becomes closed. For head's neighbors w: new_pathOrder(w).1 ≤ old_pathOrder(head).1 + edgeCost(head,w) by construction of hsearch_step_expand (new_cost takes min). Also new_pathOrder(head) = old_pathOrder(head) (head's pathOrder doesn't change when head is expanded, as any self-loop path would be at least as costly).
-- For n ≠ head that was closed before and stays closed: n's pathOrder didn't change (if it had decreased, n would have been re-opened). And neighbors' pathOrder can only decrease. So old inequality still holds.
-
-Key details of hsearch_step_expand: new_order for v adj to head is min(old, pathOrder(head)+edgeCost) essentially. A node v stays closed (not re-opened) iff its pathOrder doesn't strictly decrease on the first component (the re-opening condition is pathOrder(v).1 > pathOrder(head).1 + edgeCost). So for a node that stays closed, its pathOrder.1 stays the same or increases. Actually pathOrder only decreases or stays by construction of new_cost. If pathOrder stays, that's fine. If pathOrder decreased (strictly on .1), the node gets re-opened and is no longer closed.
-
-After expanding head from old_stack = head::tail:
-
-A node v is closed in new state means v ∈ new_visited ∧ v ∉ new_stack.
-
-Case 1: v = head. head becomes closed. For neighbor w of head:
-  new_pathOrder(w).1 ≤ pathOrder(head).1 + edgeCost(head,w) by construction of hsearch_step_expand.
-  new_pathOrder(head) = old_pathOrder(head) (head's pathOrder doesn't change when head is expanded: if adj(head,head), new_cost takes min(old, old+edgeCost(head,head)), which is old since edgeCost ≥ 0; if not adj, stays same).
-  So new_pathOrder(w).1 ≤ new_pathOrder(head).1 + edgeCost.
-
-Case 2: v ≠ head, v is closed in new state. Then v was closed in old state (since only head changes from open to closed, and v ≠ head). By the old invariant, for any neighbor w: old_pathOrder(w).1 ≤ old_pathOrder(v).1 + edgeCost(v,w).
-After expansion:
-  - new_pathOrder(w).1 ≤ old_pathOrder(w).1 (by pathOrder_mono_after_expand)
-  - new_pathOrder(v).1 = old_pathOrder(v).1 (since v stayed closed, its pathOrder didn't change: if adj(head,v), the re-opening condition old.1 > pathOrder(head).1 + edgeCost would have re-opened v. Since v stayed closed, either not adj(head,v) or the min didn't strictly decrease .1).
-
-  Actually more precisely: v is closed in new state means v ∈ new_visited and v ∉ new_stack. If v was closed in old state (v ∈ old_visited, v ∉ old_stack=head::tail), then v ∉ tail. For v to be on new_stack, v would need to be in newly_visited_list. This happens only if adj(head,v) and (v ∉ old_visited OR (v ∈ old_visited ∧ v ∉ tail ∧ old_pathOrder(v).1 > pathOrder(head).1 + edgeCost)). Since v ∈ old_visited, the condition is the latter with strict >. If this condition holds, v IS re-opened (on new stack), contradicting v being closed in new state. So the condition doesn't hold: old_pathOrder(v).1 ≤ pathOrder(head).1 + edgeCost or v ∈ tail or not adj(head,v).
-
-  Since v was closed in old state, v ∉ tail. So either not adj(head,v) [in which case pathOrder stays] or old_pathOrder(v).1 ≤ pathOrder(head).1 + edgeCost(head,v) [in which case new_cost keeps old value since old.1 ≤ path_val.1].
-
-  Either way new_pathOrder(v).1 = old_pathOrder(v).1.
-
-  So new_pathOrder(w).1 ≤ old_pathOrder(w).1 ≤ old_pathOrder(v).1 + edgeCost = new_pathOrder(v).1 + edgeCost. ✓
--/
-lemma closed_neighbor_bound_maintained (goal : V) :
-    ∀ head : V, ∀ tail : List V,
-      closed_neighbor_pathOrder_bound state
-        ∧ search_invar_on_stack_or_all_neighbours_visited state
-        ∧ search_invar_stack_is_visited state
-        ∧ head ≠ goal
-        ∧ state.stack = head :: tail
-      → closed_neighbor_pathOrder_bound (hsearch_step_expand heur state head tail) := by
-  intro head tail h
-  intro v hv w adj
-  by_cases hv' : v ∈ state.visited <;> simp_all +decide [ node_closed ];
-  · unfold hsearch_step_expand at *; simp_all +decide [ Finset.subset_iff ] ;
-    grind;
-  · unfold hsearch_step_expand at hv; simp_all +decide [ Finset.filterMap ] ;
-    grind
 
 /-
 PROBLEM
@@ -490,7 +429,7 @@ lemma pathOrder_ge_optimal_after_expand
     -- By definition of `Walk.concat`, there exists a walk from `start` to `v` with cost ≤ `pathOrder(head) + edgeCost(head,v)`.
     obtain ⟨walk_v, hwalk_v⟩ : ∃ walk_v : g.Walk start v, walk_v.cost ≤ (state.pathOrder head).1 + g.edgeCost (hv_adj_head.choose) := by
       use walk_head.concat hv_adj_head.choose
-      simp [hwalk_head, Walk.concat];
+      simp [Walk.concat];
       exact add_le_add hwalk_head le_rfl;
     have hwalk_v_min : d ≤ min ((state.pathOrder v).1) ((state.pathOrder head).1 + g.edgeCost (hv_adj_head.choose)) := by
       have hwalk_v_min : d ≤ walk_v.cost := by
@@ -509,7 +448,7 @@ lemma pathOrder_ge_optimal_after_expand
       exact hwalk_v_min.trans hwalk_v)
     unfold hsearch_step_expand
     simp only [new_cost]
-    split_ifs <;> simp_all [path_val] <;> omega
+    split_ifs <;> simp_all [path_val]
   · -- Since v is not adjacent to head, the pathOrder of v remains the same after expansion.
     have h_pathOrder_eq : ((hsearch_step_expand heur state head tail).pathOrder v).1 = (state.pathOrder v).1 := by
       unfold hsearch_step_expand; grind
@@ -555,7 +494,7 @@ For nodup: start_w'_walk.support is Nodup since it's a prefix of p.val which has
 lemma find_open_on_walk_suffix
     {s : WeightedDiGraph.base_search_state g (ℕ×ℕ)}
     (on_stack_or_nei : search_invar_on_stack_or_all_neighbours_visited s)
-    (closed_bound_s : closed_neighbor_pathOrder_bound s)
+    (closed_bound_s : hsearch_invar_on_stack_or_all_neighbours_max_order s)
     (pathOrder_ge_g : ∀ u : V, u ∈ s.visited → ∀ d : ℕ, g.cost_is start u d → d ≤ (s.pathOrder u).1)
     {w v : V} (w_v : g.Walk w v)
     (hv_not_closed : ¬ node_closed s v)
@@ -575,7 +514,7 @@ lemma find_open_on_walk_suffix
       · exact absurd h_stack hw_closed.2
       · exact h_nei w' adj_w_w'
     have bound : (s.pathOrder w').1 ≤ (s.pathOrder w).1 + g.edgeCost adj_w_w' :=
-      closed_bound_s w hw_closed w' adj_w_w'
+      closed_bound_s ⟨ w, hw_closed.1 ⟩ hw_closed.2 w' adj_w_w'
     obtain ⟨start_w, hcompose⟩ := w_v_is_suffix
     -- start_w.concat adj = start_w.append (cons adj nil)
     -- (start_w.concat adj).append rest = start_w.append (cons adj rest) = p.val
@@ -646,7 +585,7 @@ lemma find_open_on_walk_suffix
 lemma find_open_on_path_from_closed
     {s : WeightedDiGraph.base_search_state g (ℕ×ℕ)}
     (on_stack_or_nei : search_invar_on_stack_or_all_neighbours_visited s)
-    (closed_bound_s : closed_neighbor_pathOrder_bound s)
+    (closed_bound_s : hsearch_invar_on_stack_or_all_neighbours_max_order s)
     (pathOrder_ge_g : ∀ v : V, v ∈ s.visited → ∀ d : ℕ, g.cost_is start v d → d ≤ (s.pathOrder v).1)
     {v : V} (hv_not_closed : ¬ node_closed s v)
     {p : g.Path start v} (hp : p.is_cheapest)
@@ -687,8 +626,7 @@ lemma astar_invar_from_state_properties
     (start_visited : start ∈ s.visited)
     (start_pathOrder_zero : (s.pathOrder start).1 = 0)
     (on_stack_or_nei : search_invar_on_stack_or_all_neighbours_visited s)
-    (stack_visited : search_invar_stack_is_visited s)
-    (closed_bound_s : closed_neighbor_pathOrder_bound s)
+    (closed_bound_s : hsearch_invar_on_stack_or_all_neighbours_max_order s)
     (pathOrder_ge_g : ∀ v : V, v ∈ s.visited → ∀ d : ℕ, g.cost_is start v d → d ≤ (s.pathOrder v).1) :
     astar_invar start s := by
   intro v hv_not_closed p hp_cheapest
@@ -696,18 +634,17 @@ lemma astar_invar_from_state_properties
   generalize_proofs at *; (
   -- Since $v = start$, the path from $start$ to $v$ is just the start itself. Therefore, $start$ is the node we're looking for.
   use start
-  simp [hv_start, start_pathOrder_zero, pathOrder_ge_g] at *; (
+  simp [hv_start, start_pathOrder_zero] at *; (
   exact ⟨ hv_not_closed start_visited, by exact cost_v_v start ⟩));
   -- Since v is not closed, start is open and we can apply the finding open node from closed node lemma.
   by_cases hv_open : node_open s start;
   · refine ⟨ start, ?_, hv_open, by simpa [ start_pathOrder_zero ] using cost_v_v start ⟩
     exact WeightedDiGraph.Walk.start_in_support p.1
   · apply find_open_on_path_from_closed on_stack_or_nei closed_bound_s pathOrder_ge_g
-    generalize_proofs at *; (
-    exact hv_not_closed);
-    exact hp_cheapest;
+    exact hv_not_closed
+    exact hp_cheapest
     any_goals exact start
-    all_goals generalize_proofs at *; simp_all +decide [ node_closed, node_open ] ;
+    all_goals generalize_proofs at *; simp_all +decide [ node_closed, node_open ]
     · exact Ne.symm hv_start;
     · exact cost_v_v start
 
@@ -733,9 +670,10 @@ After unfolding hsearch_step_expand at hv, v is in the union of state.visited an
 lemma newly_visited_adj_head
     (v : V) (hv : v ∈ (hsearch_step_expand heur state head tail).visited)
     (hv_old : v ∉ state.visited) :
-    ∃ adj : g.Adj head v, True := by
-  unfold hsearch_step_expand at hv; (
-  contrapose! hv; grind)
+    g.Adj head v := by
+  unfold hsearch_step_expand at hv
+  contrapose! hv
+  grind
 
 /-
 PROBLEM
@@ -757,13 +695,12 @@ lemma pathOrder_newly_visited
 
 /-- After expansion, the optimal cost is ≤ pathOrder for all visited nodes in the new state. -/
 lemma pathOrder_ge_optimal_all_after_expand
-    (start_visited : start ∈ state.visited)
     (mother_invar : search_invar_mother_is_visited state)
     (mother_adj : search_invar_mother_is_adjacent start state)
     (decreasing : search_invar_mother_decreasing_path_order start state)
     (diff_invar_h : hsearch_path_order_diff_by_edge_cost start state)
     (stack_visited : search_invar_stack_is_visited state)
-    (old_pathOrder_ge : ∀ v : V, v ∈ state.visited → ∀ d : ℕ, g.cost_is start v d → d ≤ (state.pathOrder v).1) :
+    :
     ∀ head : V, ∀ tail : List V,
       state.stack = head :: tail →
       ∀ v : V, v ∈ (hsearch_step_expand heur state head tail).visited →
@@ -775,7 +712,7 @@ lemma pathOrder_ge_optimal_all_after_expand
     have head_vis : head ∈ state.visited := stack_visited head (by rw [hstack]; simp)
     -- Build walk start → head → v
     -- v is adjacent to head
-    obtain ⟨adj, _⟩ := newly_visited_adj_head heur state v hv hv_old
+    have adj := newly_visited_adj_head heur state v hv hv_old
     -- pathOrder(v).1 = pathOrder(head).1 + edgeCost
     have po_eq := pathOrder_newly_visited (tail := tail) heur state v adj hv_old
     -- Build walk start → head → v
@@ -796,7 +733,7 @@ abbrev astar_start_pathOrder_zero (start : V) (s : WeightedDiGraph.base_search_s
 omit [DecidableEq V] in
 lemma astar_start_pathOrder_zero_init :
     astar_start_pathOrder_zero start (WeightedDiGraph.base_search_state_initial (G:=g) start (0,0)) := by
-  simp [astar_start_pathOrder_zero, WeightedDiGraph.base_search_state_initial]
+  simp [astar_start_pathOrder_zero]
 
 lemma astar_start_pathOrder_zero_maintained (goal : V)
     (start_vis : start ∈ state.visited) :
@@ -808,11 +745,15 @@ lemma astar_start_pathOrder_zero_maintained (goal : V)
   intro head tail ⟨h_zero, _, _⟩
   unfold astar_start_pathOrder_zero at h_zero ⊢
   have h_mono := pathOrder_mono_after_expand heur state head tail start start_vis
-  omega
+  apply nonpos_iff_eq_zero.mp
+  convert h_mono
+  exact h_zero.symm
+
+
 lemma astar_expand_keeps_main_invar (goal : V)
     (base_invars : search_invar_all_basic start state)
     (diff_invar : hsearch_path_order_diff_by_edge_cost start state)
-    (closed_bound : closed_neighbor_pathOrder_bound state)
+    (closed_bound : hsearch_invar_on_stack_or_all_neighbours_max_order state)
     (start_zero : astar_start_pathOrder_zero start state)
     :
      ∀ head : V, ∀ tail : List V, 
@@ -831,14 +772,13 @@ lemma astar_expand_keeps_main_invar (goal : V)
     -- Start pathOrder.1 = 0 in new state
     have new_start_zero := start_pathOrder_zero_after_expand heur state start_vis start_zero head tail
     -- closed_neighbor_pathOrder_bound in new state
-    have new_closed_bound := closed_neighbor_bound_maintained heur state goal head tail
-      ⟨closed_bound, on_stack_nei, stack_vis, head_ne_goal, stack_compose⟩
+    have new_closed_bound := hsearch_expand_keeps_on_stack_or_nei_max_order heur state goal on_stack_nei head tail 
+      ⟨closed_bound, head_ne_goal, stack_compose⟩
     -- pathOrder_ge_optimal for all visited nodes in new state
-    have new_pathOrder_ge := pathOrder_ge_optimal_all_after_expand heur state start_vis mother_vis mother_adj mother_dec diff_invar stack_vis
-      (fun v hv d hd => optimal_cost_le_pathOrder state mother_vis mother_adj mother_dec diff_invar v hv d hd)
+    have new_pathOrder_ge := pathOrder_ge_optimal_all_after_expand heur state mother_vis mother_adj mother_dec diff_invar stack_vis
       head tail stack_compose
     -- Apply astar_invar_from_state_properties
-    exact astar_invar_from_state_properties new_start_vis new_start_zero new_on_stack_nei new_stack_vis new_closed_bound new_pathOrder_ge
+    exact astar_invar_from_state_properties new_start_vis new_start_zero new_on_stack_nei new_closed_bound new_pathOrder_ge
 
 end
 
@@ -850,7 +790,7 @@ abbrev astar_all_invar (start goal : V) (s : WeightedDiGraph.base_search_state g
   ∧ astar_path_invar start goal s
   ∧ astar_stack_sorted heur s
   ∧ astar_goal_invar goal s
-  ∧ closed_neighbor_pathOrder_bound s
+  ∧ hsearch_invar_on_stack_or_all_neighbours_max_order s
   ∧ astar_start_pathOrder_zero start s
 
 omit [DecidableEq V] in
@@ -862,10 +802,10 @@ lemma astar_all_invar_holds_at_init (start goal : V) :
     unfold WeightedDiGraph.base_search_state_initial at hv
     simp at hv; subst hv; exact absurd rfl u_ne_start
   · exact astar_invar_holds_at_init start
-  · intro p; use start; simp [node_open, WeightedDiGraph.base_search_state_initial]
-  · simp [astar_stack_sorted, WeightedDiGraph.base_search_state_initial]
-  · intro hv; simp [WeightedDiGraph.base_search_state_initial] at hv ⊢; exact hv
-  · exact closed_neighbor_bound_init
+  · intro p; use start; simp [node_open]
+  · simp [astar_stack_sorted]
+  · intro hv; simp at hv ⊢; exact hv
+  · simp [hsearch_invar_on_stack_or_all_neighbours_max_order,WeightedDiGraph.base_search_state_initial]
   · exact astar_start_pathOrder_zero_init
 
 /-- The bundled A* invariant is preserved by expansion. -/
@@ -878,7 +818,7 @@ lemma astar_all_invar_preserved :
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · exact hsearch_expand_keeps_base_invars heur s head tail
       ⟨⟨stack_vis, mother_vis, mother_adj, mother_dec, on_stack_nei, start_vis⟩, head_ne_goal, stack_compose⟩
-  · exact hsearch_expand_keeps_on_path_order_diff s start goal stack_vis mother_adj mother_vis head tail
+  · exact hsearch_expand_keeps_on_path_order_diff heur s start goal stack_vis mother_adj mother_vis head tail
       ⟨diff, head_ne_goal, stack_compose⟩
   · exact astar_expand_keeps_main_invar heur s goal
       ⟨stack_vis, mother_vis, mother_adj, mother_dec, on_stack_nei, start_vis⟩
@@ -890,8 +830,8 @@ lemma astar_all_invar_preserved :
       ⟨sorted, head_ne_goal, stack_compose⟩
   · exact astar_expand_keeps_goal_invar heur s goal head tail
       ⟨goal_inv, head_ne_goal, stack_compose⟩
-  · exact closed_neighbor_bound_maintained heur s goal head tail
-      ⟨closed_bd, on_stack_nei, stack_vis, head_ne_goal, stack_compose⟩
+  · exact hsearch_expand_keeps_on_stack_or_nei_max_order heur s goal on_stack_nei head tail
+      ⟨closed_bd, head_ne_goal, stack_compose⟩
   · exact astar_start_pathOrder_zero_maintained heur s goal start_vis head tail
       ⟨start_zero, head_ne_goal, stack_compose⟩
 
