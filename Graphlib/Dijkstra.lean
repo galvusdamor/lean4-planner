@@ -162,7 +162,7 @@ variable (state : WeightedDiGraph.base_search_state g (ℕ×ℕ))
 
 lemma dijkstra_expand_start_not_mem_tail_carries (start : V) (goal : V)
     (start_visited : WeightedDiGraph.search_invar_start_visited start state)
-    (start_zero_zero : search_invar_start_path_order_zero_zero start state)
+    (start_zero_zero : hsearch_invar_start_path_order_zero_zero start state)
     :
      ∀ head : V, ∀ tail : List V, 
         search_invar_start_not_mem_tail start state
@@ -171,7 +171,7 @@ lemma dijkstra_expand_start_not_mem_tail_carries (start : V) (goal : V)
         → search_invar_start_not_mem_tail start (hsearch_step_expand h_zero state head tail) := by
       intro head tail ⟨ prior_invar,head_ne_goal,compose⟩ 
       unfold search_invar_start_not_mem_tail
-      unfold search_invar_start_path_order_zero_zero at start_zero_zero
+      unfold hsearch_invar_start_path_order_zero_zero at start_zero_zero
       unfold hsearch_step_expand
       simp_all
       intro start_in
@@ -232,17 +232,17 @@ lemma dijkstra_expand_stack_nodup_carries (goal : V)
 lemma dijkstra_expand_keeps_shortest_path_invar_start
     (start : V) (goal : V)
     (start_visited : WeightedDiGraph.search_invar_start_visited start state)
-    (start_path_order : search_invar_start_path_order_zero_zero start state)
+    (start_path_order : hsearch_invar_start_path_order_zero_zero start state)
     (head : V) (tail : List V)
     (head_is_not_goal : ¬head = goal)
     (compose : state.stack = head :: tail):
      g.cost_is start start ((hsearch_step_expand h_zero state head tail).pathOrder start).1
      := by
       unfold cost_is
-      unfold search_invar_start_path_order_zero_zero at start_path_order
+      unfold hsearch_invar_start_path_order_zero_zero at start_path_order
       have gg := start_path_order
       have still_zero : (hsearch_step_expand h_zero state head tail).pathOrder start = 0 := by
-        apply dijkstra_expand_start_path_order_zero_carries
+        apply hsearch_expand_start_path_order_zero_carries
         · apply start_visited
         · constructor
           · apply start_path_order
@@ -1182,7 +1182,7 @@ lemma dijkstra_expand_keeps_shortest_path_invar
     (path_order_diff : hsearch_path_order_diff_by_edge_cost start state)
     --(extract_length_invar : dijkstra_path_as_extracted_as_long_as_sort_index start state)
     (update_invar : hsearch_invar_on_stack_or_all_neighbours_max_order state)
-    (start_path_order : search_invar_start_path_order_zero_zero start state)
+    (start_path_order : hsearch_invar_start_path_order_zero_zero start state)
     (start_not_mem_tail : search_invar_start_not_mem_tail start state)
     (stack_nodup : search_invar_stack_nodup state)
     :
@@ -1759,7 +1759,7 @@ lemma dijkstra_expand_carries_all_dijkstra_invars (start : V) (goal : V):
           · exact ⟨ invar_before.right.right.right.left, head_ne_goal, compose⟩
         · apply dijkstra_expand_keeps_stack_sorted
           · exact ⟨ invar_before.right.right.right.right.left, head_ne_goal, compose⟩
-        · apply dijkstra_expand_start_path_order_zero_carries
+        · apply hsearch_expand_start_path_order_zero_carries
           · exact invar_before.left.right.right.right.right.right
           · exact ⟨ invar_before.right.right.right.right.right.left, head_ne_goal, compose⟩
         · apply dijkstra_expand_start_not_mem_tail_carries 
