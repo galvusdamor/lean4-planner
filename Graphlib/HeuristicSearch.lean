@@ -175,6 +175,74 @@ def hsearch_termination_metric
 
 variable (heur : V → ℕ)
 
+
+section
+variable (state : WeightedDiGraph.base_search_state g (ℕ×ℕ))
+
+
+/-
+PROBLEM
+After expansion, pathOrder.1 can only stay or decrease for previously visited nodes.
+
+PROVIDED SOLUTION
+For v ∈ state.visited: In hsearch_step_expand, new_order for v is:
+- If adj(head, v): if v ∉ visited then path_val else new_cost = min(old, path_val)
+  Since v ∈ state.visited, we use new_cost which is ≤ old by construction (it takes the min).
+- If not adj(head, v): pathOrder stays the same.
+So new_pathOrder(v).1 ≤ old_pathOrder(v).1.
+
+In new_cost:
+- if old.1 < path_val.1: keep old → new = old. ≤ holds.
+- if old.1 = path_val.1 ∧ old.2 < path_val.2: keep old → ≤ holds.
+- else: use path_val. Since we're in the else case, old.1 ≥ path_val.1. So path_val.1 ≤ old.1. ≤ holds.
+
+After unfolding hsearch_step_expand and new_cost, this becomes a decidable comparison. For each neighbor v of head that is visited, new_cost takes the minimum of old and path_val, so new.1 ≤ old.1. For non-neighbors, pathOrder stays the same. The goal should be provable by splitting on all the if-then-else conditions (whether v is adjacent to head, whether v is visited, etc.) and using omega or le_refl for each case. Try simp with split, omega, or decide.
+-/
+lemma pathOrder_mono_after_expand :
+    ∀ head : V, ∀ tail : List V,
+      ∀ v : V, v ∈ state.visited →
+        ((hsearch_step_expand heur state head tail).pathOrder v).1 ≤ (state.pathOrder v).1 := by
+  unfold hsearch_step_expand;
+  unfold new_cost
+  grind
+
+/-
+PROBLEM
+If v is in the new visited set but not the old, then head is adjacent to v.
+
+PROVIDED SOLUTION
+Unfold hsearch_step_expand at hv. The visited set is state.visited ∪ newly_visited. Since v ∉ state.visited, v ∈ newly_visited. By definition of newly_visited = Finset.filterMap ..., v must satisfy the condition that adj(head, v) exists. Extract this adjacency.
+
+After unfolding hsearch_step_expand at hv, v is in the union of state.visited and newly_visited. Since hv_old says v is not in state.visited, v must be in newly_visited. The newly_visited set is a Finset.filterMap over adjacencies of head. So there exists an adjacency adj : g.Adj head v. Try simp_all or Finset membership lemmas.
+-/
+lemma newly_visited_adj_head
+    (v : V) (hv : v ∈ (hsearch_step_expand heur state head tail).visited)
+    (hv_old : v ∉ state.visited) :
+    g.Adj head v := by
+  unfold hsearch_step_expand at hv
+  contrapose! hv
+  grind
+
+/-
+PROBLEM
+For a newly visited node v (not in old visited), pathOrder(v).1 = pathOrder(head).1 + edgeCost.
+
+PROVIDED SOLUTION
+Unfold hsearch_step_expand. The new pathOrder for v is: if adj(head, v) then (if v ∉ state.visited then path_val else new_cost). Since hv_old : v ∉ state.visited, we use path_val. path_val = (pathOrder(head).1 + edgeCost adj, pathOrder(head).2 + 1). So the .1 component is pathOrder(head).1 + edgeCost adj.
+
+Key: we have adj : g.Adj head v, so the decidable adj check resolves to true. And v ∉ state.visited from hv_old, so we take the path_val branch.
+
+After unfolding hsearch_step_expand, the new pathOrder for v: since v is not in state.visited (hv_old) and adj(head, v) exists, the path_val branch is taken, giving pathOrder(head).1 + edgeCost. Try simp_all or split on conditions and use omega.
+-/
+lemma pathOrder_newly_visited
+    (v : V) (adj : g.Adj head v)
+    (hv_old : v ∉ state.visited) :
+    ((hsearch_step_expand heur state head tail).pathOrder v).1 = (state.pathOrder head).1 + g.edgeCost adj := by
+  unfold hsearch_step_expand;
+  unfold path_val; grind
+
+end
+
 lemma hsearch_expand_metric_reduction : WeightedDiGraph.termination_proof_for_expand (G:=g) (state_type := hsearch_search_state g) (D:=ℕ ×ℕ) (hsearch_step_expand heur) goal hsearch_termination_metric := by
     unfold WeightedDiGraph.termination_proof_for_expand
     intro state head tail ⟨head_ne_goal,compose⟩
@@ -843,6 +911,23 @@ lemma hsearch_expand_keeps_on_stack_or_nei_max_order(goal : V)
 
 
 
+@[simp]
+abbrev hsearch_invar_start_path_order_zero_zero (start : V) (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
+      s.pathOrder start = (0,0)
+
+
+lemma hsearch_expand_start_path_order_zero_carries (start : V) (goal : V)
+    (start_visited : WeightedDiGraph.search_invar_start_visited start state)
+    :
+     ∀ head : V, ∀ tail : List V, 
+        hsearch_invar_start_path_order_zero_zero start state
+          ∧ ¬ head = goal
+          ∧ state.stack = head :: tail
+        → hsearch_invar_start_path_order_zero_zero start (hsearch_step_expand heur state head tail) := by
+      intro head tail ⟨ prior_invar,head_ne_goal,compose⟩ 
+      unfold hsearch_invar_start_path_order_zero_zero
+      unfold hsearch_step_expand
+      simp_all
 
 
 end

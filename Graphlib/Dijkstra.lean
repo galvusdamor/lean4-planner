@@ -96,10 +96,6 @@ abbrev dijkstra_stack_shortest_path (start : V) (s : WeightedDiGraph.base_search
 
 
 @[simp]
-abbrev search_invar_start_path_order_zero_zero (start : V) (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
-      s.pathOrder start = (0,0)
-
-@[simp]
 abbrev search_invar_start_not_mem_tail (start : V) (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
       start ∉ s.stack.tail
 
@@ -114,7 +110,7 @@ abbrev dijkstra_all_invar (start : V) (s : WeightedDiGraph.base_search_state g (
     ∧ hsearch_path_order_diff_by_edge_cost start s
     ∧ hsearch_invar_on_stack_or_all_neighbours_max_order s
     ∧ dijkstra_stack_sorted s
-    ∧ search_invar_start_path_order_zero_zero start s
+    ∧ hsearch_invar_start_path_order_zero_zero start s
     ∧ search_invar_start_not_mem_tail start s
     ∧ search_invar_stack_nodup s
 
@@ -149,7 +145,7 @@ lemma dijkstra_invar_holds_at_init (start : V):
         · unfold dijkstra_stack_sorted
           unfold WeightedDiGraph.base_search_state_initial
           simp
-        · unfold search_invar_start_path_order_zero_zero
+        · unfold hsearch_invar_start_path_order_zero_zero
           unfold WeightedDiGraph.base_search_state_initial
           simp
         · unfold search_invar_start_not_mem_tail
@@ -162,19 +158,6 @@ lemma dijkstra_invar_holds_at_init (start : V):
 section
 variable (state : WeightedDiGraph.base_search_state g (ℕ×ℕ))
 
-
-lemma dijkstra_expand_start_path_order_zero_carries (start : V) (goal : V)
-    (start_visited : WeightedDiGraph.search_invar_start_visited start state)
-    :
-     ∀ head : V, ∀ tail : List V, 
-        search_invar_start_path_order_zero_zero start state
-          ∧ ¬ head = goal
-          ∧ state.stack = head :: tail
-        → search_invar_start_path_order_zero_zero start (hsearch_step_expand h_zero state head tail) := by
-      intro head tail ⟨ prior_invar,head_ne_goal,compose⟩ 
-      unfold search_invar_start_path_order_zero_zero
-      unfold hsearch_step_expand
-      simp_all
 
 
 lemma dijkstra_expand_start_not_mem_tail_carries (start : V) (goal : V)
