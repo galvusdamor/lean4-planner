@@ -49,7 +49,7 @@ variable {G : WeightedDiGraph V E}
 
 namespace WeightedDiGraph
 
-def nodeNum (G : WeightedDiGraph V E) : ℕ := Fintype.card V
+def nodeNum (_ : WeightedDiGraph V E) : ℕ := Fintype.card V
 
 
 theorem payloadProofIrrelevant (u v : V) (h h' : G.Adj u v) :
