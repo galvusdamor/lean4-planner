@@ -1,4 +1,5 @@
 import Graphlib.Basic
+import Graphlib.FinEnum
 
 
 def NatGraph (V : Type) [FinEnum V] : Type := WeightedDiGraph V ℕ 
@@ -325,5 +326,50 @@ lemma cost_v_v (v : V) : G.cost_is v v 0 := by
     apply le_trans (b:=0)
     · rfl
     · apply zero_le
+
+
+
+
+def add_artificial_goal (goals : List V) : NatGraph (Option V) :=
+  let nAdj : Option V → Option V → Prop := fun a b => 
+    match (a,b) with
+     | (none, none) => ⊥
+     | (none, some _) => ⊥
+     | (some g ,none) => g ∈ goals
+     | (some a', some b') => G.Adj a' b'
+
+  let g : Digraph (Option V) := Digraph.mk nAdj
+
+  let nPay : (u v : Option V) -> (g.Adj u v) -> ℕ := fun u v adj =>
+    match eq : (u,v) with
+     | (none, none) => ⊥
+     | (none, some _) => ⊥
+     | (some g ,none) => 0 -- cost from actual goal to artificial one is 0
+     | (some a', some b') =>
+        have adj' : G.Adj a' b' := by
+          unfold g nAdj at adj
+          simp at adj
+          split at adj <;> try contradiction
+          · grind -- contradictory some = none
+          · convert adj <;> grind
+        G.Payload a' b' adj'
+
+  let nDec : DecidableRel g.Adj := by
+    unfold DecidableRel
+    intro a b
+    unfold g nAdj
+    simp
+    split
+    · apply Decidable.isFalse
+      simp
+    · apply Decidable.isFalse
+      simp
+    · expose_names; exact List.instDecidableMemOfLawfulBEq g_1 goals
+    · expose_names; apply G.instDecAdj a' b' 
+
+  WeightedDiGraph.mk g nPay nDec
+
+
+
 
 end NatGraph
