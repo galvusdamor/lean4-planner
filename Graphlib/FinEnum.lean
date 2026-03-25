@@ -65,4 +65,50 @@ theorem len_toList {α : Type} [DecidableEq α] [FinEnum α] : (toList (Finset.u
       apply multiset_map_id_attach 
   · simp
 
-end FinEnum 
+end FinEnum
+
+
+/-- Skeleton by ChatGPT, fixed compile errors
+ Proves that if V is FinEnum, so is Option V -/
+instance [FinEnum V] : FinEnum (Option V) where
+  card := FinEnum.card V + 1
+
+  equiv :=
+  { toFun := fun x =>
+      match x with
+      | none => ⟨0, Nat.succ_pos _⟩
+      | some v =>
+          let i := (FinEnum.equiv v).val
+          ⟨i + 1, Nat.succ_lt_succ (FinEnum.equiv v).isLt⟩
+
+    invFun := fun i =>
+      if h : i.val = 0 then
+        none
+      else
+        let j : Fin (FinEnum.card V) :=
+          ⟨i.val - 1,
+           by
+             have : i.val ≤ FinEnum.card V := Nat.lt_succ_iff.mp i.isLt
+             have hpos : 0 < i.val := Nat.pos_of_ne_zero h
+             grind
+          ⟩
+        some (FinEnum.equiv.symm j)
+
+    left_inv := by
+      intro x
+      cases x with
+      | none =>
+          simp
+      | some v =>
+          simp
+
+    right_inv := by
+      intro i
+      by_cases h : i.val = 0
+      · simp [h]; simp_all only [Fin.val_eq_zero_iff]
+      · simp [h]; grind
+  }
+
+  decEq := inferInstance
+
+
