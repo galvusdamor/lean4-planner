@@ -967,7 +967,7 @@ def opt_heur : Option V → ℕ := fun v =>
     | some v' => heur v'
 
 
-def astar_multigoal (start : V) (goals : List V): Option ((thegoal : V) × g.Path start thegoal) :=
+def astar_multigoal (start : V) (goals : List V): Option ((thegoal : {v : V // v ∈ goals}) × g.Path start thegoal) :=
   let nGraph : NatGraph (Option V) := g.add_artificial_goal goals
   let ret : Option (nGraph.Path start none) := nGraph.astar (opt_heur heur) start none
 
@@ -988,20 +988,21 @@ def astar_multigoal (start : V) (goals : List V): Option ((thegoal : V) × g.Pat
     have w_eq_some_w' : w = Option.some w' := by grind
     have pp : none ∉ (w_eq_some_w' ▸ path).support := by sorry
     have p : g.Path start w' := NatGraph.translate_path g (w_eq_some_w' ▸ path) (pp)
-    use Option.some ⟨w',p⟩
+    use Option.some ⟨⟨w',w_is_goal⟩,p⟩
 
 theorem astar_multigoal_is_sound (start : V) (goals : List V) :
     (Option.isSome (astar_multigoal (g:=g) heur start goals) → (∃ goal ∈ goals, ∃ x : (g.Path start goal), x = x)) := by
-    intro ret
-    --apply astar_is_sound
-    unfold astar_multigoal at ret
-    simp_all 
-    split at ret
-    · simp_all
-    · expose_names
-      have xxx := astar_is_sound (g:=g.add_artificial_goal goals) (opt_heur heur) (some start) (Option.none) (by unfold Option.isSome; simp_all only [Option.isSome_some])
-      sorry
-
+    intro retSome
+    let ret := g.astar_multigoal heur start goals
+    let theGoal := (ret.get retSome).1
+    let thePath := (ret.get retSome).2
+    use theGoal
+    constructor
+    · exact theGoal.prop
+    · constructor
+      · rfl
+      · use thePath
+        exact thePath.prop
 
 
 theorem astar_multigoal_is_complete (start : V) (goals : List V):
