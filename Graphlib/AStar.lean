@@ -26,7 +26,7 @@ set_option trace.split.failure true
 --set_option diagnostics true
 
 -- def local global variable for a graph
-variable {V : Type} [FinEnum V] [DecidableEq V]
+variable {V : Type} [FinEnum V] --[DecidableEq V]
 variable {g : NatGraph V}
 
 
@@ -37,6 +37,9 @@ open WeightedDiGraph
 /-- a heuristic is admissible iff for all nodes, the true cost is greater or equal to the heuristic --/
 abbrev admissible (heur : V → ℕ) (goal : V) :=
   ∀ v : V, g.cost_ge v goal (heur v)
+
+abbrev admissible' (heur : V → ℕ) (goals : List V) :=
+  ∀ v : V, ∀ goal ∈ goals, g.cost_ge v goal (heur v)
 
 variable (heur : V → ℕ)
 
@@ -104,7 +107,6 @@ abbrev astar_goal_invar (goal : V) (s : WeightedDiGraph.base_search_state g (ℕ
   goal ∈ s.visited → goal ∈ s.stack
 
 
-omit [DecidableEq V] in
 lemma astar_invar_holds_at_init (start : V):
   astar_invar start (WeightedDiGraph.base_search_state_initial (G:=g) start (0,0)) := by
   unfold astar_invar
@@ -119,7 +121,6 @@ lemma astar_invar_holds_at_init (start : V):
     apply cost_v_v
 
 
-omit [DecidableEq V] in 
 lemma walk_more_costly_than_chapest (start v : V) (d : ℕ)
 (v_cost_is : g.cost_is start v d) 
 (w : g.Walk start v) :
@@ -699,7 +700,6 @@ abbrev astar_all_invar (start goal : V) (s : WeightedDiGraph.base_search_state g
   ∧ hsearch_invar_on_stack_or_all_neighbours_max_order s
   ∧ hsearch_invar_start_path_order_zero_zero  start s
 
-omit [DecidableEq V] in
 lemma astar_all_invar_holds_at_init (start goal : V) :
     astar_all_invar heur start goal (WeightedDiGraph.base_search_state_initial (G:=g) start (0,0)) := by
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
@@ -741,7 +741,6 @@ lemma astar_all_invar_preserved :
   · exact hsearch_expand_start_path_order_zero_carries heur s start goal start_vis head tail
       ⟨start_zero, head_ne_goal, stack_compose⟩
 
-omit [DecidableEq V] in
 lemma astar_open_node_with_lower_f (start goal : V) (s : WeightedDiGraph.base_search_state g (ℕ×ℕ))
   (is_admissible : g.admissible heur goal)
   (has_astar_invar : astar_invar start s)
@@ -800,7 +799,6 @@ lemma astar_open_node_with_lower_f (start goal : V) (s : WeightedDiGraph.base_se
 
 
 
-omit [DecidableEq V] in
 @[simp]
 theorem admissible_heur_zero_for_goal
     (is_admissible : g.admissible heur goal):
@@ -955,5 +953,67 @@ theorem astar_is_optimal (start : V) (goal : V)
             case inr h =>
               apply le_of_eq
               exact h.1
+end NatGraph
+
+
+namespace NatGraph
+
+variable (heur : V → ℕ)
+
+
+def opt_heur : Option V → ℕ := fun v =>
+    match v with
+    | none => 0
+    | some v' => heur v'
+
+
+def astar_multigoal (start : V) (goals : List V): Option ((thegoal : V) × g.Path start thegoal) :=
+  let nGraph : NatGraph (Option V) := g.add_artificial_goal goals
+  let ret : Option (nGraph.Path start none) := nGraph.astar (opt_heur heur) start none
+
+  match ret with
+  | none => none
+  | some p => by
+    obtain ⟨w,⟨ path,prop⟩⟩ := WeightedDiGraph.Path.snoc p (by simp)
+    have w_is_some : w.isSome := by
+      unfold Option.isSome
+      unfold nGraph NatGraph.add_artificial_goal at prop
+      simp at prop
+      grind
+    let w' : V := w.get w_is_some
+    have w_is_goal : w' ∈ goals := by
+      unfold nGraph NatGraph.add_artificial_goal at prop
+      simp at prop
+      grind
+    have w_eq_some_w' : w = Option.some w' := by grind
+    have pp : none ∉ (w_eq_some_w' ▸ path).support := by sorry
+    have p : g.Path start w' := NatGraph.translate_path g (w_eq_some_w' ▸ path) (pp)
+    use Option.some ⟨w',p⟩
+
+theorem astar_multigoal_is_sound (start : V) (goals : List V) :
+    (Option.isSome (astar_multigoal (g:=g) heur start goals) → (∃ goal ∈ goals, ∃ x : (g.Path start goal), x = x)) := by
+    intro ret
+    --apply astar_is_sound
+    unfold astar_multigoal at ret
+    simp_all 
+    split at ret
+    · simp_all
+    · expose_names
+      have xxx := astar_is_sound (g:=g.add_artificial_goal goals) (opt_heur heur) (some start) (Option.none) (by unfold Option.isSome; simp_all only [Option.isSome_some])
+      sorry
+
+
+
+theorem astar_multigoal_is_complete (start : V) (goals : List V):
+    ((∃ goal ∈ goals, ∃ x : (g.Path start goal), x = x) → Option.isSome (astar_multigoal (g:=g) heur start goals)) := by
+  sorry 
+
+
+theorem astar_multigoal_is_optimal (start : V) (goals : List V)
+    (is_admissible : g.admissible' heur goal)
+    (returned_path : Option.isSome (astar_multigoal (g:=g) heur start goals)):
+    ((astar_multigoal (g:=g) heur start goals).get returned_path).2.is_cheapest := by
+      sorry
+
 
 end NatGraph

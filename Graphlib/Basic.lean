@@ -121,7 +121,7 @@ def length {u v : V} : (G.Walk u v) → ℕ
   | Walk.nil => 0
 
 @[simp]
-theorem length_nil_zero {u : V} : (Walk.nil : G.Walk u u).length = 0 := by unfold length ; rfl 
+theorem length_nil_zero {u : V} : (Walk.nil : G.Walk u u).length = 0 := by unfold length ; rfl
 
 @[simp]
 theorem length_diff_ends_ne_zero {u v : V} (h : u ≠ v) (p : G.Walk u v):
@@ -161,7 +161,7 @@ theorem cons_support {x u v w: V} (p: G.Walk v w) (h : G.Adj u v ): x ∈ (Walk.
 theorem support_cons {u v w: V} (p: G.Walk v w) (h : G.Adj u v): (Walk.cons h p).support = u :: p.support:= by
   conv =>
    left
-   unfold support 
+   unfold support
 
 theorem support_last {u v : V} (p : G.Walk u v):
     p.support = p.support.dropLast ++ [v] := by
@@ -228,7 +228,7 @@ def is_sub_walk_head {u v w : V} (p : G.Walk u v) (p' : G.Walk w v) : Bool :=
   | cons _ p_sub => p_sub.is_sub_walk_head  p'
 
 def is_prefix {u v w : V} (p : G.Walk u v) (p' : G.Walk u w) : Bool :=
-  match p' with 
+  match p' with
   | nil => true -- p' is the empty path already.
   | cons (w:= p'_u') _ p_sub' =>
     match p with
@@ -285,6 +285,32 @@ theorem split_at_end_length_one (p : G.Walk u v) (len_ne_zero : p.length > 0):
         rw [extend_prop]
         congr
 
+def snoc' (p : G.Walk u v)  (len_ne_zero : p.length > 0):
+    Σ w : V, { p : G.Walk u w // G.Adj w v }:= by
+    cases p
+    · simp_all [length]
+    · next u' u_adj_u' p_u' =>
+      cases eq : p_u'
+      case nil =>
+        use u
+        use (Walk.nil : G.Walk u u)
+      case cons u'' u'_adj_u'' p_u'' =>
+        let p_u' := Walk.cons u'_adj_u'' p_u''
+        have p_u'_length : p_u'.length > 0 := by simp [length, p_u']
+        obtain ⟨w,pp⟩ := p_u'.snoc' p_u'_length
+        have p' : G.Walk u w := Walk.cons u_adj_u' pp
+        exact ⟨w,⟨ p',pp.prop⟩⟩
+
+
+def snoc (p : G.Walk u v) (not_nil : u ≠ v):
+    Σ w : V, { p : G.Walk u w // G.Adj w v }:= by
+    have len_ne_zero : p.length > 0 := by
+      cases p
+      · contradiction
+      · simp [length]
+
+    exact snoc' p len_ne_zero
+
 theorem split_at_end (p : G.Walk u v) (not_nil : u ≠ v):
     ∃ w : V, ∃ p' : G.Walk u w, ∃ w_adj_v : G.Adj w v,
       p = p'.concat w_adj_v := by
@@ -295,7 +321,7 @@ theorem split_at_end (p : G.Walk u v) (not_nil : u ≠ v):
     apply p.split_at_end_length_one len_ne_zero
 
 def support_of_append {u v w : V} (uv : G.Walk u v) (vw : G.Walk v w):
-    (uv.append vw).support = uv.support ++ vw.support.tail := by 
+    (uv.append vw).support = uv.support ++ vw.support.tail := by
   induction uv with
   | nil =>
     cases vw with
@@ -348,7 +374,7 @@ lemma nodup_suffix_of_append_nodup {u v w : V}
         exact Walk.support_of_append uw wv
       cases wv <;> simp_all +decide [ List.nodup_append ];
       · exact List.nodup_singleton _;
-      · cases uw 
+      · cases uw
         · by_contra
           have x := h.2.2 u
           simp at x
@@ -457,7 +483,7 @@ theorem support_walk_nodup {u : V} : (G.nil_path u).val.support.Nodup := by
 
 theorem length_diff_ends_ne_zero {u v : V} (h : u ≠ v) (p : G.Path u v):
     p.length > 0 := by
-  unfold length 
+  unfold length
   apply Walk.length_diff_ends_ne_zero
   exact h
 
@@ -496,7 +522,7 @@ def concat (p : G.Path u v) (h : G.Adj v w) (proof_w_not_in_support : w ∉ p.va
     intro x y notEq h
     apply notEq
     rw  [h]
-  ⟨ path_walk, path_nodup ⟩ 
+  ⟨ path_walk, path_nodup ⟩
 
 def append {u v w : V} (uv : G.Path u v) (vw : G.Path v w) (h : ∀ a ∈ uv.val.support, ∀ b ∈ vw.val.support.tail, a ≠ b): G.Path u w :=
   let uwWalk : G.Walk u w := uv.val.append vw.val
@@ -525,7 +551,7 @@ theorem support_concat_is_append_at_end (p: G.Path u v) (h: G.Adj v w)(proof_w_n
 @[simp]
 theorem concat_inc_length_by_one (p : G.Path u v) (h : G.Adj v w) (proof_w_not_in_support : w ∉ p.support) :
       (p.concat h proof_w_not_in_support).length = 1 + p.length := by
-  apply Walk.concat_inc_length_by_one 
+  apply Walk.concat_inc_length_by_one
 
 
 theorem split_at_end (p : G.Path u v) (not_nil : u ≠ v):
@@ -550,6 +576,10 @@ theorem split_at_end (p : G.Path u v) (not_nil : u ≠ v):
       apply List.pairwise_append.mp at p_supp_nodup
       grind
     use not_in_supp
+
+def snoc (p : G.Path u v) (not_nil : u ≠ v):
+    Σ w : V, { p : G.Path u w // G.Adj w v }:= by sorry
+
 
 theorem contains_subpath {u v w : V} (p : G.Path u v) (w_in_path : w ∈ p.support) (w_ne_v : w ≠ v):
     ∃ p' : G.Path u w, p'.length  < p.length := by

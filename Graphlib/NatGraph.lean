@@ -2,12 +2,12 @@ import Graphlib.Basic
 import Graphlib.FinEnum
 
 
-def NatGraph (V : Type) [FinEnum V] : Type := WeightedDiGraph V ℕ 
+def NatGraph (V : Type) [FinEnum V] : Type := WeightedDiGraph V ℕ
 
 
 
 namespace NatGraph
-variable {V : Type} [FinEnum V] 
+variable {V : Type} [FinEnum V]
 variable {G : NatGraph V}
 
 
@@ -18,7 +18,7 @@ end NatGraph
 
 namespace WeightedDiGraph
 
-variable {V : Type} [FinEnum V] 
+variable {V : Type} [FinEnum V]
 variable {G : NatGraph V}
 
 namespace Walk
@@ -35,7 +35,7 @@ theorem append_cons_inc_cost_by_edge (w : G.Walk u v) (h : G.Adj v v') :
   split
   · repeat unfold Walk.cost
     simp_all
-  · unfold Walk.cost 
+  · unfold Walk.cost
     conv =>
       right
       rw [add_comm]
@@ -60,7 +60,7 @@ theorem concat_inc_cost_by_edge (p : G.Walk u v) (h : G.Adj v w) :
   apply append_cons_inc_cost_by_edge
 
 @[simp]
-theorem cost_nil_zero {u : V} : (Walk.nil : G.Walk u u).cost = 0 := by unfold cost ; rfl 
+theorem cost_nil_zero {u : V} : (Walk.nil : G.Walk u u).cost = 0 := by unfold cost ; rfl
 
 theorem contains_subwalk_cost {u v w : V} (p : G.Walk u v) (w_in_walk : w ∈ p.support) (w_ne_v : w ≠ v):
     ∃ p' : G.Walk u w, p'.cost ≤ p.cost ∧ p'.support <+: p.support := by
@@ -103,7 +103,7 @@ theorem dropUntilMakesCheaper (p : G.Walk u v) (f : V) (h : f ∈ p.support):
       apply walk_trans (V:=V)
       apply nil_eq_cons
     · simp
-  | cons _ p' ih => 
+  | cons _ p' ih =>
     unfold dropUntil
     split
     · rename_i h_2
@@ -129,7 +129,7 @@ theorem cost_bypass_le (p : G.Walk u v) : p.bypass.cost ≤ p.cost:= by
       trans
       · apply dropUntilMakesCheaper
       · grind
-    · unfold cost 
+    · unfold cost
       grind
 
 
@@ -158,7 +158,7 @@ theorem cost_nil_walk_zero {u : V} : (G.nil_path u).val.length  = 0 := by
 
 @[simp]
 theorem cost_empty_zero {u : V} (p : G.Path u u) : p.cost = 0 := by
-  unfold cost 
+  unfold cost
   unfold Walk.cost
   cases compose : p.val
   · simp
@@ -173,7 +173,7 @@ theorem cost_empty_zero {u : V} (p : G.Path u u) : p.cost = 0 := by
 @[simp]
 theorem concat_inc_cost_by_edge (p : G.Path u v) (h : G.Adj v w) (proof_w_not_in_support : w ∉ p.support) :
       (p.concat h proof_w_not_in_support).cost = G.edgeCost h + p.cost := by
-  apply Walk.concat_inc_cost_by_edge 
+  apply Walk.concat_inc_cost_by_edge
 
 
 
@@ -183,7 +183,7 @@ def is_cheapest {u v : V} (p : G.Path u v) : Prop :=
 
 theorem contains_subpath_cost {u v w : V} (p : G.Path u v) (w_in_path : w ∈ p.support) (w_ne_v : w ≠ v):
     ∃ p' : G.Path u w, p'.cost ≤ p.cost ∧ p'.support <+: p.support := by
-    obtain ⟨w',len,supp⟩ := p.val.contains_subwalk_cost w_in_path w_ne_v 
+    obtain ⟨w',len,supp⟩ := p.val.contains_subwalk_cost w_in_path w_ne_v
     have p_nodup : w'.support.Nodup := by
       apply List.Nodup.sublist (l₂ := p.support)
       · apply List.IsPrefix.sublist
@@ -197,12 +197,12 @@ theorem contains_subpath_cost {u v w : V} (p : G.Path u v) (w_in_path : w ∈ p.
       apply supp
 
 
-theorem non_cheapest_path_has_cheaper {u v : V} (p : G.Path u v): 
+theorem non_cheapest_path_has_cheaper {u v : V} (p : G.Path u v):
   ¬ is_cheapest p → ∃ p' : G.Path u v, p'.cost < p.cost := by
   unfold is_cheapest
   simp
 
-theorem non_cheapest_path_has_cheaper_cheapest {u v : V} (p : G.Path u v): 
+theorem non_cheapest_path_has_cheaper_cheapest {u v : V} (p : G.Path u v):
   ¬ is_cheapest p → ∃ p' : G.Path u v, is_cheapest p' ∧ p'.cost < p.cost := by
   intro prop
   --unfold is_cheapest
@@ -289,7 +289,7 @@ end Path
 end WeightedDiGraph
 
 namespace NatGraph
-variable {V : Type} [FinEnum V] 
+variable {V : Type} [FinEnum V]
 variable {G : NatGraph V}
 
 def cost_is (u v : V) (dist: ℕ) : Prop :=
@@ -321,17 +321,18 @@ lemma cost_v_v (v : V) : G.cost_is v v 0 := by
   constructor
   · simp_all only [WeightedDiGraph.Path.cost_same]
     rfl
-  · intro p' 
+  · intro p'
     simp_all only [WeightedDiGraph.Path.cost_same]
     apply le_trans (b:=0)
     · rfl
     · apply zero_le
 
+end NatGraph
 
+namespace NatGraph
 
-
-def add_artificial_goal (goals : List V) : NatGraph (Option V) :=
-  let nAdj : Option V → Option V → Prop := fun a b => 
+def add_artificial_goal {V : Type} [FinEnum V] (G : NatGraph V) (goals : List V) : NatGraph (Option V) :=
+  let nAdj : Option V → Option V → Prop := fun a b =>
     match (a,b) with
      | (none, none) => ⊥
      | (none, some _) => ⊥
@@ -365,11 +366,25 @@ def add_artificial_goal (goals : List V) : NatGraph (Option V) :=
     · apply Decidable.isFalse
       simp
     · expose_names; exact List.instDecidableMemOfLawfulBEq g_1 goals
-    · expose_names; apply G.instDecAdj a' b' 
+    · expose_names; apply G.instDecAdj a' b'
 
   WeightedDiGraph.mk g nPay nDec
 
+def translate_path {V : Type} [FinEnum V] (G : NatGraph V) {a b : V} {goals : List V} (p : (G.add_artificial_goal goals).Path (some a) (some b)) (none_not_in_p : Option.none ∉ p.support) : G.Path a b :=  match eq : p.val with
+  | .nil => WeightedDiGraph.nil_path a 
+  | .cons adj walk => by
+    expose_names   
 
+    have w_is_some : w.isSome := by sorry
+    let w' := w.get w_is_some
+
+    let walk' : G.Walk w' b := by sorry
+    have adj' : G.Adj a w' := by 
+      unfold NatGraph.add_artificial_goal at adj
+      simp at adj ; grind
+    
+    use WeightedDiGraph.Walk.cons adj' walk'
+    sorry
 
 
 end NatGraph
