@@ -5,29 +5,30 @@ import Mathlib.Data.Finsupp.Defs
 import Mathlib.Data.Finsupp.WellFounded
 import Mathlib.Data.List.ToFinsupp
 
+set_option linter.deprecated false in
+/-- Bridge from `Std.Trichotomous` to `IsTrichotomous` for decidable relations.
+Can be removed after update to 4.28 as Finsupp.Lex.wellFounded' is then updated-/
+instance isTrichOfStdTrich {α : Sort*} {r : α → α → Prop} [DecidableRel r]
+    [Std.Trichotomous r] : IsTrichotomous α r := by
+  first
+  | exact inferInstance
+  | exact ⟨fun a b => by
+      by_cases h1 : r a b
+      · exact Or.inl h1
+      · by_cases h2 : r b a
+        · exact Or.inr (Or.inr h2)
+        · exact Or.inr (Or.inl (Std.Trichotomous.trichotomous a b h1 h2))⟩
 
-instance : IsTrichotomous ℕ Nat.lt where
- trichotomous (a b : ℕ) : Nat.lt a b ∨ a = b ∨ Nat.lt b a := by
-   simp
-   by_cases h : a < b
-   · left ; exact h
-   by_cases hh : b < a
-   · right ; right ; exact hh
-   right ; left ; omega
+instance : Std.Trichotomous (· < · : ℕ → ℕ → Prop) where
+  trichotomous _ _ h1 h2 := Nat.le_antisymm (Nat.not_lt.mp h2) (Nat.not_lt.mp h1)
 
 def Fin.lt (n : ℕ) (a b : Fin n) : Prop := a.val < b.val
 
-instance {n : ℕ} : IsTrichotomous (Fin n) (Fin.lt n) where
- trichotomous (a b : Fin n) : Nat.lt a b ∨ a = b ∨ Nat.lt b a := by
-   simp
-   by_cases h : a < b
-   · left ; exact h
-   by_cases hh : b < a
-   · right ; right ; exact hh
-   right ; left ; omega
+instance {n : ℕ} : DecidableRel (Fin.lt n) := fun a b => Nat.decLt a.val b.val
 
 
-
+instance {n : ℕ} : Std.Trichotomous (Fin.lt n) where
+  trichotomous _ _ h1 h2 := Fin.ext (Nat.le_antisymm (Nat.not_lt.mp h2) (Nat.not_lt.mp h1))
 
 def zero_wf_rel {α : Type} (rel_a : α → α → Prop) (a b : WithZero α) : Prop := 
   match (a,b) with
