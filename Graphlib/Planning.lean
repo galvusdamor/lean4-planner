@@ -1,5 +1,6 @@
 import Validator.PlanningTask.Core
 import Graphlib.NatGraph
+import Graphlib.AStar
 
 namespace Validator
 
@@ -11,10 +12,13 @@ instance {n : ℕ} : FinEnum (BitVec n) :=
     grind)
 
 
-def applicable' {n : ℕ} (a : Action n) (state : State' n) : Bool :=
-  a.pre'.val.all (fun x => state[x])
+def satisfies' {n : ℕ} (cond : VarSet' n) (state : State' n) : Bool :=
+  cond.val.all (fun x => state[x])
 
-def successor' {n : ℕ} (a : Action n) (f t : State' n) : Bool :=
+def applicable' {n : ℕ} (a : Action n) (state : State' n) : Bool :=
+  satisfies' a.pre' state
+
+def is_successor' {n : ℕ} (a : Action n) (f t : State' n) : Bool :=
   (List.finRange n).all (fun x =>
     if a.add'.val.contains x then
       t[x]
@@ -24,24 +28,126 @@ def successor' {n : ℕ} (a : Action n) (f t : State' n) : Bool :=
       t[x] = f[x]
   )
 
+def successor' {n : ℕ} (a : Action n) (f : State' n) : State' n :=
+  BitVec.cast (by simp) (BitVec.ofBoolListLE ((List.finRange n).map (fun x =>
+    if a.add'.val.contains x then
+      True
+    else if a.del'.val.contains x then
+      False
+    else
+      f[x])))
+
+
+theorem BitVec.getElem_ofBoolListLE {i : Nat} {bs : List Bool} (h : i < bs.length) :
+  (BitVec.ofBoolListLE bs)[i] = bs[i] := by
+  rw [← BitVec.getLsbD_eq_getElem, BitVec.getLsbD_ofBoolListLE]
+  simp only [List.getD_eq_getElem?_getD]
+  rw [List.getElem?_eq_getElem (by omega)]
+  simp
+
+
+lemma successor'_is_successor' {n : ℕ} (a : Action n) (f : State' n) :
+    is_successor' a f (successor' a f) := by
+  unfold is_successor' successor'
+  simp
+  intro x
+  split_ifs <;> try (simp_all [BitVec.getElem_ofBoolListLE])
+
+
+
+
+abbrev is_successor_state {n : ℕ} (prob : STRIPS n) (f t : State' n) :=
+    prob.actions'.any (fun a => applicable' a f ∧ is_successor' a f t)
+
+
+def cost_of {n : ℕ} (prob : STRIPS n) (f t : State' n) (is_succ : is_successor_state prob f t): ℕ := 
+    let applicableActs := prob.actions'.filter (fun a => applicable' a f ∧ is_successor' a f t)
+    let costs : List ℕ := applicableActs.map (fun x => x.cost)
+    costs.min (by unfold costs applicableActs ; simp_all)
+
+
+lemma min_fold_find {α β : Type u}  [LinearOrder β] (l : List α) (x : β) (f : α → β) (h : x ≠ List.foldl min (x) (List.map f l)):
+  ∃ a ∈ l, f a = List.foldl min x (List.map f l) := by
+  cases l
+  · contradiction
+  case cons head tail =>
+    by_cases head_eq_min : f head = List.foldl min x (List.map f (head :: tail))
+    · use head
+      constructor
+      · simp only [List.mem_cons, true_or]
+      · exact head_eq_min
+    · 
+      unfold List.map List.foldl at ⊢ head_eq_min
+      simp only [List.mem_cons, exists_eq_or_imp]
+      right
+      apply min_fold_find
+      by_contra 
+      rw [←this] at head_eq_min
+      have x_lt_head : x = x ⊓ f head := by
+        expose_names
+        rw [inst.min_def]
+        grind
+      grind
+
+lemma min_map {α β : Type u} [LinearOrder β] (l : List α) (f : α → β) (h : l.map f ≠ []):
+    ∃ a ∈ l, f a = (l.map f).min h := by
+    cases l
+    · grind
+    · expose_names
+      unfold List.min
+      simp
+      rw [or_iff_not_imp_left]; intro head_ne_min
+      apply min_fold_find
+      apply head_ne_min
+
+
+def min_cost_action {n : ℕ} (prob : STRIPS n) (f t : State' n) (is_succ : is_successor_state prob f t): Action n := 
+    let applicableActs := prob.actions'.filter (fun a => applicable' a f ∧ is_successor' a f t)
+    -- TODO ideally use List.minOn in newer mathlib version
+    let costs : List ℕ := applicableActs.map (fun x => x.cost)
+    let minCost := costs.min (by unfold costs applicableActs ; simp_all)
+    let opt_act := applicableActs.find? (·.cost = minCost)
+    have is_act : opt_act.isSome = true := by
+      unfold opt_act minCost costs
+      simp
+      apply min_map
+
+    opt_act.get is_act
+
+
 
 def trans_of_STRIPS {n : ℕ} (prob : STRIPS n) : NatGraph (State' n) :=
-
-  let edges : State' n → State' n → Prop := fun f t =>
-    prob.actions'.any (fun a => applicable' a f ∧ successor' a f t)
+  let edges : State' n → State' n → Prop := fun f t => is_successor_state prob f t
 
   let dg : Digraph (State' n) := Digraph.mk edges
   let dg_dec : DecidableRel dg.Adj := by infer_instance
   let cost : (u v : State' n) → dg.Adj u v → ℕ := fun f t adj =>
-    let applicableActs := prob.actions'.filter (fun a => applicable' a f ∧ successor' a f t)
-    let costs : List ℕ := applicableActs.map (fun x => x.cost)
-    costs.min (by
-      unfold dg edges at adj
-      simp at adj
-      unfold costs applicableActs
-      simp_all)
+    cost_of prob f t (by unfold is_successor_state ; grind)
 
   WeightedDiGraph.mk dg cost dg_dec
+
+def walk_to_strips_path {n : ℕ} (prob : STRIPS n) {start goal : State' n} (walk : WeightedDiGraph.Walk (G:= trans_of_STRIPS prob) start goal) (is_goal : satisfies' prob.goal' goal):
+    Path prob (convertState start) (convertState goal):= 
+  match eq : walk with
+  | .nil => Path.empty (convertState start)
+  | .cons adj walk' => by
+    expose_names
+    have is_succ : is_successor_state prob start w := by sorry
+    let a : Action n := min_cost_action prob start w is_succ
+    apply Path.cons (a := a)
+    · sorry
+    · sorry
+    · sorry
+    · sorry
+
+def planner {n : ℕ} (prob : STRIPS n) : Option (Plan prob prob.init) :=
+  let trans := trans_of_STRIPS prob
+  let ini := prob.init'
+  let goals := (List.finRange (2^n)).filter (fun s => satisfies' prob.goal' s)
+  let h : (State' n) → ℕ := fun _ => 0 
+
+  let ret := NatGraph.astar_multigoal (g:=trans) h ini goals 
+  sorry
 
 
 --import Aesop
