@@ -43,14 +43,14 @@ namespace Nat
 instance : SizeOfFromPreOrder ℕ where
   comp := by intro x y leq ; simp_all
 
-instance (n : ℕ) : SizeOf (ℕ × Fin n) where
+@[simp] instance instSizeOfNatFin (n : ℕ) : SizeOf (ℕ × Fin n) where
   sizeOf x := x.fst * (n+1) + x.snd 
 
 instance (n : ℕ) : SizeOfFromPreOrder (ℕ × Fin n) where
   comp := by
     intro x y leq
     unfold sizeOf
-    unfold instSizeOfProdFin_graphlib
+    unfold instSizeOfNatFin
     apply Prod.lt_iff.mp at leq
     obtain ⟨ x1, x2⟩ := x
     obtain ⟨ y1, y2⟩ := y
