@@ -4,8 +4,6 @@ import Graphlib.FinEnum
 
 def NatGraph (V : Type) [FinEnum V] : Type := WeightedDiGraph V ℕ
 
-
-
 namespace NatGraph
 variable {V : Type} [FinEnum V]
 variable {G : NatGraph V}
