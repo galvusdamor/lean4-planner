@@ -8,3 +8,9 @@ name = "Graphlib"
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"
+rev = "v4.27.0"
+
+[[require]]
+name = "unplanvalidator"
+git = "https://github.com/AmosNico/validator"
+rev = "main"
