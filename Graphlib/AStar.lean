@@ -47,7 +47,7 @@ def astar (start : V) (goal : V): Option (g.Path start goal) :=
   let start_state := WeightedDiGraph.base_search_state_initial start ⟨0,0⟩
   have h : WeightedDiGraph.has_base_search_state.to_base_state (G:=g) start_state = WeightedDiGraph.base_search_state_initial start (0,0):= by simp_all only [start_state]; rfl
 
-  WeightedDiGraph.search_exe_with_stack_step (G:=g) (start := start) (goal:=goal) (start_state:=start_state) (termination_metric := hsearch_termination_metric) (hsearch_step_expand heur) (hsearch_expand_metric_reduction heur) (hsearch_expand_keeps_base_invars heur) h 
+  WeightedDiGraph.search_exe_with_stack_step (G:=g) (start := start) (goal:=goal) (start_state:=start_state) (termination_metric := hsearch_termination_metric) (hsearch_step_expand heur) (hsearch_expand_metric_reduction heur) (hsearch_expand_keeps_base_invars heur) h
 
 
 def astar_last_state (start : V) (goal : V): WeightedDiGraph.base_search_state g (ℕ×ℕ) × Bool :=
@@ -97,7 +97,7 @@ abbrev node_closed (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) (v : V) 
     there is an open node v' on p for which its current known distance from start is the optimum -/
 abbrev astar_invar (start : V) (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
   ∀ v : V, ¬ (node_closed s v) → ∀ p : g.Path start v, p.is_cheapest →
-    ∃ v' ∈ p.support, (node_open s v') ∧ g.cost_is start v' (s.pathOrder v').1 
+    ∃ v' ∈ p.support, (node_open s v') ∧ g.cost_is start v' (s.pathOrder v').1
 
 abbrev astar_path_invar (start : V) (goal : V) (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
   --∀ p : g.Path start goal, p.is_cheapest → ∃ v' ∈ p.support, (node_open s v')
@@ -122,7 +122,7 @@ lemma astar_invar_holds_at_init (start : V):
 
 
 lemma walk_more_costly_than_chapest (start v : V) (d : ℕ)
-(v_cost_is : g.cost_is start v d) 
+(v_cost_is : g.cost_is start v d)
 (w : g.Walk start v) :
     d ≤ w.cost := by
     unfold cost_is at v_cost_is
@@ -140,15 +140,15 @@ variable (state : WeightedDiGraph.base_search_state g (ℕ×ℕ))
 
 lemma astar_expand_keeps_stack_sorted (goal : V)
     :
-     ∀ head : V, ∀ tail : List V, 
+     ∀ head : V, ∀ tail : List V,
         astar_stack_sorted heur state
           ∧ head ≠ goal
           ∧ state.stack = head :: tail
         → astar_stack_sorted  heur (hsearch_step_expand heur state head tail) := by
-      intro head tail ⟨ prior_invar,head_ne_goal,compose⟩ 
+      intro head tail ⟨ prior_invar,head_ne_goal,compose⟩
       unfold astar_stack_sorted
       unfold hsearch_step_expand
-      apply merge_two_prop 
+      apply merge_two_prop
       · intro a b c a_b b_c
         apply hsearch_merge_trans
         · apply a_b
@@ -161,7 +161,7 @@ lemma astar_expand_keeps_stack_sorted (goal : V)
 
 lemma astar_expand_keeps_goal_invar (goal : V)
     :
-     ∀ head : V, ∀ tail : List V, 
+     ∀ head : V, ∀ tail : List V,
         astar_goal_invar goal state
           ∧ head ≠ goal
           ∧ state.stack = head :: tail
@@ -169,8 +169,8 @@ lemma astar_expand_keeps_goal_invar (goal : V)
   intro head tail ⟨ prior_invar, head_ne_goal, stack_compose ⟩
   unfold astar_goal_invar at prior_invar ⊢
   intro goal_visited
-  unfold hsearch_step_expand at goal_visited ⊢ 
-  simp at goal_visited ⊢ 
+  unfold hsearch_step_expand at goal_visited ⊢
+  simp at goal_visited ⊢
   cases goal_visited
   case inl goal_mem_tail =>
     left
@@ -234,7 +234,7 @@ lemma astar_expand_keeps_path_invar {start : V} (goal : V)
   (goal_invar : astar_goal_invar goal state)
   (stack_visited : search_invar_stack_is_visited state)
     :
-     ∀ head : V, ∀ tail : List V, 
+     ∀ head : V, ∀ tail : List V,
         astar_path_invar start goal state
           ∧ head ≠ goal
           ∧ state.stack = head :: tail
@@ -285,7 +285,7 @@ lemma astar_expand_keeps_path_invar {start : V} (goal : V)
         have head'_in_p : head' ∈ p.support := by
           unfold Path.support
           rw [← compose]
-          rw [Walk.support_of_append] 
+          rw [Walk.support_of_append]
           rw [List.mem_append]
           right
           rw [head_goal_compose]
@@ -293,7 +293,7 @@ lemma astar_expand_keeps_path_invar {start : V} (goal : V)
         by_cases head'_on_stack : head' ∈ tail
         · use head'
           constructor
-          · exact head'_in_p 
+          · exact head'_in_p
           · unfold hsearch_step_expand
             simp
             left
@@ -328,7 +328,7 @@ lemma astar_expand_keeps_path_invar {start : V} (goal : V)
     case tail v'_in_tail =>
       use v'
       constructor
-      · exact v'_in_p 
+      · exact v'_in_p
       · unfold hsearch_step_expand
         simp
         left
@@ -664,7 +664,7 @@ lemma astar_expand_keeps_main_invar (goal : V)
     (closed_bound : hsearch_invar_on_stack_or_all_neighbours_max_order state)
     (start_zero : hsearch_invar_start_path_order_zero_zero start state)
     :
-     ∀ head : V, ∀ tail : List V, 
+     ∀ head : V, ∀ tail : List V,
           head ≠ goal
           ∧ state.stack = head :: tail
         → astar_invar start (hsearch_step_expand heur state head tail) := by
@@ -679,7 +679,7 @@ lemma astar_expand_keeps_main_invar (goal : V)
     -- Start pathOrder.1 = 0 in new state
     have new_start_zero := hsearch_expand_start_path_order_zero_carries heur state start goal start_vis head tail ⟨ start_zero, head_ne_goal, stack_compose ⟩
     -- closed_neighbor_pathOrder_bound in new state
-    have new_closed_bound := hsearch_expand_keeps_on_stack_or_nei_max_order heur state goal on_stack_nei head tail 
+    have new_closed_bound := hsearch_expand_keeps_on_stack_or_nei_max_order heur state goal on_stack_nei head tail
       ⟨closed_bound, head_ne_goal, stack_compose⟩
     -- pathOrder_ge_optimal for all visited nodes in new state
     have new_pathOrder_ge := pathOrder_ge_optimal_all_after_expand heur state mother_vis mother_adj mother_dec diff_invar stack_vis
@@ -746,7 +746,7 @@ lemma astar_open_node_with_lower_f (start goal : V) (s : WeightedDiGraph.base_se
   (has_astar_invar : astar_invar start s)
   (has_path_invar : astar_path_invar start goal s)
   :
-  ∀ p : g.Path start goal, p.is_cheapest → 
+  ∀ p : g.Path start goal, p.is_cheapest →
     ∃ v' ∈ p.support, (node_open s v') ∧ (s.pathOrder v').1 + (heur v') ≤ p.cost
   := by
   intro p p_cheapest
@@ -765,7 +765,7 @@ lemma astar_open_node_with_lower_f (start goal : V) (s : WeightedDiGraph.base_se
   
   specialize has_astar_invar start_v' start_v'_nodup start_v'_cheapest
 
-  obtain ⟨v'',v''_in_support,v''_open,v''_cost_is⟩ := has_astar_invar 
+  obtain ⟨v'',v''_in_support,v''_open,v''_cost_is⟩ := has_astar_invar
 
   use v''
   and_intros
@@ -776,7 +776,7 @@ lemma astar_open_node_with_lower_f (start goal : V) (s : WeightedDiGraph.base_se
     left
     exact v''_in_support
   · exact v''_open
-  · unfold Path.cost 
+  · unfold Path.cost
     have v''_in_p : v'' ∈ p.support := by
       unfold Path.support
       exact Walk.mem_support_prefix_of_append start_v' v'_goal compose v'' v''_in_support
@@ -794,7 +794,7 @@ lemma astar_open_node_with_lower_f (start goal : V) (s : WeightedDiGraph.base_se
       -- subwalk of p
       have v''_goal_nodup : v''_goal.support.Nodup :=
         Walk.nodup_suffix_of_append_nodup start_v'' v''_goal (compose ▸ p.prop)
-      specialize is_admissible ⟨v''_goal, v''_goal_nodup⟩ 
+      specialize is_admissible ⟨v''_goal, v''_goal_nodup⟩
       apply is_admissible
 
 
@@ -803,7 +803,7 @@ lemma astar_open_node_with_lower_f (start goal : V) (s : WeightedDiGraph.base_se
 theorem admissible_heur_zero_for_goal
     (is_admissible : g.admissible heur goal):
     heur goal = 0 := by
-      specialize is_admissible goal (nil_path goal) 
+      specialize is_admissible goal (nil_path goal)
       rw [Path.cost_nil_zero] at is_admissible
       simp_all only [ge_iff_le, nonpos_iff_eq_zero]
 
@@ -817,14 +817,14 @@ theorem astar_is_optimal (start : V) (goal : V)
  
     -- general properties
     have h_4 : WeightedDiGraph.search_prop_stack_head_is_goal goal final_state := by
-      --intro terminated_with_goal_found 
+      --intro terminated_with_goal_found
       --unfold search_prop_stack_head_is_goal
       unfold final_state
       unfold final
       unfold WeightedDiGraph.search_with_stack_step
       simp
       unfold WeightedDiGraph.search_internal
-      apply WeightedDiGraph.search_recurse_obtain_base_termination_property (G:=g) (D:=ℕ×ℕ) (T:=(Vector (WithTop (ℕ × ℕ)) g.nodeNum) × ℕ) goal (WeightedDiGraph.base_search_state_initial start (0,0)) (property_after_termination := WeightedDiGraph.search_prop_stack_head_is_goal (D:=ℕ×ℕ) goal ) (terminated_with := true) (search_step := WeightedDiGraph.search_stack_step (G:=g) (D:=ℕ×ℕ) (hsearch_step_expand (g:=g) heur)) hsearch_termination_metric 
+      apply WeightedDiGraph.search_recurse_obtain_base_termination_property (G:=g) (D:=ℕ×ℕ) (T:=(Vector (WithTop (ℕ × ℕ)) g.nodeNum) × ℕ) goal (WeightedDiGraph.base_search_state_initial start (0,0)) (property_after_termination := WeightedDiGraph.search_prop_stack_head_is_goal (D:=ℕ×ℕ) goal ) (terminated_with := true) (search_step := WeightedDiGraph.search_stack_step (G:=g) (D:=ℕ×ℕ) (hsearch_step_expand (g:=g) heur)) hsearch_termination_metric
       · intro s
         apply WeightedDiGraph.search_stack_step_goal_stack_head_if_terminated
       · unfold astar at returned_path
@@ -845,7 +845,7 @@ theorem astar_is_optimal (start : V) (goal : V)
 
     have h_3 : WeightedDiGraph.search_prop_goal_visited goal final_state := by
       apply t_0
-      unfold WeightedDiGraph.search_prop_stack_head_is_goal at h_4 
+      unfold WeightedDiGraph.search_prop_stack_head_is_goal at h_4
       apply List.eq_cons_of_mem_head? at h_4
       rw [h_4]
       simp
@@ -911,7 +911,7 @@ theorem astar_is_optimal (start : V) (goal : V)
 
     specialize xx has_astar_path_invar p' p'_cheapest
 
-    obtain ⟨v', v'_on_p', v'_open,cost⟩ := xx 
+    obtain ⟨v', v'_on_p', v'_open,cost⟩ := xx
 
     apply le_trans ; rotate_left
     · apply cost
@@ -924,7 +924,7 @@ theorem astar_is_optimal (start : V) (goal : V)
       · -- from invariant
         have final_stack_sorted : astar_stack_sorted heur final_state := astar_full_invar_at_end.2.2.2.2.1
         unfold astar_stack_sorted at final_stack_sorted
-        unfold search_prop_stack_head_is_goal at h_4 
+        unfold search_prop_stack_head_is_goal at h_4
         apply List.head?_eq_some_iff.mp at h_4
         obtain ⟨tail, compose⟩ := h_4
         unfold node_open at v'_open
@@ -942,7 +942,7 @@ theorem astar_is_optimal (start : V) (goal : V)
           case inl h =>
             apply le_of_eq
             exact (Prod.mk_inj.mp h).1
-          case inr h => 
+          case inr h =>
             unfold FValueComp.lt Nat.instFValueCompProd at h
             simp at h
             apply Prod.lex_iff.mp at h

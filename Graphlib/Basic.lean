@@ -567,7 +567,7 @@ theorem split_at_end (p : G.Path u v) (not_nil : u ≠ v):
       apply List.pairwise_append.mp at h
       grind
     use w
-    use⟨ p_w, nodup ⟩ 
+    use⟨ p_w, nodup ⟩
     use w_adj_v
     have not_in_supp : v ∉ p_w.support:= by
       have support_compose : p.val.support= p_w.support ++ [v] := by simp [walk_extended]
