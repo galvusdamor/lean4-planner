@@ -439,6 +439,20 @@ lemma planner_complete {n : ℕ} (prob : STRIPS n):
     contradiction
   · grind -- some = none
 
+namespace Path
+
+/-- The length of a path. -/
+def cost {n} {pt : STRIPS n} {s s'} : Path pt s s' → ℕ
+| Path.empty _ => 0
+| Path.cons a _ _ _ π => π.cost + a.cost
+
+end Path
+
+
+lemma planner_optimal {n : ℕ} (prob : STRIPS n) (ret_plan : (planner prob).isSome):
+  ∀ plan : Plan prob prob.init, plan.path.cost ≥ ((planner prob).get ret_plan).path.cost := by
+  sorry
+
 --import Aesop
 --
 --import Mathlib.Data.Fintype.Basic
