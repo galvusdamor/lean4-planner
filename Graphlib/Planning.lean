@@ -1,6 +1,9 @@
 import Validator.PlanningTask.Core
+import Validator.PlanningTask.Basic
 import Graphlib.NatGraph
 import Graphlib.AStar
+
+import Mathlib.Logic.Lemmas
 
 namespace Validator
 
@@ -207,6 +210,162 @@ def walk_to_strips_path {n : ℕ} (prob : STRIPS n) {start goal : State' n} (wal
       · exact walk'
       · exact is_goal
 
+lemma convertState_injective {n} : Function.Injective (@convertState n) := by
+  intro a b h
+  ext i
+  unfold convertState at h
+  simp_all
+  apply Set.ext_iff.mp at h
+  expose_names
+  specialize h ⟨i,hi⟩
+  grind
+
+
+lemma state_has_bitvec {n : ℕ} (s : State n) [DecidablePred s.Mem] : ∃ s' : State' n, convertState s' = s := by
+  unfold State at s
+  unfold convertState
+  let l := (List.finRange n).map (fun x => decide (s.Mem x))
+  have l_length : l.length = n := by grind
+  let s' := BitVec.ofBoolListLE l
+  use s'.cast l_length
+  unfold s' l
+  apply Set.ext
+  intro x
+  constructor
+  · intro x_in
+    simp_all
+    rw [BitVec.getElem_ofBoolListLE] at x_in
+    simp_all
+    exact x_in
+  · intro x_in
+    simp_all
+    rw [BitVec.getElem_ofBoolListLE]
+    simp_all
+    exact x_in
+
+
+lemma adj_of_successor {n : ℕ} {a : Action n} (prob : STRIPS n) {s s' : State' n} (succ : Successor a (convertState s) (convertState s')) (ha : a ∈ prob.actions):
+  (trans_of_STRIPS prob).Adj s s' := by
+  unfold Successor convertState Applicable Action.pre Action.add Action.del convertVarSet at succ
+  unfold trans_of_STRIPS
+  simp_all
+  use a
+  constructor
+  · unfold STRIPS.actions at ha
+    simp at ha
+    exact ha
+  · constructor
+    · unfold applicable' satisfies'
+      simp
+      intro x x_in_pre
+      grind
+    · unfold is_successor'
+      simp
+      intro x
+      obtain ⟨_,eff⟩ := succ
+      apply Set.ext_iff.mp at eff
+      specialize eff x
+      grind
+
+
+noncomputable def successor_dec {n : ℕ} (a : Action n) (s s' : State n) (succ : Successor a s s'):
+  DecidablePred (Set.Mem s') := by
+  unfold DecidablePred
+  intro i
+  obtain ⟨ _, foo ⟩ := succ
+  rw [foo]
+  by_cases i_in_add : i ∈ a.add
+  · apply isTrue
+    apply Set.mem_union_right
+    exact i_in_add
+  · have union := (Set.mem_union (x:=i) (a:=s \ a.del) (b:=a.add)).mp
+    by_cases i_in_del : i ∈ a.del
+    · apply isFalse
+      by_contra
+      specialize union this
+      grind
+    · by_cases i_in_s : i ∈ s
+      · apply isTrue
+        apply Set.mem_union_left
+        apply Set.mem_diff_of_mem
+        · exact i_in_s
+        · exact i_in_del
+      · apply isFalse
+        by_contra
+        specialize union this
+        cases union
+        · expose_names
+          apply (Set.mem_diff (x:=i)).mp at h 
+          simp_all
+        · contradiction
+
+noncomputable def strips_path_to_walk {n : ℕ} (prob : STRIPS n) {start goal : State' n} (path : Path prob (convertState start) (convertState goal)):
+    WeightedDiGraph.Walk (G:= trans_of_STRIPS prob) start goal
+  := by
+    generalize hs : convertState start = s at path
+    generalize hg : convertState goal = g at path
+    cases path with
+    | empty s => 
+        have : start = goal := convertState_injective (hs.trans hg.symm)
+        subst this
+        exact WeightedDiGraph.Walk.nil
+    | cons a s2 ha succ path' =>
+      have s2_mem_dec : DecidablePred (Set.Mem s2) := successor_dec a s s2 succ
+      have xx := state_has_bitvec s2
+      let s2' := Classical.choose xx
+      let s2'_eq_s2 := Classical.choose_spec xx
+      apply WeightedDiGraph.Walk.cons (w:= s2')
+      · apply adj_of_successor
+        · rw [← hs] at succ
+          rw [← s2'_eq_s2] at succ
+          apply succ
+        · exact ha
+      · rw [← s2'_eq_s2] at path'
+        rw [← hg] at path'
+        apply strips_path_to_walk (path := path')
+termination_by path.length
+decreasing_by
+  simp
+  expose_names
+  have f : path'.length < path.length := by
+    have e := HEq.eq h_2
+    rw [e]
+    conv =>
+      right
+      unfold Validator.Path.length 
+    simp
+  grind
+
+noncomputable def last_dec {n : ℕ} (prob : STRIPS n) (s : State' n) (last : State n) (path : Path prob (convertState s) last) :
+    DecidablePred (Set.Mem last) := by 
+  cases path
+  · intro x
+    unfold convertState
+    by_cases s_i : s[x] = true
+    · apply isTrue
+      unfold Set.Mem
+      exact s_i
+    · apply isFalse
+      exact s_i
+  case cons a s2 ha succ path' =>
+    have s2_mem_dec : DecidablePred (Set.Mem s2) := successor_dec a (convertState s) s2 succ
+    have xx := state_has_bitvec s2
+    let s2' := Classical.choose xx
+    let s2'_eq_s2 := Classical.choose_spec xx
+    apply last_dec (path:=s2'_eq_s2 ▸ path')
+termination_by path.length
+decreasing_by
+  expose_names
+  have f : π.length < path.length := by
+    have e := HEq.eq h_2
+    rw [e]
+    conv =>
+      right
+      unfold Validator.Path.length 
+    simp
+  grind
+
+
 def planner {n : ℕ} (prob : STRIPS n) : Option (Plan prob prob.init) :=
   let trans := trans_of_STRIPS prob
   let ini := prob.init'
@@ -237,6 +396,48 @@ def planner {n : ℕ} (prob : STRIPS n) : Option (Plan prob prob.init) :=
     let plan : Plan prob prob.init := Plan.mk (convertState ret.fst) path goal_sat 
     Option.some plan
 
+
+
+lemma planner_complete {n : ℕ} (prob : STRIPS n):
+      planner prob = Option.none → Unsolvable prob := by
+  intro ret_none
+  unfold Unsolvable UnsolvableState 
+  constructor
+  intro plan
+  let plan_path : Path prob prob.init plan.last := plan.path
+  unfold STRIPS.init at plan_path
+  have last_dec : DecidablePred (Set.Mem plan.last) := last_dec prob prob.init' plan.last plan_path
+  obtain ⟨goal',goal_eq_goal'⟩ := state_has_bitvec plan.last
+  rw [←goal_eq_goal'] at plan_path
+  let walk := strips_path_to_walk prob plan_path
+
+
+  unfold planner at ret_none
+  simp at ret_none
+  split at ret_none
+  · expose_names
+    let zero_h : State' n → ℕ := fun _ => 0
+    let goals : List (State' n) := (List.finRange (2^n)).filter (fun s => satisfies' prob.goal' s)
+
+    have no_goal_path := mt (NatGraph.astar_multigoal_is_complete zero_h prob.init' goals) (by simp ; apply heq)
+    push_neg at no_goal_path
+    have goal'_in_goals : goal' ∈ goals := by
+      unfold goals
+      simp
+      constructor
+      · grind only
+      · have gs := plan.goal
+        unfold STRIPS.GoalState at gs
+        unfold satisfies'
+        simp
+        intro x x_in_goal'
+        rw [←goal_eq_goal'] at gs
+        unfold convertVarSet convertState at gs
+        simp_all only [ne_eq, not_true_eq_false, Subtype.forall, imp_false, List.coe_toFinset, Fin.getElem_fin, Set.setOf_subset_setOf]
+    obtain ⟨path,_⟩ := walk.shorter_path_exists
+    specialize no_goal_path goal' goal'_in_goals path 
+    contradiction
+  · grind -- some = none
 
 --import Aesop
 --
