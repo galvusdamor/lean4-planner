@@ -311,6 +311,23 @@ def snoc (p : G.Walk u v) (not_nil : u ≠ v):
 
     exact snoc' p len_ne_zero
 
+/-- Like `snoc'` but also returns a proof that the walk equals the prefix concatenated with the last edge. -/
+def snoc_with_proof (p : G.Walk u v) (h : p.length > 0) :
+    Σ w : V, (q : G.Walk u w) × { adj : G.Adj w v // p = q.concat adj } := by
+  cases p with
+  | nil => simp [length] at h
+  | cons u_adj_u' p_u' =>
+    cases hp : p_u' with
+    | nil =>
+      exact ⟨_, Walk.nil, ⟨u_adj_u', by simp [concat, append]⟩⟩
+    | cons u'_adj_u'' p_u'' =>
+      let p_u'_new : G.Walk _ v := Walk.cons u'_adj_u'' p_u''
+      have p_u'_length : p_u'_new.length > 0 := by simp [length, p_u'_new]
+      let ⟨w, q, ⟨adj, hq⟩⟩ := snoc_with_proof p_u'_new p_u'_length
+      refine ⟨w, Walk.cons u_adj_u' q, ⟨adj, ?_⟩⟩
+      change Walk.cons u_adj_u' p_u'_new = (Walk.cons u_adj_u' q).concat adj
+      change p_u'_new = q.concat adj at hq
+      rw [hq]; simp [concat, append]
 theorem split_at_end (p : G.Walk u v) (not_nil : u ≠ v):
     ∃ w : V, ∃ p' : G.Walk u w, ∃ w_adj_v : G.Adj w v,
       p = p'.concat w_adj_v := by
@@ -428,7 +445,7 @@ theorem split_at {u v w : V} (p : G.Walk u v) (w_in_walk : w ∈ p.support):
         cases hw;
         · exact ⟨ Walk.nil, Walk.cons h p, by rfl ⟩
         · obtain ⟨ uw, wv, hw ⟩ := w_in_walk _ ‹_›
-          use cons h uw, wv; aesop;
+          use cons h uw, wv; simp [Walk.append, hw]
     exact h_length p w w_in_walk
 
 
@@ -585,10 +602,15 @@ Induction on p.val (the underlying walk). p.val can't be nil since u ≠ v. So p
 
 Alternative simpler approach: use Walk.snoc p.val not_nil to get ⟨w, ⟨walk, adj⟩⟩. Then show walk.support is nodup because it's a sublist of p.val.support (which is nodup). The key is that walk.support ++ [v] = p.val.support (by the concatenation property of Walk.snoc/split_at_end).
 -/
-noncomputable def snoc (p : G.Path u v) (not_nil : u ≠ v):
-    Σ w : V, { p : G.Path u w // G.Adj w v } :=
-  have h := split_at_end p not_nil
-  ⟨h.choose, ⟨h.choose_spec.choose, h.choose_spec.choose_spec.choose⟩⟩
+def snoc (p : G.Path u v) (not_nil : u ≠ v):
+    Σ w : V, { p' : G.Path u w // G.Adj w v } :=
+  let len_pos : p.val.length > 0 := Walk.length_diff_ends_ne_zero not_nil p.val
+  let ⟨w, walk, ⟨adj, concat_eq⟩⟩ := p.val.snoc_with_proof len_pos
+  have walk_nodup : walk.support.Nodup := by
+    have h : (walk.concat adj).support.Nodup := concat_eq ▸ p.prop
+    rw [Walk.support_concat_is_append_at_end] at h
+    exact (List.nodup_append.mp h).1
+  ⟨w, ⟨⟨walk, walk_nodup⟩, adj⟩⟩
 
 theorem contains_subpath {u v w : V} (p : G.Path u v) (w_in_path : w ∈ p.support) (w_ne_v : w ≠ v):
     ∃ p' : G.Path u w, p'.length  < p.length := by

@@ -543,7 +543,7 @@ lemma translate_walk_nodup {a b : V} {goals : List V}
 
 /-- Translate a path in the augmented graph (with no `none` in support)
     to a path in the original graph. -/
-noncomputable def translate_path {a b : V} {goals : List V}
+def translate_path {a b : V} {goals : List V}
     (p : (G.add_artificial_goal goals).Path (some a) (some b))
     (none_not_in_p : Option.none ∉ p.support) : G.Path a b :=
   ⟨G.translate_walk p.val none_not_in_p, G.translate_walk_nodup p.val p.prop none_not_in_p⟩
@@ -609,7 +609,7 @@ lemma lift_path_to_augmented_cost {goals : List V} {start thegoal : V}
         · simp_all +decide [ List.nodup_append ];
           intro a ha H
           have := hq₁; simp_all +decide [ List.nodup_iff_count_le_one ] ;
-          exact absurd ( none_not_in_walk_to_some q ) ( by aesop );
+          exact absurd ha ( none_not_in_walk_to_some q );
         · simp +decide [ WeightedDiGraph.Walk.concat ];
           rfl;
       exact ⟨ ⟨ q', hq'.1 ⟩, hq'.2.trans hq₂ ⟩

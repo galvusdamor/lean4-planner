@@ -966,7 +966,7 @@ def opt_heur : Option V → ℕ := fun v =>
     | none => 0
     | some v' => heur v'
 
-noncomputable def astar_multigoal (start : V) (goals : List V): Option ((thegoal : {v : V // v ∈ goals}) × g.Path start thegoal) :=
+def astar_multigoal (start : V) (goals : List V): Option ((thegoal : {v : V // v ∈ goals}) × g.Path start thegoal) :=
   let nGraph : NatGraph (Option V) := g.add_artificial_goal goals
   let ret : Option (nGraph.Path start none) := nGraph.astar (opt_heur heur) start none
 
@@ -1127,9 +1127,10 @@ lemma astar_multigoal_cost_le_aug (start : V) (goals : List V)
       rw [WeightedDiGraph.Path.path_subst_cost]
       unfold WeightedDiGraph.Path.snoc
       simp only
-      have h_se := aug_path.split_at_end (by simp)
-      have h_concat := h_se.choose_spec.choose_spec.choose_spec.2
-      conv_rhs => rw [h_concat]
+      -- Use the concat_eq from snoc_with_proof
+      have concat_eq := (aug_path.val.snoc_with_proof
+        (WeightedDiGraph.Walk.length_diff_ends_ne_zero (by simp) aug_path.val)).2.2.prop
+      conv_rhs => rw [concat_eq]
       rw [WeightedDiGraph.Walk.concat_inc_cost_by_edge]
       apply Nat.le_add_left
 
