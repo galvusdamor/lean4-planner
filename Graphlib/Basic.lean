@@ -577,9 +577,18 @@ theorem split_at_end (p : G.Path u v) (not_nil : u ≠ v):
       grind
     use not_in_supp
 
-def snoc (p : G.Path u v) (not_nil : u ≠ v):
-    Σ w : V, { p : G.Path u w // G.Adj w v }:= by sorry
+/-
+PROVIDED SOLUTION
+Use `split_at_end p not_nil` to obtain ⟨w, p', w_adj_v, _, _⟩. Then return ⟨w, ⟨p', w_adj_v⟩⟩.
 
+Induction on p.val (the underlying walk). p.val can't be nil since u ≠ v. So p.val = Walk.cons adj rest. If rest is nil, then return ⟨u, nil_path u, adj⟩. Otherwise, recursively call snoc on the tail (which is a path since prefix of a nodup list is nodup), then prepend the first edge.
+
+Alternative simpler approach: use Walk.snoc p.val not_nil to get ⟨w, ⟨walk, adj⟩⟩. Then show walk.support is nodup because it's a sublist of p.val.support (which is nodup). The key is that walk.support ++ [v] = p.val.support (by the concatenation property of Walk.snoc/split_at_end).
+-/
+noncomputable def snoc (p : G.Path u v) (not_nil : u ≠ v):
+    Σ w : V, { p : G.Path u w // G.Adj w v } :=
+  have h := split_at_end p not_nil
+  ⟨h.choose, ⟨h.choose_spec.choose, h.choose_spec.choose_spec.choose⟩⟩
 
 theorem contains_subpath {u v w : V} (p : G.Path u v) (w_in_path : w ∈ p.support) (w_ne_v : w ≠ v):
     ∃ p' : G.Path u w, p'.length  < p.length := by

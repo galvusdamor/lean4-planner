@@ -966,8 +966,7 @@ def opt_heur : Option V → ℕ := fun v =>
     | none => 0
     | some v' => heur v'
 
-
-def astar_multigoal (start : V) (goals : List V): Option ((thegoal : {v : V // v ∈ goals}) × g.Path start thegoal) :=
+noncomputable def astar_multigoal (start : V) (goals : List V): Option ((thegoal : {v : V // v ∈ goals}) × g.Path start thegoal) :=
   let nGraph : NatGraph (Option V) := g.add_artificial_goal goals
   let ret : Option (nGraph.Path start none) := nGraph.astar (opt_heur heur) start none
 
@@ -986,8 +985,8 @@ def astar_multigoal (start : V) (goals : List V): Option ((thegoal : {v : V // v
       simp at prop
       grind
     have w_eq_some_w' : w = Option.some w' := by grind
-    have pp : none ∉ (w_eq_some_w' ▸ path).support := by sorry
-    have p : g.Path start w' := NatGraph.translate_path g (w_eq_some_w' ▸ path) (pp)
+    have pp : none ∉ (w_eq_some_w' ▸ path).support := by apply none_not_in_walk_to_some
+    have p : g.Path start w' := NatGraph.translate_path (G:=g) (w_eq_some_w' ▸ path) (pp)
     use Option.some ⟨⟨w',w_is_goal⟩,p⟩
 
 theorem astar_multigoal_is_sound (start : V) (goals : List V) :
@@ -1005,16 +1004,172 @@ theorem astar_multigoal_is_sound (start : V) (goals : List V) :
         exact thePath.prop
 
 
+/-
+PROVIDED SOLUTION
+Given ∃ goal ∈ goals, ∃ x : g.Path start goal, x = x, obtain the goal and path p. By path_in_augmented_exists (using goal_in_goals and p), we get a path q from (some start) to none in the augmented graph g.add_artificial_goal goals. This means ∃ x : (g.add_artificial_goal goals).Path (some start) none, x = x. By astar_is_complete applied to the augmented graph (g.add_artificial_goal goals) with heuristic (opt_heur heur), start = (some start), goal = none, we get that astar returns Some on the augmented graph. Unfolding astar_multigoal, the match on the astar result in the Some case returns Some, so astar_multigoal returns Some, i.e. Option.isSome is true.
+-/
 theorem astar_multigoal_is_complete (start : V) (goals : List V):
     ((∃ goal ∈ goals, ∃ x : (g.Path start goal), x = x) → Option.isSome (astar_multigoal (g:=g) heur start goals)) := by
-  sorry 
+  contrapose!;
+  intro h_contra goal hgoal x hx
+  have h_path_in_augmented : ∃ q : (g.add_artificial_goal goals).Path (some start) none, q = q := by
+    exact path_in_augmented_exists hgoal x;
+  obtain ⟨ q, hq ⟩ := h_path_in_augmented;
+  convert NatGraph.astar_is_complete ( g := g.add_artificial_goal goals ) ( opt_heur heur ) ( some start ) none _;
+  · unfold astar_multigoal at h_contra
+    simp_all only [ne_eq, Bool.not_eq_true, Option.isSome_eq_false_iff, Option.isNone_iff_eq_none, false_iff]
+    obtain ⟨val, property⟩ := x
+    obtain ⟨val_1, property_1⟩ := q
+    split at h_contra
+    next ret heq => simp_all only
+    next ret p heq => simp_all only [reduceCtorEq]
+  · exact ⟨ q, rfl ⟩
 
+/-
+PROBLEM
+If admissible' holds on g, then opt_heur is admissible on the augmented graph for target none.
+
+PROVIDED SOLUTION
+We need to show: ∀ v : Option V, (g.add_artificial_goal goals).cost_ge v none (opt_heur heur v).
+
+Unfolding cost_ge: ∀ p : (g.add_artificial_goal goals).Path v none, p.cost ≥ opt_heur heur v.
+
+Case v = none: opt_heur heur none = 0, and p.cost ≥ 0 trivially for ℕ.
+
+Case v = some v': opt_heur heur (some v') = heur v'. Let p be a path from (some v') to none. Since some v' ≠ none, use Path.split_at_end to decompose p = p' ++ [w_adj_none] where p' is a path from (some v') to w and w is adjacent to none. Since w is adjacent to none in add_artificial_goal, w must be some w' for some w' ∈ goals (by definition of add_artificial_goal, none has no outgoing edges and the only edges to none are from some g where g ∈ goals).
+
+Now p' is a path from (some v') to (some w') with none ∉ p'.support (from split_at_end). Translate p' to get q : g.Path v' w' with q.cost = p'.cost (by translate_walk_cost_eq). Since w' ∈ goals and is_admissible says heur v' ≤ q.cost for all g.Path from v' to w', we get heur v' ≤ q.cost = p'.cost.
+
+p.cost = p'.cost + edgeCost(w_adj_none). The edge from (some w') to none has cost 0 in add_artificial_goal. So p.cost = p'.cost + 0 = p'.cost ≥ heur v'.
+
+To get p.cost from the split: use the fact that p.val = p'.val.concat w_adj_none, so p.cost = p'.cost + 0 by Walk.concat_inc_cost_by_edge and the fact that edgeCost of the artificial edge is 0.
+-/
+lemma opt_heur_admissible {goals : List V}
+    (is_admissible : g.admissible' heur goals) :
+    (g.add_artificial_goal goals).admissible (opt_heur heur) none := by
+      intro v p
+      by_cases hv : v = none
+      · unfold opt_heur
+        subst hv
+        simp_all only [WeightedDiGraph.Path.cost_same, ge_iff_le, zero_le]
+      · obtain ⟨ v', rfl ⟩ := Option.ne_none_iff_exists'.mp hv
+        obtain ⟨w, hw⟩ : ∃ w : V, ∃ p' : (g.add_artificial_goal goals).Path (some v') (some w), ∃ w_adj_none : (g.add_artificial_goal goals).Adj w none, none∉ p'.support ∧ p.val = p'.val.concat w_adj_none := by
+          obtain ⟨w, hw⟩ : ∃ w : Option V, ∃ p' : (g.add_artificial_goal goals).Path (some v') w, ∃ w_adj_none : (g.add_artificial_goal goals).Adj w none, none∉ p'.support ∧ p.val = p'.val.concat w_adj_none := by
+            exact WeightedDiGraph.Path.split_at_end p hv;
+          cases w <;> tauto;
+        obtain ⟨ p', w_adj_none, hp'_none, hp_eq ⟩ := hw
+        have h_cost_p' : p'.cost ≥ heur v' := by
+          have h_cost_p' : ∃ q : g.Path v' w, q.cost = p'.cost := by
+            exact ⟨ NatGraph.translate_path (G:=g) p' hp'_none, NatGraph.translate_walk_cost_eq _ hp'_none ⟩
+          obtain ⟨ q, hq ⟩ := h_cost_p';
+          exact le_of_le_of_eq (is_admissible v' w w_adj_none q) hq
+        have h_cost_p : p.cost = p'.cost + (g.add_artificial_goal goals).edgeCost w_adj_none := by
+          grind +suggestions
+        rw [h_cost_p]
+        simp
+        exact le_add_right h_cost_p' |> le_trans ( by rfl )
+
+/-
+PROBLEM
+When astar_multigoal returns some, the underlying astar also returns some.
+
+PROVIDED SOLUTION
+Unfold astar_multigoal. It matches on astar (opt_heur heur) (some start) none. If the astar returns none, then astar_multigoal returns none, contradicting returned_path. So astar must return some.
+-/
+lemma astar_multigoal_some_implies_astar_some (start : V) (goals : List V)
+    (returned_path : Option.isSome (astar_multigoal (g:=g) heur start goals)) :
+    Option.isSome (astar (g:=g.add_artificial_goal goals) (opt_heur heur) (some start) none) := by
+      unfold astar_multigoal at returned_path
+      simp_all only
+      split at returned_path
+      next ret heq => simp_all only [Option.isSome_none, Bool.false_eq_true]
+      next ret p heq => simp_all only [Option.isSome_some]
+
+/-
+PROBLEM
+The goal returned by astar_multigoal is in the goals list.
+
+PROVIDED SOLUTION
+Unfold astar_multigoal. In the some case, the returned goal is w' which was shown to be in goals (w_is_goal in the definition). The .1 of the returned value is w' which is in goals.
+-/
+lemma astar_multigoal_goal_in_goals (start : V) (goals : List V)
+    (returned_path : Option.isSome (astar_multigoal (g:=g) heur start goals)) :
+    ((astar_multigoal (g:=g) heur start goals).get returned_path).1.val ∈ goals := by
+      have h_some : ∃ aug_path, astar (g:=g.add_artificial_goal goals) (opt_heur heur) (some start) none = some aug_path := by
+        unfold astar_multigoal at returned_path
+        cases h : astar (g:=g.add_artificial_goal goals) (opt_heur heur) (some start) none with
+        | none => simp [h] at returned_path
+        | some p => exact ⟨p, rfl⟩
+      obtain ⟨aug_path, h_eq⟩ := h_some
+      unfold astar_multigoal
+      simp only [h_eq, Option.get_some]
+      obtain ⟨w, path_to_w, w_adj_none⟩ := aug_path.snoc (by simp)
+      simp only
+      obtain ⟨w', hw_eq, hw_in⟩ := adj_to_none_is_goal (G:=g) w_adj_none
+      subst hw_eq
+      simp [hw_in]
+
+
+/-- The cost of the returned multigoal path is ≤ the cost of the augmented A* path. -/
+lemma astar_multigoal_cost_le_aug (start : V) (goals : List V)
+    (returned_path : Option.isSome (astar_multigoal (g:=g) heur start goals))
+    (aug_path : (g.add_artificial_goal goals).Path (some start) none)
+    (h_eq : astar (g:=g.add_artificial_goal goals) (opt_heur heur) (some start) none = some aug_path) :
+    ((astar_multigoal (g:=g) heur start goals).get returned_path).2.cost ≤ aug_path.cost := by
+      delta astar_multigoal at returned_path ⊢
+      dsimp only [] at returned_path ⊢
+      revert returned_path
+      rw [h_eq]
+      intro returned_path
+      simp only [Option.get_some]
+      unfold translate_path WeightedDiGraph.Path.cost
+      rw [translate_walk_cost_eq]
+      rw [WeightedDiGraph.Path.path_subst_cost]
+      unfold WeightedDiGraph.Path.snoc
+      simp only
+      have h_se := aug_path.split_at_end (by simp)
+      have h_concat := h_se.choose_spec.choose_spec.choose_spec.2
+      conv_rhs => rw [h_concat]
+      rw [WeightedDiGraph.Walk.concat_inc_cost_by_edge]
+      apply Nat.le_add_left
 
 theorem astar_multigoal_is_optimal (start : V) (goals : List V)
-    (is_admissible : g.admissible' heur goal)
+    (is_admissible : g.admissible' heur goals)
     (returned_path : Option.isSome (astar_multigoal (g:=g) heur start goals)):
     ((astar_multigoal (g:=g) heur start goals).get returned_path).2.is_cheapest := by
-      sorry
+      -- Extract the augmented A* path
+      have h_some : ∃ aug_path, astar (g:=g.add_artificial_goal goals) (opt_heur heur) (some start) none = some aug_path := by
+        unfold astar_multigoal at returned_path
+        cases h : astar (g:=g.add_artificial_goal goals) (opt_heur heur) (some start) none with
+        | none => simp [h] at returned_path
+        | some p => exact ⟨p, rfl⟩
+      obtain ⟨aug_path, h_eq⟩ := h_some
+      -- The augmented path is optimal
+      have aug_optimal : aug_path.is_cheapest := by
+        have aug_ret : Option.isSome (astar (g:=g.add_artificial_goal goals) (opt_heur heur) (some start) none) := by
+          rw [h_eq]; simp
+        have h := astar_is_optimal (g:=g.add_artificial_goal goals) (opt_heur heur) (some start) none
+          (opt_heur_admissible heur is_admissible) aug_ret
+        have h_get : (astar (g:=g.add_artificial_goal goals) (opt_heur heur) (some start) none).get aug_ret = aug_path := by
+          simp [h_eq]
+        rw [h_get] at h
+        exact h
+      -- Use sufficient_cheapest_path_cheaper
+      apply WeightedDiGraph.Path.sufficient_cheapest_path_cheaper
+      intro p' p'_cheapest
+      -- thegoal ∈ goals
+      have thegoal_in : ((astar_multigoal (g:=g) heur start goals).get returned_path).1.val ∈ goals :=
+        astar_multigoal_goal_in_goals heur start goals returned_path
+      -- Lift p' to the augmented graph
+      obtain ⟨aug_p', h_cost_eq⟩ := lift_path_to_augmented_cost (G:=g) thegoal_in p'
+      -- aug_path.cost ≤ p'.cost
+      have h1 : aug_path.cost ≤ p'.cost := by
+        calc aug_path.cost ≤ aug_p'.cost := aug_optimal aug_p'
+          _ = p'.cost := h_cost_eq
+      -- returned.cost ≤ aug_path.cost (from the helper lemma)
+      have h2 := astar_multigoal_cost_le_aug heur start goals returned_path aug_path h_eq
+      -- Combine
+      exact le_trans h2 h1
 
 
 end NatGraph
