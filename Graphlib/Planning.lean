@@ -114,6 +114,11 @@ def min_cost_action {n : ℕ} (prob : STRIPS n) (f t : State' n) (is_succ : is_s
 
     opt_act.get is_act
 
+lemma min_cost_action_in_prob {n : ℕ} (prob : STRIPS n) (f t : State' n) (is_succ : is_successor_state prob f t):
+    min_cost_action prob f t is_succ ∈ prob.actions' := by
+    unfold min_cost_action
+    simp
+    apply List.get_find?_mem
 
 
 def trans_of_STRIPS {n : ℕ} (prob : STRIPS n) : NatGraph (State' n) :=
@@ -126,19 +131,81 @@ def trans_of_STRIPS {n : ℕ} (prob : STRIPS n) : NatGraph (State' n) :=
 
   WeightedDiGraph.mk dg cost dg_dec
 
+
+lemma is_successor_state_of_trans_STRIPS_adj {n : ℕ} (prob : STRIPS n) (s s' : State' n) (adj : (trans_of_STRIPS prob).Adj s s') :
+    is_successor_state prob s s' := by
+  unfold is_successor_state
+  unfold trans_of_STRIPS at adj
+  simp_all
+
+lemma min_cost_action_creates_successor {n : ℕ} (prob : STRIPS n) (s s' : State' n) (adj : (trans_of_STRIPS prob).Adj s s') :
+  Successor (min_cost_action prob s s' (is_successor_state_of_trans_STRIPS_adj prob s s' adj)) (convertState s) (convertState s') := by 
+  unfold Successor
+  set a := min_cost_action prob s s' (is_successor_state_of_trans_STRIPS_adj prob s s' adj) 
+  constructor
+  · unfold Applicable
+    intro x x_in_find
+    unfold convertState
+    unfold Action.pre convertVarSet at x_in_find
+    simp_all
+    have appli_a : applicable' a s := by
+      unfold a
+      unfold min_cost_action
+      grind
+    unfold applicable' satisfies' at appli_a
+    apply List.all_eq_true.mp at appli_a
+    exact appli_a x x_in_find
+  · unfold convertState
+    simp
+    apply Set.ext
+    intro x 
+    simp
+    have is_succ_a : is_successor' a s s' := by
+      unfold a
+      unfold min_cost_action
+      grind
+    unfold is_successor' at is_succ_a
+    simp at is_succ_a
+    specialize is_succ_a x
+    split at is_succ_a
+    · expose_names 
+      unfold Action.add
+      unfold convertVarSet
+      simp 
+      tauto
+    · split at is_succ_a
+      · expose_names
+        simp_all
+        unfold Action.add Action.del
+        unfold convertVarSet
+        simp 
+        tauto
+      · rw [is_succ_a]
+        unfold Action.add Action.del
+        unfold convertVarSet
+        simp 
+        tauto
+
 def walk_to_strips_path {n : ℕ} (prob : STRIPS n) {start goal : State' n} (walk : WeightedDiGraph.Walk (G:= trans_of_STRIPS prob) start goal) (is_goal : satisfies' prob.goal' goal):
     Path prob (convertState start) (convertState goal):= 
   match eq : walk with
   | .nil => Path.empty (convertState start)
   | .cons adj walk' => by
     expose_names
-    have is_succ : is_successor_state prob start w := by sorry
+    have is_succ : is_successor_state prob start w := by
+      apply is_successor_state_of_trans_STRIPS_adj
+      exact adj
     let a : Action n := min_cost_action prob start w is_succ
-    apply Path.cons (a := a)
-    · sorry
-    · sorry
-    · sorry
-    · sorry
+    apply Path.cons (a := a) (s2 := convertState w)
+    · unfold a
+      unfold STRIPS.actions
+      simp
+      apply min_cost_action_in_prob
+    · apply min_cost_action_creates_successor
+      exact adj
+    · apply walk_to_strips_path
+      · exact walk'
+      · exact is_goal
 
 def planner {n : ℕ} (prob : STRIPS n) : Option (Plan prob prob.init) :=
   let trans := trans_of_STRIPS prob
@@ -146,8 +213,29 @@ def planner {n : ℕ} (prob : STRIPS n) : Option (Plan prob prob.init) :=
   let goals := (List.finRange (2^n)).filter (fun s => satisfies' prob.goal' s)
   let h : (State' n) → ℕ := fun _ => 0 
 
-  let ret := NatGraph.astar_multigoal (g:=trans) h ini goals 
-  sorry
+  let opt_ret := NatGraph.astar_multigoal (g:=trans) h ini goals 
+  match opt_ret with
+  | .none => .none
+  | .some ret => 
+    let goal' : State' n := ret.1
+    have goal'_in_goals : goal' ∈ goals := by apply ret.1.prop
+
+    have sat : satisfies' prob.goal' goal' := by
+      unfold goals at goal'_in_goals
+      simp at goal'_in_goals
+      exact goal'_in_goals.2
+
+    let path : Path prob (convertState ini) (convertState goal') := walk_to_strips_path prob ret.2.val sat
+    have goal_sat : prob.GoalState (convertState goal') := by
+      unfold STRIPS.GoalState
+      unfold convertVarSet convertState
+      intro x x_in_goal'
+      unfold satisfies' at sat
+      simp only [Fin.getElem_fin, List.all_eq_true] at sat
+      apply sat
+      simp_all
+    let plan : Plan prob prob.init := Plan.mk (convertState ret.fst) path goal_sat 
+    Option.some plan
 
 
 --import Aesop
