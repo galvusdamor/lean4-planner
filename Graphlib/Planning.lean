@@ -8,7 +8,7 @@ import Mathlib.Logic.Lemmas
 namespace Validator
 
 instance {n : ℕ} : FinEnum (BitVec n) :=
-  FinEnum.ofList (List.range (2^n)) (by 
+  FinEnum.ofList (List.range (2^n)) (by
     intro x
     simp
     use BitVec.toNat x
@@ -63,7 +63,7 @@ abbrev is_successor_state {n : ℕ} (prob : STRIPS n) (f t : State' n) :=
     prob.actions'.any (fun a => applicable' a f ∧ is_successor' a f t)
 
 
-def cost_of {n : ℕ} (prob : STRIPS n) (f t : State' n) (is_succ : is_successor_state prob f t): ℕ := 
+def cost_of {n : ℕ} (prob : STRIPS n) (f t : State' n) (is_succ : is_successor_state prob f t): ℕ :=
     let applicableActs := prob.actions'.filter (fun a => applicable' a f ∧ is_successor' a f t)
     let costs : List ℕ := applicableActs.map (fun x => x.cost)
     costs.min (by unfold costs applicableActs ; simp_all)
@@ -79,12 +79,12 @@ lemma min_fold_find {α β : Type u}  [LinearOrder β] (l : List α) (x : β) (f
       constructor
       · simp only [List.mem_cons, true_or]
       · exact head_eq_min
-    · 
+    ·
       unfold List.map List.foldl at ⊢ head_eq_min
       simp only [List.mem_cons, exists_eq_or_imp]
       right
       apply min_fold_find
-      by_contra 
+      by_contra
       rw [←this] at head_eq_min
       have x_lt_head : x = x ⊓ f head := by
         expose_names
@@ -104,7 +104,7 @@ lemma min_map {α β : Type u} [LinearOrder β] (l : List α) (f : α → β) (h
       apply head_ne_min
 
 
-def min_cost_action {n : ℕ} (prob : STRIPS n) (f t : State' n) (is_succ : is_successor_state prob f t): Action n := 
+def min_cost_action {n : ℕ} (prob : STRIPS n) (f t : State' n) (is_succ : is_successor_state prob f t): Action n :=
     let applicableActs := prob.actions'.filter (fun a => applicable' a f ∧ is_successor' a f t)
     -- TODO ideally use List.minOn in newer mathlib version
     let costs : List ℕ := applicableActs.map (fun x => x.cost)
@@ -142,9 +142,9 @@ lemma is_successor_state_of_trans_STRIPS_adj {n : ℕ} (prob : STRIPS n) (s s' :
   simp_all
 
 lemma min_cost_action_creates_successor {n : ℕ} (prob : STRIPS n) (s s' : State' n) (adj : (trans_of_STRIPS prob).Adj s s') :
-  Successor (min_cost_action prob s s' (is_successor_state_of_trans_STRIPS_adj prob s s' adj)) (convertState s) (convertState s') := by 
+  Successor (min_cost_action prob s s' (is_successor_state_of_trans_STRIPS_adj prob s s' adj)) (convertState s) (convertState s') := by
   unfold Successor
-  set a := min_cost_action prob s s' (is_successor_state_of_trans_STRIPS_adj prob s s' adj) 
+  set a := min_cost_action prob s s' (is_successor_state_of_trans_STRIPS_adj prob s s' adj)
   constructor
   · unfold Applicable
     intro x x_in_find
@@ -161,7 +161,7 @@ lemma min_cost_action_creates_successor {n : ℕ} (prob : STRIPS n) (s s' : Stat
   · unfold convertState
     simp
     apply Set.ext
-    intro x 
+    intro x
     simp
     have is_succ_a : is_successor' a s s' := by
       unfold a
@@ -171,26 +171,26 @@ lemma min_cost_action_creates_successor {n : ℕ} (prob : STRIPS n) (s s' : Stat
     simp at is_succ_a
     specialize is_succ_a x
     split at is_succ_a
-    · expose_names 
+    · expose_names
       unfold Action.add
       unfold convertVarSet
-      simp 
+      simp
       tauto
     · split at is_succ_a
       · expose_names
         simp_all
         unfold Action.add Action.del
         unfold convertVarSet
-        simp 
+        simp
         tauto
       · rw [is_succ_a]
         unfold Action.add Action.del
         unfold convertVarSet
-        simp 
+        simp
         tauto
 
 def walk_to_strips_path {n : ℕ} (prob : STRIPS n) {start goal : State' n} (walk : WeightedDiGraph.Walk (G:= trans_of_STRIPS prob) start goal) (is_goal : satisfies' prob.goal' goal):
-    Path prob (convertState start) (convertState goal):= 
+    Path prob (convertState start) (convertState goal):=
   match eq : walk with
   | .nil => Path.empty (convertState start)
   | .cons adj walk' => by
@@ -295,7 +295,7 @@ noncomputable def successor_dec {n : ℕ} (a : Action n) (s s' : State n) (succ 
         specialize union this
         cases union
         · expose_names
-          apply (Set.mem_diff (x:=i)).mp at h 
+          apply (Set.mem_diff (x:=i)).mp at h
           simp_all
         · contradiction
 
@@ -305,7 +305,7 @@ noncomputable def strips_path_to_walk {n : ℕ} (prob : STRIPS n) {start goal : 
     generalize hs : convertState start = s at path
     generalize hg : convertState goal = g at path
     cases path with
-    | empty s => 
+    | empty s =>
         have : start = goal := convertState_injective (hs.trans hg.symm)
         subst this
         exact WeightedDiGraph.Walk.nil
@@ -332,12 +332,12 @@ decreasing_by
     rw [e]
     conv =>
       right
-      unfold Validator.Path.length 
+      unfold Validator.Path.length
     simp
   grind
 
 noncomputable def last_dec {n : ℕ} (prob : STRIPS n) (s : State' n) (last : State n) (path : Path prob (convertState s) last) :
-    DecidablePred (Set.Mem last) := by 
+    DecidablePred (Set.Mem last) := by
   cases path
   · intro x
     unfold convertState
@@ -361,7 +361,7 @@ decreasing_by
     rw [e]
     conv =>
       right
-      unfold Validator.Path.length 
+      unfold Validator.Path.length
     simp
   grind
 
@@ -370,12 +370,12 @@ def planner {n : ℕ} (prob : STRIPS n) : Option (Plan prob prob.init) :=
   let trans := trans_of_STRIPS prob
   let ini := prob.init'
   let goals := (List.finRange (2^n)).filter (fun s => satisfies' prob.goal' s)
-  let h : (State' n) → ℕ := fun _ => 0 
+  let h : (State' n) → ℕ := fun _ => 0
 
-  let opt_ret := NatGraph.astar_multigoal (g:=trans) h ini goals 
+  let opt_ret := NatGraph.astar_multigoal (g:=trans) h ini goals
   match opt_ret with
   | .none => .none
-  | .some ret => 
+  | .some ret =>
     let goal' : State' n := ret.1
     have goal'_in_goals : goal' ∈ goals := by apply ret.1.prop
 
@@ -393,7 +393,7 @@ def planner {n : ℕ} (prob : STRIPS n) : Option (Plan prob prob.init) :=
       simp only [Fin.getElem_fin, List.all_eq_true] at sat
       apply sat
       simp_all
-    let plan : Plan prob prob.init := Plan.mk (convertState ret.fst) path goal_sat 
+    let plan : Plan prob prob.init := Plan.mk (convertState ret.fst) path goal_sat
     Option.some plan
 
 
@@ -401,7 +401,7 @@ def planner {n : ℕ} (prob : STRIPS n) : Option (Plan prob prob.init) :=
 lemma planner_complete {n : ℕ} (prob : STRIPS n):
       planner prob = Option.none → Unsolvable prob := by
   intro ret_none
-  unfold Unsolvable UnsolvableState 
+  unfold Unsolvable UnsolvableState
   constructor
   intro plan
   let plan_path : Path prob prob.init plan.last := plan.path
@@ -435,7 +435,7 @@ lemma planner_complete {n : ℕ} (prob : STRIPS n):
         unfold convertVarSet convertState at gs
         simp_all only [ne_eq, not_true_eq_false, Subtype.forall, imp_false, List.coe_toFinset, Fin.getElem_fin, Set.setOf_subset_setOf]
     obtain ⟨path,_⟩ := walk.shorter_path_exists
-    specialize no_goal_path goal' goal'_in_goals path 
+    specialize no_goal_path goal' goal'_in_goals path
     contradiction
   · grind -- some = none
 
