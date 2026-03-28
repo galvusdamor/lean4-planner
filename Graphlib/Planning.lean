@@ -461,7 +461,7 @@ lemma min_cost_action_cost_eq_cost_of {n : ℕ} (prob : STRIPS n) (f t : State' 
     (is_succ : is_successor_state prob f t) :
     (min_cost_action prob f t is_succ).cost = cost_of prob f t is_succ := by
   unfold cost_of min_cost_action at *;
-  grind +suggestions
+  grind only [List.get_find?_prop]
 
 /-
 PROBLEM
@@ -508,11 +508,14 @@ lemma walk_to_strips_path_cost_eq {n : ℕ} (prob : STRIPS n) {start goal : Stat
   revert walk is_goal;
   intro walk;
   induction walk;
-  · aesop;
-  · rename_i h₁ h₂ h₃ h₄;
-    intro is_goal; unfold walk_to_strips_path; simp +decide [ * ] ;
-    unfold Path.cost WeightedDiGraph.Walk.cost; simp +decide [ * ] ;
+  · intro is_goal
+    simp_all only [WeightedDiGraph.Walk.cost_nil_zero]
+    rfl
+  · intro is_goal
+    unfold walk_to_strips_path
+    unfold Path.cost WeightedDiGraph.Walk.cost
     rw [ add_comm, min_cost_action_cost_eq_cost_of, trans_of_STRIPS_edgeCost ]
+    simp_all
 
 /-
 PROBLEM
@@ -538,7 +541,7 @@ STRIPS.actions is defined as List.toFinset prob.actions'. So a ∈ prob.actions 
 -/
 lemma mem_actions'_of_mem_actions {n : ℕ} {prob : STRIPS n} {a : Action n}
     (ha : a ∈ prob.actions) : a ∈ prob.actions' := by
-  exact?
+  exact List.mem_dedup.mp ha
 
 /-
 PROBLEM
@@ -552,8 +555,8 @@ lemma successor_implies_applicable {n : ℕ}
     {a : Action n} {s t : State' n}
     (succ : Successor a (convertState s) (convertState t)) :
     applicable' a s = true := by
-  unfold applicable' at *;
-  unfold satisfies' at *; simp_all +decide [ Finset.subset_iff ] ;
+  unfold applicable' satisfies' at *
+  simp
   intro x hx
   have h_pre : x ∈ a.pre := by
     convert Finset.mem_coe.mpr ( Finset.mem_coe.mpr ( List.mem_toFinset.mpr hx ) ) using 1
@@ -703,7 +706,10 @@ lemma planner_isSome_implies_astar_isSome {n : ℕ} (prob : STRIPS n)
       ((List.finRange (2^n)).filter (fun s => satisfies' prob.goal' s))) := by
   -- By definition of planner, if the planner returns some, then the astar_multigoal must have returned some.
   unfold planner at ret_plan
-  aesop
+  simp_all only [BitVec.natCast_eq_ofNat, List.pure_def, List.bind_eq_flatMap]
+  split at ret_plan
+  next opt_ret heq => simp_all only [Option.isSome_none, Bool.false_eq_true]
+  next opt_ret ret heq => simp_all only [Option.isSome_some]
 
 /-
 PROBLEM
@@ -726,20 +732,17 @@ lemma planner_path_cost_eq_astar {n : ℕ} (prob : STRIPS n)
   nontriviality;
   rename_i h₁ h₂ h₃;
   obtain ⟨ ret, hret ⟩ := Option.isSome_iff_exists.mp h₂;
-  simp +decide [ hret ];
+  simp 
   convert walk_to_strips_path_cost_eq prob ret.2.val _ using 1;
   any_goals solve_by_elim;
   · unfold Option.get; aesop;
   · congr! 2;
     · congr! 1
-      generalize_proofs at *;
-      exact?;
+      exact Option.get_of_eq_some h₂ hret
     · congr! 2;
+    · congr! 3;
     · congr! 1;
-      congr! 1;
-      congr! 1;
-    · congr! 1;
-      exact?
+      exact Option.get_of_eq_some h₂ hret
 
 /-
 PROBLEM
@@ -780,22 +783,22 @@ lemma plan_cost_ge_astar {n : ℕ} (prob : STRIPS n)
         ((List.finRange (2^n)).filter (fun s => satisfies' prob.goal' s))).get astar_some).2.cost := by
   obtain ⟨g', hg'⟩ : ∃ g' : State' n, convertState g' = plan.last := by
     convert state_has_bitvec plan.last;
-    exact?;
+    exact Classical.decPred (Set.Mem plan.last)
   -- By `strips_path_has_cheaper_walk`, get walk w with w.cost ≤ plan.path.cost.
   obtain ⟨w, hw⟩ : ∃ w : WeightedDiGraph.Walk (G := trans_of_STRIPS prob) prob.init' g', w.cost ≤ (hg' ▸ plan.path).cost := by
     apply strips_path_has_cheaper_walk;
   obtain ⟨p, hp⟩ : ∃ p : (trans_of_STRIPS prob).Path prob.init' g', p.cost ≤ w.cost := by
-    exact?;
+    exact WeightedDiGraph.Walk.cheaper_path_exists w
   have h_optimal : (NatGraph.astar_multigoal (g := trans_of_STRIPS prob) (fun _ => 0) prob.init'
     ((List.finRange (2^n)).filter (fun s => satisfies' prob.goal' s))).get astar_some |>.2.cost ≤ p.cost := by
       apply astar_multigoal_cross_goal_optimal;
       have h_goal_in_goals : satisfies' prob.goal' g' := by
-        have := plan.goal; unfold STRIPS.GoalState at this; unfold convertState at hg'; simp_all +decide [ Finset.mem_univ, List.mem_filter ] ;
+        have := plan.goal; unfold STRIPS.GoalState at this; unfold convertState at hg';
         unfold convertVarSet at this; unfold satisfies'; simp_all +decide [ Set.subset_def ] ;
         exact fun x hx => hg'.symm.subset ( this x hx );
-      simp +zetaDelta at *;
+      simp 
       exact ⟨ ⟨ g'.toFin, rfl ⟩, h_goal_in_goals ⟩;
-  grind +ring
+  grind 
 
 lemma planner_optimal {n : ℕ} (prob : STRIPS n) (ret_plan : (planner prob).isSome):
   ∀ plan : Plan prob prob.init, plan.path.cost ≥ ((planner prob).get ret_plan).path.cost := by
