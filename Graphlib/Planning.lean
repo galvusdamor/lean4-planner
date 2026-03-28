@@ -448,137 +448,357 @@ def cost {n} {pt : STRIPS n} {s s'} : Path pt s s' → ℕ
 
 end Path
 
+/-! ### Helper lemmas for planner optimality -/
+
+/-
+PROBLEM
+`min_cost_action` achieves the minimum cost, i.e., its cost equals `cost_of`.
+
+PROVIDED SOLUTION
+Unfold both `min_cost_action` and `cost_of`. They share the same `applicableActs` and `costs` definitions. `min_cost_action` finds an action via `find?` whose cost equals `costs.min`, and `cost_of` returns `costs.min`. So `min_cost_action.cost = costs.min = cost_of`. The key is that `find?` returns an element satisfying `·.cost = minCost` and `.get` extracts it, so `.cost = minCost`.
+-/
+lemma min_cost_action_cost_eq_cost_of {n : ℕ} (prob : STRIPS n) (f t : State' n)
+    (is_succ : is_successor_state prob f t) :
+    (min_cost_action prob f t is_succ).cost = cost_of prob f t is_succ := by
+  unfold cost_of min_cost_action at *;
+  grind +suggestions
+
+/-
+PROBLEM
+The edge cost in `trans_of_STRIPS` equals `cost_of`.
+
+PROVIDED SOLUTION
+Unfold `NatGraph.edgeCost` to get `G.Payload f t adj`. Unfold `trans_of_STRIPS` - the Payload is defined as `cost_of prob f t (some_proof)`. By `WeightedDiGraph.Payload_irr`, the proof doesn't matter, so this equals `cost_of prob f t (is_successor_state_of_trans_STRIPS_adj prob f t adj)`.
+-/
+lemma trans_of_STRIPS_edgeCost {n : ℕ} (prob : STRIPS n) (f t : State' n)
+    (adj : (trans_of_STRIPS prob).Adj f t) :
+    NatGraph.edgeCost adj = cost_of prob f t (is_successor_state_of_trans_STRIPS_adj prob f t adj) := by
+  convert rfl
+
+/-
+PROBLEM
+`cost_of` is at most the cost of any specific applicable action producing the transition.
+
+PROVIDED SOLUTION
+Unfold `cost_of`. The result is `costs.min h` where `costs = applicableActs.map (·.cost)` and `applicableActs = prob.actions'.filter (fun a => applicable' a f ∧ is_successor' a f t)`. Since `a ∈ prob.actions'` and `applicable' a f = true` and `is_successor' a f t = true`, we have `a ∈ applicableActs`. Therefore `a.cost ∈ costs`. And `List.min` is ≤ every element in the list. Use `List.min_le_of_mem` or similar.
+-/
+lemma cost_of_le_action_cost {n : ℕ} (prob : STRIPS n) (f t : State' n) (a : Action n)
+    (is_succ : is_successor_state prob f t)
+    (a_in_prob : a ∈ prob.actions')
+    (a_applicable : applicable' a f = true) (a_produces : is_successor' a f t = true) :
+    cost_of prob f t is_succ ≤ a.cost := by
+  have h_a_in_applicableActs : a ∈ prob.actions'.filter (fun a => applicable' a f ∧ is_successor' a f t) := by
+    grind +ring;
+  apply List.min_le_of_mem;
+  exact List.mem_map.mpr ⟨ a, h_a_in_applicableActs, rfl ⟩
+
+/-
+PROBLEM
+The STRIPS path cost of `walk_to_strips_path` equals the graph walk cost.
+
+PROVIDED SOLUTION
+By induction on walk.
+- nil case: both costs are 0 (Path.empty has cost 0, Walk.nil has cost 0).
+- cons case: walk = cons adj walk'. walk_to_strips_path produces Path.cons (min_cost_action ...) ... (walk_to_strips_path walk'). STRIPS cost = (walk_to_strips_path walk').cost + (min_cost_action ...).cost. By IH, (walk_to_strips_path walk').cost = walk'.cost. And (min_cost_action ...).cost = cost_of ... = edgeCost adj (by min_cost_action_cost_eq_cost_of and trans_of_STRIPS_edgeCost). Walk.cost of cons = edgeCost adj + walk'.cost. So STRIPS cost = walk'.cost + edgeCost adj = edgeCost adj + walk'.cost = walk.cost.
+-/
+lemma walk_to_strips_path_cost_eq {n : ℕ} (prob : STRIPS n) {start goal : State' n}
+    (walk : WeightedDiGraph.Walk (G := trans_of_STRIPS prob) start goal)
+    (is_goal : satisfies' prob.goal' goal) :
+    (walk_to_strips_path prob walk is_goal).cost = walk.cost := by
+  revert walk is_goal;
+  intro walk;
+  induction walk;
+  · aesop;
+  · rename_i h₁ h₂ h₃ h₄;
+    intro is_goal; unfold walk_to_strips_path; simp +decide [ * ] ;
+    unfold Path.cost WeightedDiGraph.Walk.cost; simp +decide [ * ] ;
+    rw [ add_comm, min_cost_action_cost_eq_cost_of, trans_of_STRIPS_edgeCost ]
+
+/-
+PROBLEM
+For any STRIPS plan, there exists a graph walk whose cost is at most the plan's path cost.
+
+If action `a` is in `prob.actions` (Finset), then it's in `prob.actions'` (List).
+
+PROVIDED SOLUTION
+Use strips_path_to_walk to get a graph walk, then show its cost ≤ path.cost by induction on the path. Alternatively, construct the walk directly by induction on path:
+- empty: use Walk.nil, cost 0 ≤ 0
+- cons with action a, successor from s1 to s2, and rest path from s2 to goal:
+  - s2 has a BitVec representation s2' (via state_has_bitvec, using successor_dec for decidability)
+  - There's a graph edge from start to s2' (by adj_of_successor)
+  - edgeCost = cost_of ≤ a.cost (by cost_of_le_action_cost, since a is applicable and produces the transition, and a ∈ prob.actions')
+  - By IH on the rest path (from convertState s2' to convertState goal), get walk' with cost ≤ rest.cost
+  - Combine: Walk.cons adj walk' with cost = edgeCost + walk'.cost ≤ a.cost + rest.cost = path.cost
+
+Key: need to handle the DecidablePred for s2, use state_has_bitvec and Classical.choose. The function adj_of_successor gives the graph adjacency. cost_of_le_action_cost bounds the edge cost.
+
+Need to handle termination carefully - use path.length as the termination measure, similar to strips_path_to_walk.
+
+STRIPS.actions is defined as List.toFinset prob.actions'. So a ∈ prob.actions means a ∈ prob.actions'.toFinset, which implies a ∈ prob.actions'. Unfold STRIPS.actions and use List.mem_toFinset.
+-/
+lemma mem_actions'_of_mem_actions {n : ℕ} {prob : STRIPS n} {a : Action n}
+    (ha : a ∈ prob.actions) : a ∈ prob.actions' := by
+  exact?
+
+/-
+PROBLEM
+If `Successor a (convertState s) (convertState t)` with `a ∈ prob.actions`,
+    then `applicable' a s` and `is_successor' a s t`.
+
+PROVIDED SOLUTION
+Successor a (convertState s) (convertState t) gives us Applicable (convertState s) a, i.e., a.pre ⊆ convertState s. Unfold applicable' and satisfies'. We need a.pre'.val.all (fun x => s[x]) = true. By List.all_eq_true, this means for all x ∈ a.pre'.val, s[x] = true. Since a.pre ⊆ convertState s and a.pre = convertVarSet a.pre' = a.pre'.val.toFinset, for any x ∈ a.pre'.val, x ∈ a.pre'.val.toFinset = a.pre ⊆ convertState s = {i | s[i]}, so s[x] = true. This is the same logic as in the first part of adj_of_successor (unfold applicable' satisfies', then use the Applicable hypothesis via List.all_eq_true and simp/grind).
+-/
+lemma successor_implies_applicable {n : ℕ}
+    {a : Action n} {s t : State' n}
+    (succ : Successor a (convertState s) (convertState t)) :
+    applicable' a s = true := by
+  unfold applicable' at *;
+  unfold satisfies' at *; simp_all +decide [ Finset.subset_iff ] ;
+  intro x hx
+  have h_pre : x ∈ a.pre := by
+    convert Finset.mem_coe.mpr ( Finset.mem_coe.mpr ( List.mem_toFinset.mpr hx ) ) using 1
+  have h_s : s[x] := by
+    exact Set.mem_setOf.mp ( succ.1 h_pre ) |> fun h => by simpa using h;
+  exact h_s
+
+lemma successor_implies_is_successor {n : ℕ}
+    {a : Action n} {s t : State' n}
+    (succ : Successor a (convertState s) (convertState t)) :
+    is_successor' a s t = true := by
+  unfold Successor convertState Applicable Action.pre Action.add Action.del convertVarSet at succ
+  unfold is_successor'
+  simp
+  intro x
+  obtain ⟨_,eff⟩ := succ
+  apply Set.ext_iff.mp at eff
+  specialize eff x
+  simp only [Set.mem_setOf_eq, Set.mem_diff, Set.mem_union, Finset.mem_coe, List.mem_toFinset] at eff
+  split_ifs with h1 h2 <;> simp_all
+
+
+private lemma strips_path_has_cheaper_walk_aux {n : ℕ} (prob : STRIPS n) (k : ℕ)
+    {start goal : State' n}
+    (path : Path prob (convertState start) (convertState goal))
+    (hlen : path.length ≤ k) :
+    ∃ w : WeightedDiGraph.Walk (G := trans_of_STRIPS prob) start goal, w.cost ≤ path.cost := by
+  induction k generalizing start goal with
+  | zero =>
+    generalize hs : convertState start = s at path
+    generalize hg : convertState goal = g at path
+    cases path with
+    | empty =>
+      have : start = goal := convertState_injective (hs.trans hg.symm)
+      subst this
+      exact ⟨WeightedDiGraph.Walk.nil, le_refl 0⟩
+    | cons => simp [Path.length] at hlen
+  | succ k ih =>
+    generalize hs : convertState start = s at path
+    generalize hg : convertState goal = g at path
+    cases path with
+    | empty =>
+      have : start = goal := convertState_injective (hs.trans hg.symm)
+      subst this
+      exact ⟨WeightedDiGraph.Walk.nil, le_refl 0⟩
+    | cons a s2 ha succ path' =>
+      subst hs; subst hg
+      haveI := successor_dec a (convertState start) s2 succ
+      obtain ⟨s2', rfl⟩ := state_has_bitvec s2
+      have adj := adj_of_successor prob succ ha
+      have path'_len : path'.length ≤ k := by
+        simp [Path.length] at hlen; omega
+      obtain ⟨walk', hw'⟩ := ih path' path'_len
+      refine ⟨WeightedDiGraph.Walk.cons adj walk', ?_⟩
+      have edge_le : NatGraph.edgeCost adj ≤ a.cost := by
+        rw [trans_of_STRIPS_edgeCost]
+        exact cost_of_le_action_cost prob start s2' a _
+          (mem_actions'_of_mem_actions ha)
+          (successor_implies_applicable succ)
+          (successor_implies_is_successor succ)
+      simp only [WeightedDiGraph.Walk.cost, Path.cost]
+      omega
+
+lemma strips_path_has_cheaper_walk {n : ℕ} (prob : STRIPS n) {start goal : State' n}
+    (path : Path prob (convertState start) (convertState goal)) :
+    ∃ w : WeightedDiGraph.Walk (G := trans_of_STRIPS prob) start goal, w.cost ≤ path.cost :=
+  strips_path_has_cheaper_walk_aux prob path.length path (le_refl _)
+
+/-
+PROBLEM
+The zero heuristic is admissible for any goals.
+
+PROVIDED SOLUTION
+Unfold admissible' and cost_ge. We need: for all v, for all goal in goals, for all path p from v to goal, p.cost ≥ 0. This is trivially true since p.cost : ℕ ≥ 0.
+-/
+lemma zero_heur_admissible' {n : ℕ} (prob : STRIPS n) (goals : List (State' n)) :
+    (trans_of_STRIPS prob).admissible' (fun _ => 0) goals := by
+  exact fun v goal h => fun p => Nat.zero_le _
+
+/-- The A* multigoal result is optimal across all goals: its graph path cost is ≤ any graph path
+    to any goal in the goals list. -/
+lemma astar_multigoal_cross_goal_optimal {n : ℕ} (prob : STRIPS n)
+    (goals : List (State' n))
+    (returned_path : Option.isSome (NatGraph.astar_multigoal (g := trans_of_STRIPS prob)
+      (fun _ => 0) prob.init' goals)) :
+    ∀ goal ∈ goals, ∀ p : (trans_of_STRIPS prob).Path prob.init' goal,
+      ((NatGraph.astar_multigoal (g := trans_of_STRIPS prob)
+        (fun _ => 0) prob.init' goals).get returned_path).2.cost ≤ p.cost := by
+  intro goal goal_in_goals p
+  -- Extract augmented A* path
+  have h_some : ∃ aug_path, NatGraph.astar
+      (g := (trans_of_STRIPS prob).add_artificial_goal goals)
+      (NatGraph.opt_heur (fun _ => 0)) (some prob.init') none = some aug_path := by
+    exact Option.isSome_iff_exists.mp
+      (NatGraph.astar_multigoal_some_implies_astar_some (fun _ => 0) prob.init' goals returned_path)
+  obtain ⟨aug_path, h_eq⟩ := h_some
+  -- The augmented path is optimal
+  have aug_optimal : aug_path.is_cheapest := by
+    have aug_ret : Option.isSome (NatGraph.astar
+        (g := (trans_of_STRIPS prob).add_artificial_goal goals)
+        (NatGraph.opt_heur (fun _ => 0)) (some prob.init') none) := by
+      rw [h_eq]; simp
+    have h := NatGraph.astar_is_optimal
+      (g := (trans_of_STRIPS prob).add_artificial_goal goals)
+      (NatGraph.opt_heur (fun _ => 0)) (some prob.init') none
+      (NatGraph.opt_heur_admissible (fun _ => 0) (zero_heur_admissible' prob goals)) aug_ret
+    have h_get : (NatGraph.astar
+        (g := (trans_of_STRIPS prob).add_artificial_goal goals)
+        (NatGraph.opt_heur (fun _ => 0)) (some prob.init') none).get aug_ret = aug_path := by
+      simp [h_eq]
+    rw [h_get] at h
+    exact h
+  -- Lift p to augmented path
+  obtain ⟨aug_p, h_cost_eq⟩ := NatGraph.lift_path_to_augmented_cost
+    (G := trans_of_STRIPS prob) goal_in_goals p
+  -- Chain: returned.cost ≤ aug_path.cost ≤ aug_p.cost = p.cost
+  have h1 : aug_path.cost ≤ p.cost := calc
+    aug_path.cost ≤ aug_p.cost := aug_optimal aug_p
+    _ = p.cost := h_cost_eq
+  have h2 := NatGraph.astar_multigoal_cost_le_aug
+    (fun _ => 0) prob.init' goals returned_path aug_path h_eq
+  exact le_trans h2 h1
+
+/-
+PROBLEM
+When planner returns some, the underlying A* also returns some.
+
+PROVIDED SOLUTION
+Unfold planner. Since ret_plan says planner returns some, the A* match is in the some case. The planner's path is walk_to_strips_path of the A* result walk. By walk_to_strips_path_cost_eq, its cost = the graph walk cost.
+
+For any plan:
+1. Get DecidablePred for plan.last via last_dec
+2. Get BitVec g' for plan.last via state_has_bitvec
+3. Rewrite plan.path to go from convertState init' to convertState g'
+4. By strips_path_has_cheaper_walk, get graph walk with cost ≤ plan.path.cost
+5. By Walk.cheaper_path_exists, get graph Path with cost ≤ walk cost
+6. g' is in the goals list (satisfies goal condition)
+7. By astar_multigoal_cross_goal_optimal, A* result cost ≤ graph Path cost
+8. Chain inequalities: planner.path.cost = graph walk cost ≤ any plan.path.cost
+
+Unfold planner at ret_plan. The planner matches on astar_multigoal result. If astar_multigoal returns none, planner returns none, so ret_plan (isSome of none) would be false. Contradiction. So astar_multigoal returns some.
+-/
+lemma planner_isSome_implies_astar_isSome {n : ℕ} (prob : STRIPS n)
+    (ret_plan : (planner prob).isSome) :
+    Option.isSome (NatGraph.astar_multigoal (g := trans_of_STRIPS prob)
+      (fun _ => 0) prob.init'
+      ((List.finRange (2^n)).filter (fun s => satisfies' prob.goal' s))) := by
+  -- By definition of planner, if the planner returns some, then the astar_multigoal must have returned some.
+  unfold planner at ret_plan
+  aesop
+
+/-
+PROBLEM
+The planner's path cost equals the A* multigoal result's graph path cost.
+
+PROVIDED SOLUTION
+Unfold planner at ret_plan and the goal. Split on the astar_multigoal match. In the none case, contradiction with ret_plan. In the some case with result `ret`, the planner's plan has path = walk_to_strips_path prob ret.2.val sat. By walk_to_strips_path_cost_eq, this cost = ret.2.val.cost. And ret.2.val.cost = ret.2.cost by WeightedDiGraph.Path.cost_same. And (astar_multigoal.get ...).2 = ret.2 in the some case. So the costs match.
+
+Unfold planner at both ret_plan and the goal. Split on the match of astar_multigoal. In the none case, contradiction with ret_plan (Option.isSome none = false). In the some case with ret, the planner's plan has path = walk_to_strips_path prob ret.2.val sat, so (planner prob).get.path.cost = (walk_to_strips_path prob ret.2.val sat).cost = ret.2.val.cost (by walk_to_strips_path_cost_eq). And the RHS is ((astar_multigoal ...).get ...).2.cost = ret.2.cost = ret.2.val.cost (by WeightedDiGraph.Path.cost_same). So both sides equal ret.2.val.cost.
+-/
+lemma planner_path_cost_eq_astar {n : ℕ} (prob : STRIPS n)
+    (ret_plan : (planner prob).isSome) :
+    ((planner prob).get ret_plan).path.cost =
+      ((NatGraph.astar_multigoal (g := trans_of_STRIPS prob) (fun _ => 0) prob.init'
+        ((List.finRange (2^n)).filter (fun s => satisfies' prob.goal' s))).get
+        (planner_isSome_implies_astar_isSome prob ret_plan)).2.cost := by
+  unfold planner at ret_plan
+  generalize_proofs at *;
+  unfold planner;
+  nontriviality;
+  rename_i h₁ h₂ h₃;
+  obtain ⟨ ret, hret ⟩ := Option.isSome_iff_exists.mp h₂;
+  simp +decide [ hret ];
+  convert walk_to_strips_path_cost_eq prob ret.2.val _ using 1;
+  any_goals solve_by_elim;
+  · unfold Option.get; aesop;
+  · congr! 2;
+    · congr! 1
+      generalize_proofs at *;
+      exact?;
+    · congr! 2;
+    · congr! 1;
+      congr! 1;
+      congr! 1;
+    · congr! 1;
+      exact?
+
+/-
+PROBLEM
+For any plan, its STRIPS path cost ≥ the A* optimal graph path cost.
+
+PROVIDED SOLUTION
+Given plan : Plan prob prob.init:
+1. plan.path is a Path from prob.init to plan.last. prob.init = convertState prob.init'.
+2. Get DecidablePred for plan.last using last_dec prob prob.init' plan.last plan.path.
+3. Get g' : State' n with convertState g' = plan.last via state_has_bitvec plan.last.
+4. Rewrite plan.path: it's now Path prob (convertState prob.init') (convertState g').
+5. By strips_path_has_cheaper_walk, get walk w with w.cost ≤ plan.path.cost.
+6. By Walk.cheaper_path_exists (or shorter_path_exists), get graph Path p with p.cost ≤ w.cost.
+7. Show g' is in the goals list: g' ∈ (List.finRange (2^n)).filter (satisfies' prob.goal').
+   This holds because plan.last is a goal state (plan.goal says GoalState plan.last), and
+   convertState g' = plan.last, so satisfies' prob.goal' g' = true.
+8. By astar_multigoal_cross_goal_optimal, the A* result cost ≤ p.cost.
+9. Chain: A* cost ≤ p.cost ≤ w.cost ≤ plan.path.cost.
+
+1. Have plan.path : Path prob prob.init plan.last where prob.init = convertState prob.init' (unfold STRIPS.init).
+2. Get DecidablePred for plan.last: haveI := last_dec prob prob.init' plan.last (show Path prob (convertState prob.init') plan.last from plan.path).
+3. Get g' with hg' : convertState g' = plan.last via state_has_bitvec.
+4. The plan.path, rewritten via hg', is a Path from (convertState prob.init') to (convertState g'): use hg' ▸ plan.path.
+5. By strips_path_has_cheaper_walk prob (hg' ▸ plan.path), get walk w with w.cost ≤ plan.path.cost.
+   (The rewriting preserves cost since path cost depends on structure, not endpoints.)
+6. By Walk.cheaper_path_exists w, get graph Path p with p.cost ≤ w.cost.
+7. g' ∈ goals: unfold the filter, show satisfies' prob.goal' g' from plan.goal (GoalState plan.last) and hg'. For the Finset membership, use List.mem_filter and the range condition.
+8. By astar_multigoal_cross_goal_optimal, get A* cost ≤ p.cost.
+9. Chain: A* cost ≤ p.cost ≤ w.cost ≤ plan.path.cost. So plan.path.cost ≥ A* cost.
+-/
+lemma plan_cost_ge_astar {n : ℕ} (prob : STRIPS n)
+    (astar_some : Option.isSome (NatGraph.astar_multigoal (g := trans_of_STRIPS prob)
+      (fun _ => 0) prob.init'
+      ((List.finRange (2^n)).filter (fun s => satisfies' prob.goal' s))))
+    (plan : Plan prob prob.init) :
+    plan.path.cost ≥
+      ((NatGraph.astar_multigoal (g := trans_of_STRIPS prob) (fun _ => 0) prob.init'
+        ((List.finRange (2^n)).filter (fun s => satisfies' prob.goal' s))).get astar_some).2.cost := by
+  obtain ⟨g', hg'⟩ : ∃ g' : State' n, convertState g' = plan.last := by
+    convert state_has_bitvec plan.last;
+    exact?;
+  -- By `strips_path_has_cheaper_walk`, get walk w with w.cost ≤ plan.path.cost.
+  obtain ⟨w, hw⟩ : ∃ w : WeightedDiGraph.Walk (G := trans_of_STRIPS prob) prob.init' g', w.cost ≤ (hg' ▸ plan.path).cost := by
+    apply strips_path_has_cheaper_walk;
+  obtain ⟨p, hp⟩ : ∃ p : (trans_of_STRIPS prob).Path prob.init' g', p.cost ≤ w.cost := by
+    exact?;
+  have h_optimal : (NatGraph.astar_multigoal (g := trans_of_STRIPS prob) (fun _ => 0) prob.init'
+    ((List.finRange (2^n)).filter (fun s => satisfies' prob.goal' s))).get astar_some |>.2.cost ≤ p.cost := by
+      apply astar_multigoal_cross_goal_optimal;
+      have h_goal_in_goals : satisfies' prob.goal' g' := by
+        have := plan.goal; unfold STRIPS.GoalState at this; unfold convertState at hg'; simp_all +decide [ Finset.mem_univ, List.mem_filter ] ;
+        unfold convertVarSet at this; unfold satisfies'; simp_all +decide [ Set.subset_def ] ;
+        exact fun x hx => hg'.symm.subset ( this x hx );
+      simp +zetaDelta at *;
+      exact ⟨ ⟨ g'.toFin, rfl ⟩, h_goal_in_goals ⟩;
+  grind +ring
 
 lemma planner_optimal {n : ℕ} (prob : STRIPS n) (ret_plan : (planner prob).isSome):
   ∀ plan : Plan prob prob.init, plan.path.cost ≥ ((planner prob).get ret_plan).path.cost := by
-  sorry
-
---import Aesop
---
---import Mathlib.Data.Fintype.Basic
---import Mathlib.Data.Finset.Basic
---import Mathlib.Data.Finset.Lattice.Basic
---
---abbrev StripsState (nvar : Nat) := Finset (Fin nvar)
---
---structure StripsAction (nvar : Nat) where
---  pre : Finset (Fin nvar)
---  add : Finset (Fin nvar)
---  del : Finset (Fin nvar)
---  no_pre_added : pre ∩ add = ∅
---  no_del_added : add ∩ del = ∅
---
-----
---
---def op : StripsAction 5 := StripsAction.mk {1} {2} {3} (by
---  apply Finset.inter_singleton_of_notMem
---  rw [← Finset.forall_mem_not_eq]
---  intro b b_in_1
---  rw [Finset.mem_singleton] at b_in_1
---  subst b_in_1 
---  rw [← Fin.val_inj]
---  exact Nat.succ_ne_self 1
---   ) (by
---  ext a
---  apply Iff.intro
---  · intro a_in
---    have f : False := by 
---      rw [Finset.mem_inter] at a_in
---      have ⟨ a2, a3 ⟩ := a_in
---      rw [Finset.mem_singleton] at a2
---      rw [Finset.mem_singleton] at a3
---      rw [a3] at a2
---      rw [← Fin.val_inj] at a2
---      exact Nat.succ_ne_self 2 a2
---    absurd f
---    simp only [not_false_eq_true]
---  · intro a_in_empty
---    absurd (Finset.notMem_empty a) a_in_empty 
---    simp only [not_false_eq_true]
---     ) 
---
---
---abbrev StripsActionSequence (nvar : Nat) (len : Nat) := Vector (StripsAction nvar) len
---
---structure StripsDomain (nvar : Nat) (nact : Nat) where
---  actions : Vector (StripsAction nvar) nact
---
---structure StripsProblem (nvar : Nat) (nact : Nat) where
---  domain : StripsDomain nvar nact
---  init : StripsState nvar
---  goal : StripsState nvar
---
---
---variable {nvar : Nat}
---variable {nact : Nat}
---
---
---def stripsApplicable (a: StripsAction nvar) (s : StripsState nvar) : Bool := a.pre ⊆ s
---
---def stripsApply (a: StripsAction nvar) (s : StripsState nvar) : (StripsState nvar) := (s \ a.del) ∪ a.add
---
---lemma two_applications_of_same_action_dont_change_state {a : StripsAction nvar} {s : StripsState nvar} :
---    stripsApply a s = stripsApply a (stripsApply a s) := by
---      unfold stripsApply
---      ext a_1
---      simp_all only [Finset.mem_union, Finset.mem_sdiff]
---      apply Iff.intro
---      · intro a_2
---        simp_all only [true_and]
---        cases a_2 with
---        | inl h => simp_all only [not_false_eq_true, true_or]
---        | inr h_1 => simp_all only [or_true]
---      · intro a_2
---        cases a_2 with
---        | inl h =>
---          simp_all only [not_false_eq_true, and_true]
---          obtain ⟨left, right⟩ := h
---          simp_all only [not_false_eq_true, and_true]
---        | inr h_1 => simp_all only [or_true]
---
---def stripsIsDeleteRelaxed (a: StripsAction nvar) := a.del = ∅
---
---lemma delete_relaxed_larger_state_is_better {a : StripsAction nvar} {s : StripsState nvar} {s' : StripsState nvar} : s ⊆ s' → (stripsApplicable a s) → stripsApplicable a s' := by
---  unfold stripsApplicable
---  simp
---  intro s_less_s' a_appli
---  apply Finset.Subset.trans
---  exact a_appli
---  exact s_less_s'
---
---
---
----- either returns none if not applicable or the state after the last action
---def stripsApplyActionSequence {l : Nat} (as : StripsActionSequence nvar l) (s : StripsState nvar) : Option (StripsState nvar) := 
---  if empty: l == 0 then (some s)
---  else 
---    let f : 0 < l := by
---      apply Nat.zero_lt_of_ne_zero
---      simp at empty
---      exact empty
---    let firstAction := as.get ⟨0, f⟩
---    let otherActions := as.tail
---    if !(stripsApplicable firstAction s) then none
---    else stripsApplyActionSequence otherActions (stripsApply firstAction s)
---
---
---def stripsActionSequenceApplicable {l : Nat} (as : StripsActionSequence nvar l) (s : StripsState nvar) : Bool := stripsApplyActionSequence as s != none 
---
---def stripsIsActionSequencePlan {l : Nat} (problem : StripsProblem nvar nact) (as : StripsActionSequence nvar l) : Bool :=
---  let result := stripsApplyActionSequence as problem.init
---  match result with
---   | none => False
---   | some s => problem.goal ⊆ s
---
---
---
---
---
---
---
-
-
-
-
-
-
+  intro plan
+  rw [planner_path_cost_eq_astar]
+  exact plan_cost_ge_astar prob (planner_isSome_implies_astar_isSome prob ret_plan) plan
