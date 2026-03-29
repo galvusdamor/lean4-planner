@@ -635,11 +635,68 @@ abbrev heur_admissible' {n : ℕ} (prob : STRIPS n) (heur : State' n → ℕ):=
 
 
 
+private lemma satisfies'_implies_GoalState {n : ℕ} (prob : STRIPS n) (goal : State' n)
+    (h : satisfies' prob.goal' goal = true) :
+    prob.GoalState (convertState goal) := by
+  unfold STRIPS.GoalState convertVarSet convertState satisfies' at *
+  simp_all [List.all_eq_true, Set.subset_def]
+
+private lemma GoalState_implies_satisfies' {n : ℕ} (prob : STRIPS n) (goal : State' n)
+    (h : prob.GoalState (convertState goal)) :
+    satisfies' prob.goal' goal = true := by
+  unfold STRIPS.GoalState convertVarSet convertState satisfies' at *
+  simp_all [List.all_eq_true, Set.subset_def]
+
+private lemma mem_trans_of_STRIPS_goals_iff {n : ℕ} (prob : STRIPS n) (goal : State' n) :
+    goal ∈ trans_of_STRIPS_goals prob ↔ satisfies' prob.goal' goal = true := by
+  unfold trans_of_STRIPS_goals
+  simp
+  exact fun _ => ⟨goal.toFin, rfl⟩
+
+private lemma Path.cost_eq_of_cast {n : ℕ} {pt : STRIPS n} {s s1 s2 : State n}
+    (h : s1 = s2) (p : Path pt s s2) :
+    (show Path pt s s1 from h ▸ p).cost = p.cost := by
+  subst h; rfl
 lemma admissible_of_admissible' {n : ℕ} (prob : STRIPS n) (heur : State' n → ℕ):
-    heur_admissible' prob heur → heur_admissible prob heur := by sorry
+    heur_admissible' prob heur → heur_admissible prob heur := by
+  intro h' v plan
+  -- Get a BitVec representation of plan.last
+  haveI : DecidablePred (Set.Mem plan.last) := last_dec prob v plan.last plan.path
+  obtain ⟨g', hg'⟩ := state_has_bitvec plan.last
+  -- Convert STRIPS path to graph walk
+  obtain ⟨w, hw⟩ := strips_path_has_cheaper_walk prob (hg' ▸ plan.path)
+  -- Get a graph Path from the walk
+  obtain ⟨p, hp⟩ := WeightedDiGraph.Walk.cheaper_path_exists w
+  -- Show g' is in the goals list
+  have g'_in_goals : g' ∈ trans_of_STRIPS_goals prob := by
+    rw [mem_trans_of_STRIPS_goals_iff]
+    exact GoalState_implies_satisfies' prob g' (hg' ▸ plan.goal)
+  -- Apply admissible'
+  have hge := h' v g' g'_in_goals p
+  -- Cost preservation under cast
+  have hcost : (hg' ▸ plan.path).cost = plan.path.cost :=
+    Path.cost_eq_of_cast hg' plan.path
+  omega
 
 lemma admissible'_of_admissible {n : ℕ} (prob : STRIPS n) (heur : State' n → ℕ):
-    heur_admissible prob heur → heur_admissible' prob heur := by sorry
+    heur_admissible prob heur → heur_admissible' prob heur := by
+  intro h v goal goal_in_goals graphPath
+  -- goal satisfies the goal condition
+  have sat : satisfies' prob.goal' goal = true :=
+    (mem_trans_of_STRIPS_goals_iff prob goal).mp goal_in_goals
+  -- Convert graph path to STRIPS path
+  let stripsPath := walk_to_strips_path prob graphPath.val sat
+  -- Build a Plan
+  have goal_sat := satisfies'_implies_GoalState prob goal sat
+  let plan : Plan prob (convertState v) :=
+    Plan.mk (convertState goal) stripsPath goal_sat
+  -- Apply admissible
+  have hplan := h v plan
+  -- The costs are equal
+  have cost_eq : plan.path.cost = graphPath.cost := by
+    show stripsPath.cost = graphPath.cost
+    rw [walk_to_strips_path_cost_eq, WeightedDiGraph.Path.cost_same]
+  omega
 
 
 lemma zero_heur_admissible' {n : ℕ} (prob : STRIPS n) : heur_admissible' prob (fun _ => 0) := by
@@ -820,9 +877,16 @@ lemma plan_cost_ge_astar {n : ℕ} (prob : STRIPS n) (heur : State' n → ℕ)
     ((List.finRange (2^n)).filter (fun s => satisfies' prob.goal' s))).get astar_some |>.2.cost ≤ p.cost := by
       apply astar_multigoal_cross_goal_optimal;
       simp 
-      · unfold NatGraph.admissible'
+      · have h_admissible' := admissible'_of_admissible prob heur admissible
+        unfold NatGraph.admissible'
         intro v goal is_goal
-        sorry 
+        unfold NatGraph.cost_ge
+        intro gp
+        have goal_in_goals : goal ∈ trans_of_STRIPS_goals prob := by
+          rw [mem_trans_of_STRIPS_goals_iff]
+          simp at is_goal
+          exact is_goal.2
+        exact h_admissible' v goal goal_in_goals gp
       · simp
         constructor
         · exact ⟨ g'.toFin, rfl ⟩
