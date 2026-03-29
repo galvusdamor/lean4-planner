@@ -26,7 +26,7 @@ set_option trace.split.failure true
 --set_option diagnostics true
 
 -- def local global variable for a graph
-variable {V : Type} [FinEnum V] --[DecidableEq V]
+variable {V : Type} [FinEnum V]
 variable {g : NatGraph V}
 
 
