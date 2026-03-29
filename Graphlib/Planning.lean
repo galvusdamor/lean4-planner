@@ -842,24 +842,50 @@ lemma planner_optimal {n : ℕ} (prob : STRIPS n) (heur : State' n → ℕ)
   exact plan_cost_ge_astar prob heur admissible (planner_isSome_implies_astar_isSome prob heur ret_plan) plan
 
 
+lemma admissible_of_dominated_by_admissible {n : ℕ} (prob : STRIPS n) (h1 h2 : State' n → ℕ) (admissible : heur_admissible' prob h1) (dominated : ∀ s : State' n, h1 s ≥ h2 s) : heur_admissible' prob h2 := by sorry
+
 
 
 def is_valid_abstraction {V V': Type} [FinEnum V] [FinEnum V'] (g : NatGraph V) (g' : NatGraph V') (abstraction : V → V') :=
+  ∀ v : V, ∀ v' : V, g.Adj v v' → g'.Adj (abstraction v) (abstraction v')
+
+
+def is_bisimulation {V V': Type} [FinEnum V] [FinEnum V'] (g : NatGraph V) (g' : NatGraph V') (abstraction : V → V') :=
   ∀ v : V, ∀ v' : V, g.Adj v v' ↔ g'.Adj (abstraction v) (abstraction v')
+
+
+
+def max_action_cost {n : ℕ} (prob : STRIPS n) : ℕ := if empty : prob.actions'.length = 0 then 1 else 
+  (prob.actions'.map (·.cost)).max (by rw [ne_eq] ; rw [List.map_eq_nil_iff] ; rw [←List.length_eq_zero_iff];  exact empty)
+
+/-- A path cannot contain the same node twice. I.e. any path contains at most 2^n - 1 many actions and must thos be cheaper than 2^n times the maximum action cost. -/
+lemma all_paths_shorter_than {n : ℕ} (prob : STRIPS n):
+    ∀ goal ∈ trans_of_STRIPS_goals prob, ∀ path : WeightedDiGraph.Path (G:= (trans_of_STRIPS prob)) prob.init' goal, path.cost < (2^n) * (max_action_cost prob) := by sorry
 
 
 def abstraction_heuristic {n : ℕ} (prob : STRIPS n) {V : Type} [FinEnum V] (g : NatGraph V) (abstraction: State' n → V) (s : State' n) : ℕ :=
   let goals := (trans_of_STRIPS_goals prob).map abstraction
   let opt_ret := NatGraph.astar_multigoal (g:=g) (fun _ => 0) (abstraction s) goals
   match opt_ret with
-  | .none => Fintype.card V 
+  | .none => (2^n) * (max_action_cost prob) 
   | .some ret =>
       ret.2.val.cost
-
 
 
 lemma abstractions_admissible {n : ℕ} (prob : STRIPS n) {V : Type} [FinEnum V] {g : NatGraph V} (abstraction: State' n → V) (is_abstraction : is_valid_abstraction (trans_of_STRIPS prob) (g) abstraction) : 
   heur_admissible' prob (fun s => abstraction_heuristic prob g abstraction s)
     := by sorry
 
+def delete_relax_action {n : ℕ} (a : Action n) : Action n := Action.mk a.name a.pre' a.add' ⟨[], by apply List.sortedLT_iff_pairwise.mpr ; simp ⟩  a.cost
+
+def delete_relaxation {n : ℕ} (prob : STRIPS n) : STRIPS n := STRIPS.mk prob.varNames (prob.actions'.map delete_relax_action) prob.init' prob.goal'
+
+
+def h_plus {n : ℕ} (prob : STRIPS n) (s : State' n) : ℕ :=
+  let del_relax_ret := planner (delete_relaxation prob) (fun _ => 0)
+  match del_relax_ret with
+  | .none => (2^n) * (max_action_cost prob) 
+  | .some ret => ret.path.cost
+
+lemma h_plus_admissible {n : ℕ} (prob : STRIPS n) : heur_admissible' prob (h_plus prob) := by sorry
 
