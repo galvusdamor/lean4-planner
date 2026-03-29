@@ -134,6 +134,8 @@ def trans_of_STRIPS {n : ℕ} (prob : STRIPS n) : NatGraph (State' n) :=
 
   WeightedDiGraph.mk dg cost dg_dec
 
+def trans_of_STRIPS_goals {n : ℕ} (prob : STRIPS n) : List (State' n) := 
+  (List.finRange (2^n)).filter (fun s => satisfies' prob.goal' s)
 
 lemma is_successor_state_of_trans_STRIPS_adj {n : ℕ} (prob : STRIPS n) (s s' : State' n) (adj : (trans_of_STRIPS prob).Adj s s') :
     is_successor_state prob s s' := by
@@ -366,13 +368,12 @@ decreasing_by
   grind
 
 
-def planner {n : ℕ} (prob : STRIPS n) : Option (Plan prob prob.init) :=
+def planner {n : ℕ} (prob : STRIPS n) (heur : State' n → ℕ): Option (Plan prob prob.init) :=
   let trans := trans_of_STRIPS prob
   let ini := prob.init'
-  let goals := (List.finRange (2^n)).filter (fun s => satisfies' prob.goal' s)
-  let h : (State' n) → ℕ := fun _ => 0
+  let goals := trans_of_STRIPS_goals prob
 
-  let opt_ret := NatGraph.astar_multigoal (g:=trans) h ini goals
+  let opt_ret := NatGraph.astar_multigoal (g:=trans) heur ini goals
   match opt_ret with
   | .none => .none
   | .some ret =>
@@ -381,7 +382,7 @@ def planner {n : ℕ} (prob : STRIPS n) : Option (Plan prob prob.init) :=
 
     have sat : satisfies' prob.goal' goal' := by
       unfold goals at goal'_in_goals
-      simp at goal'_in_goals
+      simp [trans_of_STRIPS_goals] at goal'_in_goals
       exact goal'_in_goals.2
 
     let path : Path prob (convertState ini) (convertState goal') := walk_to_strips_path prob ret.2.val sat
@@ -398,8 +399,8 @@ def planner {n : ℕ} (prob : STRIPS n) : Option (Plan prob prob.init) :=
 
 
 
-lemma planner_complete {n : ℕ} (prob : STRIPS n):
-      planner prob = Option.none → Unsolvable prob := by
+lemma planner_complete {n : ℕ} (prob : STRIPS n) (heur : State' n → ℕ):
+      planner prob heur = Option.none → Unsolvable prob := by
   intro ret_none
   unfold Unsolvable UnsolvableState
   constructor
@@ -416,14 +417,13 @@ lemma planner_complete {n : ℕ} (prob : STRIPS n):
   simp at ret_none
   split at ret_none
   · expose_names
-    let zero_h : State' n → ℕ := fun _ => 0
-    let goals : List (State' n) := (List.finRange (2^n)).filter (fun s => satisfies' prob.goal' s)
+    let goals : List (State' n) := trans_of_STRIPS_goals prob
 
-    have no_goal_path := mt (NatGraph.astar_multigoal_is_complete zero_h prob.init' goals) (by simp ; apply heq)
+    have no_goal_path := mt (NatGraph.astar_multigoal_is_complete heur prob.init' goals) (by simp ; apply heq)
     push_neg at no_goal_path
     have goal'_in_goals : goal' ∈ goals := by
       unfold goals
-      simp
+      simp [trans_of_STRIPS_goals]
       constructor
       · grind only
       · have gs := plan.goal
@@ -625,47 +625,63 @@ lemma strips_path_has_cheaper_walk {n : ℕ} (prob : STRIPS n) {start goal : Sta
     ∃ w : WeightedDiGraph.Walk (G := trans_of_STRIPS prob) start goal, w.cost ≤ path.cost :=
   strips_path_has_cheaper_walk_aux prob path.length path (le_refl _)
 
-/-
-PROBLEM
-The zero heuristic is admissible for any goals.
 
-PROVIDED SOLUTION
-Unfold admissible' and cost_ge. We need: for all v, for all goal in goals, for all path p from v to goal, p.cost ≥ 0. This is trivially true since p.cost : ℕ ≥ 0.
--/
-lemma zero_heur_admissible' {n : ℕ} (prob : STRIPS n) (goals : List (State' n)) :
-    (trans_of_STRIPS prob).admissible' (fun _ => 0) goals := by
+abbrev heur_admissible {n : ℕ} (prob : STRIPS n) (heur : State' n → ℕ):=
+  ∀ v : State' n, ∀ plan : Plan prob (convertState v), plan.path.cost ≥ (heur v)
+
+
+abbrev heur_admissible' {n : ℕ} (prob : STRIPS n) (heur : State' n → ℕ):=
+  ∀ v : State' n, ∀ goal ∈ trans_of_STRIPS_goals prob, ∀ path : WeightedDiGraph.Path (G:=trans_of_STRIPS prob) v goal, path.cost ≥ (heur v)
+
+
+
+lemma admissible_of_admissible' {n : ℕ} (prob : STRIPS n) (heur : State' n → ℕ):
+    heur_admissible' prob heur → heur_admissible prob heur := by sorry
+
+lemma admissible'_of_admissible {n : ℕ} (prob : STRIPS n) (heur : State' n → ℕ):
+    heur_admissible prob heur → heur_admissible' prob heur := by sorry
+
+
+lemma zero_heur_admissible' {n : ℕ} (prob : STRIPS n) : heur_admissible' prob (fun _ => 0) := by
   exact fun v goal h => fun p => Nat.zero_le _
+
+lemma zero_heur_admissible {n : ℕ} (prob : STRIPS n) : heur_admissible prob (fun _ => 0) := by
+  apply admissible_of_admissible' prob
+  apply zero_heur_admissible'
+
+
 
 /-- The A* multigoal result is optimal across all goals: its graph path cost is ≤ any graph path
     to any goal in the goals list. -/
-lemma astar_multigoal_cross_goal_optimal {n : ℕ} (prob : STRIPS n)
+lemma astar_multigoal_cross_goal_optimal {n : ℕ} (prob : STRIPS n) (heur : State' n → ℕ)
     (goals : List (State' n))
+    (admissible : (trans_of_STRIPS prob).admissible' heur goals)
     (returned_path : Option.isSome (NatGraph.astar_multigoal (g := trans_of_STRIPS prob)
-      (fun _ => 0) prob.init' goals)) :
+      heur prob.init' goals)) :
     ∀ goal ∈ goals, ∀ p : (trans_of_STRIPS prob).Path prob.init' goal,
       ((NatGraph.astar_multigoal (g := trans_of_STRIPS prob)
-        (fun _ => 0) prob.init' goals).get returned_path).2.cost ≤ p.cost := by
+        heur prob.init' goals).get returned_path).2.cost ≤ p.cost := by
   intro goal goal_in_goals p
   -- Extract augmented A* path
   have h_some : ∃ aug_path, NatGraph.astar
       (g := (trans_of_STRIPS prob).add_artificial_goal goals)
-      (NatGraph.opt_heur (fun _ => 0)) (some prob.init') none = some aug_path := by
+      (NatGraph.opt_heur heur) (some prob.init') none = some aug_path := by
     exact Option.isSome_iff_exists.mp
-      (NatGraph.astar_multigoal_some_implies_astar_some (fun _ => 0) prob.init' goals returned_path)
+      (NatGraph.astar_multigoal_some_implies_astar_some heur prob.init' goals returned_path)
   obtain ⟨aug_path, h_eq⟩ := h_some
   -- The augmented path is optimal
   have aug_optimal : aug_path.is_cheapest := by
     have aug_ret : Option.isSome (NatGraph.astar
         (g := (trans_of_STRIPS prob).add_artificial_goal goals)
-        (NatGraph.opt_heur (fun _ => 0)) (some prob.init') none) := by
+        (NatGraph.opt_heur heur) (some prob.init') none) := by
       rw [h_eq]; simp
     have h := NatGraph.astar_is_optimal
       (g := (trans_of_STRIPS prob).add_artificial_goal goals)
-      (NatGraph.opt_heur (fun _ => 0)) (some prob.init') none
-      (NatGraph.opt_heur_admissible (fun _ => 0) (zero_heur_admissible' prob goals)) aug_ret
+      (NatGraph.opt_heur heur) (some prob.init') none
+      (NatGraph.opt_heur_admissible heur admissible) aug_ret
     have h_get : (NatGraph.astar
         (g := (trans_of_STRIPS prob).add_artificial_goal goals)
-        (NatGraph.opt_heur (fun _ => 0)) (some prob.init') none).get aug_ret = aug_path := by
+        (NatGraph.opt_heur heur) (some prob.init') none).get aug_ret = aug_path := by
       simp [h_eq]
     rw [h_get] at h
     exact h
@@ -677,7 +693,7 @@ lemma astar_multigoal_cross_goal_optimal {n : ℕ} (prob : STRIPS n)
     aug_path.cost ≤ aug_p.cost := aug_optimal aug_p
     _ = p.cost := h_cost_eq
   have h2 := NatGraph.astar_multigoal_cost_le_aug
-    (fun _ => 0) prob.init' goals returned_path aug_path h_eq
+    heur prob.init' goals returned_path aug_path h_eq
   exact le_trans h2 h1
 
 /-
@@ -699,17 +715,17 @@ For any plan:
 
 Unfold planner at ret_plan. The planner matches on astar_multigoal result. If astar_multigoal returns none, planner returns none, so ret_plan (isSome of none) would be false. Contradiction. So astar_multigoal returns some.
 -/
-lemma planner_isSome_implies_astar_isSome {n : ℕ} (prob : STRIPS n)
-    (ret_plan : (planner prob).isSome) :
+lemma planner_isSome_implies_astar_isSome {n : ℕ} (prob : STRIPS n) (heur : State' n → ℕ)
+    (ret_plan : (planner prob heur).isSome) :
     Option.isSome (NatGraph.astar_multigoal (g := trans_of_STRIPS prob)
-      (fun _ => 0) prob.init'
+      heur prob.init'
       ((List.finRange (2^n)).filter (fun s => satisfies' prob.goal' s))) := by
   -- By definition of planner, if the planner returns some, then the astar_multigoal must have returned some.
   unfold planner at ret_plan
   simp_all only [BitVec.natCast_eq_ofNat, List.pure_def, List.bind_eq_flatMap]
   split at ret_plan
   next opt_ret heq => simp_all only [Option.isSome_none, Bool.false_eq_true]
-  next opt_ret ret heq => simp_all only [Option.isSome_some]
+  next opt_ret ret heq => simp_all only [Option.isSome_some, trans_of_STRIPS_goals,BitVec.natCast_eq_ofNat, List.pure_def, List.bind_eq_flatMap, Option.isSome_some]
 
 /-
 PROBLEM
@@ -720,12 +736,12 @@ Unfold planner at ret_plan and the goal. Split on the astar_multigoal match. In 
 
 Unfold planner at both ret_plan and the goal. Split on the match of astar_multigoal. In the none case, contradiction with ret_plan (Option.isSome none = false). In the some case with ret, the planner's plan has path = walk_to_strips_path prob ret.2.val sat, so (planner prob).get.path.cost = (walk_to_strips_path prob ret.2.val sat).cost = ret.2.val.cost (by walk_to_strips_path_cost_eq). And the RHS is ((astar_multigoal ...).get ...).2.cost = ret.2.cost = ret.2.val.cost (by WeightedDiGraph.Path.cost_same). So both sides equal ret.2.val.cost.
 -/
-lemma planner_path_cost_eq_astar {n : ℕ} (prob : STRIPS n)
-    (ret_plan : (planner prob).isSome) :
-    ((planner prob).get ret_plan).path.cost =
-      ((NatGraph.astar_multigoal (g := trans_of_STRIPS prob) (fun _ => 0) prob.init'
+lemma planner_path_cost_eq_astar {n : ℕ} (prob : STRIPS n) (heur : State' n → ℕ)
+    (ret_plan : (planner prob heur).isSome) :
+    ((planner prob heur).get ret_plan).path.cost =
+      ((NatGraph.astar_multigoal (g := trans_of_STRIPS prob) heur prob.init'
         ((List.finRange (2^n)).filter (fun s => satisfies' prob.goal' s))).get
-        (planner_isSome_implies_astar_isSome prob ret_plan)).2.cost := by
+        (planner_isSome_implies_astar_isSome prob heur ret_plan)).2.cost := by
   unfold planner at ret_plan
   generalize_proofs at *;
   unfold planner;
@@ -735,7 +751,17 @@ lemma planner_path_cost_eq_astar {n : ℕ} (prob : STRIPS n)
   simp 
   convert walk_to_strips_path_cost_eq prob ret.2.val _ using 1;
   any_goals solve_by_elim;
-  · unfold Option.get; aesop;
+  · unfold Option.get; unfold trans_of_STRIPS_goals
+    simp_all only [BitVec.natCast_eq_ofNat, List.pure_def, List.bind_eq_flatMap, Option.isSome_some]
+    obtain ⟨fst, snd⟩ := ret
+    obtain ⟨val, property⟩ := fst
+    obtain ⟨val_1, property_1⟩ := snd
+    simp_all only [BitVec.natCast_eq_ofNat, List.pure_def, List.bind_eq_flatMap]
+    split
+    rename_i _ _ _ _ heq _
+    simp_all only [Option.some.injEq, heq_eq_eq]
+    subst heq
+    simp_all only [Option.isSome_some]
   · congr! 2;
     · congr! 1
       exact Option.get_of_eq_some h₂ hret
@@ -773,13 +799,14 @@ Given plan : Plan prob prob.init:
 8. By astar_multigoal_cross_goal_optimal, get A* cost ≤ p.cost.
 9. Chain: A* cost ≤ p.cost ≤ w.cost ≤ plan.path.cost. So plan.path.cost ≥ A* cost.
 -/
-lemma plan_cost_ge_astar {n : ℕ} (prob : STRIPS n)
+lemma plan_cost_ge_astar {n : ℕ} (prob : STRIPS n) (heur : State' n → ℕ)
+    (admissible : heur_admissible prob heur)
     (astar_some : Option.isSome (NatGraph.astar_multigoal (g := trans_of_STRIPS prob)
-      (fun _ => 0) prob.init'
+      heur prob.init'
       ((List.finRange (2^n)).filter (fun s => satisfies' prob.goal' s))))
     (plan : Plan prob prob.init) :
     plan.path.cost ≥
-      ((NatGraph.astar_multigoal (g := trans_of_STRIPS prob) (fun _ => 0) prob.init'
+      ((NatGraph.astar_multigoal (g := trans_of_STRIPS prob) heur prob.init'
         ((List.finRange (2^n)).filter (fun s => satisfies' prob.goal' s))).get astar_some).2.cost := by
   obtain ⟨g', hg'⟩ : ∃ g' : State' n, convertState g' = plan.last := by
     convert state_has_bitvec plan.last;
@@ -789,19 +816,50 @@ lemma plan_cost_ge_astar {n : ℕ} (prob : STRIPS n)
     apply strips_path_has_cheaper_walk;
   obtain ⟨p, hp⟩ : ∃ p : (trans_of_STRIPS prob).Path prob.init' g', p.cost ≤ w.cost := by
     exact WeightedDiGraph.Walk.cheaper_path_exists w
-  have h_optimal : (NatGraph.astar_multigoal (g := trans_of_STRIPS prob) (fun _ => 0) prob.init'
+  have h_optimal : (NatGraph.astar_multigoal (g := trans_of_STRIPS prob) heur prob.init'
     ((List.finRange (2^n)).filter (fun s => satisfies' prob.goal' s))).get astar_some |>.2.cost ≤ p.cost := by
       apply astar_multigoal_cross_goal_optimal;
-      have h_goal_in_goals : satisfies' prob.goal' g' := by
-        have := plan.goal; unfold STRIPS.GoalState at this; unfold convertState at hg';
-        unfold convertVarSet at this; unfold satisfies'; simp_all +decide [ Set.subset_def ] ;
-        exact fun x hx => hg'.symm.subset ( this x hx );
       simp 
-      exact ⟨ ⟨ g'.toFin, rfl ⟩, h_goal_in_goals ⟩;
+      · unfold NatGraph.admissible'
+        intro v goal is_goal
+        sorry 
+      · simp
+        constructor
+        · exact ⟨ g'.toFin, rfl ⟩
+        · have := plan.goal; unfold STRIPS.GoalState at this; unfold convertState at hg'
+          unfold convertVarSet at this; unfold satisfies'; simp_all +decide [ Set.subset_def ] ;
+          exact fun x hx => hg'.symm.subset ( this x hx );
   grind 
 
-lemma planner_optimal {n : ℕ} (prob : STRIPS n) (ret_plan : (planner prob).isSome):
-  ∀ plan : Plan prob prob.init, plan.path.cost ≥ ((planner prob).get ret_plan).path.cost := by
+
+
+lemma planner_optimal {n : ℕ} (prob : STRIPS n) (heur : State' n → ℕ)
+  (admissible : heur_admissible prob heur)
+  (ret_plan : (planner prob heur).isSome):
+  ∀ plan : Plan prob prob.init, plan.path.cost ≥ ((planner prob heur).get ret_plan).path.cost := by
   intro plan
   rw [planner_path_cost_eq_astar]
-  exact plan_cost_ge_astar prob (planner_isSome_implies_astar_isSome prob ret_plan) plan
+  exact plan_cost_ge_astar prob heur admissible (planner_isSome_implies_astar_isSome prob heur ret_plan) plan
+
+
+
+
+def is_valid_abstraction {V V': Type} [FinEnum V] [FinEnum V'] (g : NatGraph V) (g' : NatGraph V') (abstraction : V → V') :=
+  ∀ v : V, ∀ v' : V, g.Adj v v' ↔ g'.Adj (abstraction v) (abstraction v')
+
+
+def abstraction_heuristic {n : ℕ} (prob : STRIPS n) {V : Type} [FinEnum V] (g : NatGraph V) (abstraction: State' n → V) (s : State' n) : ℕ :=
+  let goals := (trans_of_STRIPS_goals prob).map abstraction
+  let opt_ret := NatGraph.astar_multigoal (g:=g) (fun _ => 0) (abstraction s) goals
+  match opt_ret with
+  | .none => Fintype.card V 
+  | .some ret =>
+      ret.2.val.cost
+
+
+
+lemma abstractions_admissible {n : ℕ} (prob : STRIPS n) {V : Type} [FinEnum V] {g : NatGraph V} (abstraction: State' n → V) (is_abstraction : is_valid_abstraction (trans_of_STRIPS prob) (g) abstraction) : 
+  heur_admissible' prob (fun s => abstraction_heuristic prob g abstraction s)
+    := by sorry
+
+
