@@ -131,6 +131,12 @@ theorem length_diff_ends_ne_zero {u v : V} (h : u ≠ v) (p : G.Walk u v):
   · simp
   · contradiction
 
+theorem walk_support_length 
+    {u v : V} (w : G.Walk u v) : w.support.length = w.length + 1 := by
+  induction w with
+  | nil => simp [WeightedDiGraph.Walk.support, WeightedDiGraph.Walk.length]
+  | cons _ _ ih => simp [WeightedDiGraph.Walk.support, WeightedDiGraph.Walk.length, ih, Nat.add_comm]
+
 
 @[simp]
 theorem goal_in_support {u v : V} (p: G.Walk u v): v ∈ p.support := by
@@ -513,6 +519,17 @@ theorem nil_support {u : V} (p : G.Path u u) : p.support = [u] := by simp [p.pro
 
 @[simp]
 theorem goal_in_support (p: G.Path u v): v ∈ p.support := by simp
+
+
+theorem path_support_length_le {u v : V} (p : G.Path u v) :
+    p.val.support.length ≤ Fintype.card V := List.Nodup.length_le_card p.prop
+
+theorem path_length_lt_card
+    {u v : V} (p : G.Path u v) : p.val.length < Fintype.card V := by
+  have h_len := p.val.walk_support_length
+  have h_le := path_support_length_le p
+  rw [h_len] at h_le
+  exact Nat.lt_of_succ_le h_le
 
 
 
