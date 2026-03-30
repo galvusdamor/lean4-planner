@@ -45,7 +45,7 @@ theorem BitVec.getElem_ofBoolListLE {i : Nat} {bs : List Bool} (h : i < bs.lengt
   (BitVec.ofBoolListLE bs)[i] = bs[i] := by
   rw [← BitVec.getLsbD_eq_getElem, BitVec.getLsbD_ofBoolListLE]
   simp only [List.getD_eq_getElem?_getD]
-  rw [List.getElem?_eq_getElem (by omega)]
+  rw [List.getElem?_eq_getElem h]
   simp
 
 
@@ -134,7 +134,7 @@ def trans_of_STRIPS {n : ℕ} (prob : STRIPS n) : NatGraph (State' n) :=
 
   WeightedDiGraph.mk dg cost dg_dec
 
-def trans_of_STRIPS_goals {n : ℕ} (prob : STRIPS n) : List (State' n) := 
+def trans_of_STRIPS_goals {n : ℕ} (prob : STRIPS n) : List (State' n) :=
   (List.finRange (2^n)).filter (fun s => satisfies' prob.goal' s)
 
 lemma is_successor_state_of_trans_STRIPS_adj {n : ℕ} (prob : STRIPS n) (s s' : State' n) (adj : (trans_of_STRIPS prob).Adj s s') :
@@ -608,7 +608,7 @@ private lemma strips_path_has_cheaper_walk_aux {n : ℕ} (prob : STRIPS n) (k : 
       obtain ⟨s2', rfl⟩ := state_has_bitvec s2
       have adj := adj_of_successor prob succ ha
       have path'_len : path'.length ≤ k := by
-        simp [Path.length] at hlen; omega
+        simp [Path.length] at hlen; exact hlen
       obtain ⟨walk', hw'⟩ := ih path' path'_len
       refine ⟨WeightedDiGraph.Walk.cons adj walk', ?_⟩
       have edge_le : NatGraph.edgeCost adj ≤ a.cost := by
@@ -617,8 +617,12 @@ private lemma strips_path_has_cheaper_walk_aux {n : ℕ} (prob : STRIPS n) (k : 
           (mem_actions'_of_mem_actions ha)
           (successor_implies_applicable succ)
           (successor_implies_is_successor succ)
+      show (WeightedDiGraph.Walk.cons adj walk').cost ≤
+        (Path.cons a (convertState s2') ha succ path').cost
       simp only [WeightedDiGraph.Walk.cost, Path.cost]
-      omega
+      calc NatGraph.edgeCost adj + walk'.cost
+          ≤ a.cost + path'.cost := Nat.add_le_add edge_le hw'
+        _ = path'.cost + a.cost := Nat.add_comm _ _
 
 lemma strips_path_has_cheaper_walk {n : ℕ} (prob : STRIPS n) {start goal : State' n}
     (path : Path prob (convertState start) (convertState goal)) :
@@ -676,7 +680,10 @@ lemma admissible_of_admissible' {n : ℕ} (prob : STRIPS n) (heur : State' n →
   -- Cost preservation under cast
   have hcost : (hg' ▸ plan.path).cost = plan.path.cost :=
     Path.cost_eq_of_cast hg' plan.path
-  omega
+  calc heur v ≤ p.cost := hge
+    _ ≤ w.cost := hp
+    _ ≤ (hg' ▸ plan.path).cost := hw
+    _ = plan.path.cost := hcost
 
 lemma admissible'_of_admissible {n : ℕ} (prob : STRIPS n) (heur : State' n → ℕ):
     heur_admissible prob heur → heur_admissible' prob heur := by
@@ -696,7 +703,7 @@ lemma admissible'_of_admissible {n : ℕ} (prob : STRIPS n) (heur : State' n →
   have cost_eq : plan.path.cost = graphPath.cost := by
     show stripsPath.cost = graphPath.cost
     rw [walk_to_strips_path_cost_eq, WeightedDiGraph.Path.cost_same]
-  omega
+  exact cost_eq ▸ hplan
 
 
 lemma zero_heur_admissible' {n : ℕ} (prob : STRIPS n) : heur_admissible' prob (fun _ => 0) := by
@@ -805,7 +812,7 @@ lemma planner_path_cost_eq_astar {n : ℕ} (prob : STRIPS n) (heur : State' n �
   nontriviality;
   rename_i h₁ h₂ h₃;
   obtain ⟨ ret, hret ⟩ := Option.isSome_iff_exists.mp h₂;
-  simp 
+  simp
   convert walk_to_strips_path_cost_eq prob ret.2.val _ using 1;
   any_goals solve_by_elim;
   · unfold Option.get; unfold trans_of_STRIPS_goals
@@ -876,7 +883,7 @@ lemma plan_cost_ge_astar {n : ℕ} (prob : STRIPS n) (heur : State' n → ℕ)
   have h_optimal : (NatGraph.astar_multigoal (g := trans_of_STRIPS prob) heur prob.init'
     ((List.finRange (2^n)).filter (fun s => satisfies' prob.goal' s))).get astar_some |>.2.cost ≤ p.cost := by
       apply astar_multigoal_cross_goal_optimal;
-      simp 
+      simp
       · have h_admissible' := admissible'_of_admissible prob heur admissible
         unfold NatGraph.admissible'
         intro v goal is_goal
@@ -893,7 +900,7 @@ lemma plan_cost_ge_astar {n : ℕ} (prob : STRIPS n) (heur : State' n → ℕ)
         · have := plan.goal; unfold STRIPS.GoalState at this; unfold convertState at hg'
           unfold convertVarSet at this; unfold satisfies'; simp_all +decide [ Set.subset_def ] ;
           exact fun x hx => hg'.symm.subset ( this x hx );
-  grind 
+  grind
 
 
 
@@ -906,7 +913,13 @@ lemma planner_optimal {n : ℕ} (prob : STRIPS n) (heur : State' n → ℕ)
   exact plan_cost_ge_astar prob heur admissible (planner_isSome_implies_astar_isSome prob heur ret_plan) plan
 
 
-lemma admissible_of_dominated_by_admissible {n : ℕ} (prob : STRIPS n) (h1 h2 : State' n → ℕ) (admissible : heur_admissible' prob h1) (dominated : ∀ s : State' n, h1 s ≥ h2 s) : heur_admissible' prob h2 := by sorry
+/-
+PROVIDED SOLUTION
+h2 s ≤ h1 s (by dominated) ≤ path.cost (by admissible). Unfold heur_admissible' and use le_trans with dominated and admissible.
+-/
+lemma admissible_of_dominated_by_admissible {n : ℕ} (prob : STRIPS n) (h1 h2 : State' n → ℕ) (admissible : heur_admissible' prob h1) (dominated : ∀ s : State' n, h1 s ≥ h2 s) : heur_admissible' prob h2 := by
+  intro v goal goal_in_goals p
+  exact le_trans (dominated v) (admissible v goal goal_in_goals p)
 
 
 
@@ -919,37 +932,393 @@ def is_bisimulation {V V': Type} [FinEnum V] [FinEnum V'] (g : NatGraph V) (g' :
 
 
 
-def max_action_cost {n : ℕ} (prob : STRIPS n) : ℕ := if empty : prob.actions'.length = 0 then 1 else 
+def max_action_cost {n : ℕ} (prob : STRIPS n) : ℕ := if empty : prob.actions'.length = 0 then 1 else
   (prob.actions'.map (·.cost)).max (by rw [ne_eq] ; rw [List.map_eq_nil_iff] ; rw [←List.length_eq_zero_iff];  exact empty)
 
-/-- A path cannot contain the same node twice. I.e. any path contains at most 2^n - 1 many actions and must thos be cheaper than 2^n times the maximum action cost. -/
+private lemma walk_support_length {V : Type} [FinEnum V] {G : NatGraph V}
+    {u v : V} (w : G.Walk u v) : w.support.length = w.length + 1 := by
+  induction w with
+  | nil => simp [WeightedDiGraph.Walk.support, WeightedDiGraph.Walk.length]
+  | cons _ _ ih => simp [WeightedDiGraph.Walk.support, WeightedDiGraph.Walk.length, ih, Nat.add_comm]
+
+private lemma path_support_length_le {V : Type} [FinEnum V] {G : NatGraph V}
+    {u v : V} (p : G.Path u v) : p.val.support.length ≤ Fintype.card V :=
+  List.Nodup.length_le_card p.prop
+
+private lemma path_length_lt_card {V : Type} [FinEnum V] {G : NatGraph V}
+    {u v : V} (p : G.Path u v) : p.val.length < Fintype.card V := by
+  have h_len := walk_support_length p.val
+  have h_le := path_support_length_le p
+  rw [h_len] at h_le
+  exact Nat.lt_of_succ_le h_le
+
+/-
+PROVIDED SOLUTION
+First, rewrite the edge cost using trans_of_STRIPS_edgeCost to get cost_of prob f t .... Then cost_of returns List.min of costs of applicable actions. This min ≤ any element in the list. The applicable actions are a subset of prob.actions'. Each action cost ≤ max_action_cost (which is List.max of all action costs, or 1 if empty). Use List.min_le_of_mem and List.le_max_of_mem, or just show cost_of ≤ some particular action's cost ≤ max_action_cost.
+
+Rewrite edgeCost using trans_of_STRIPS_edgeCost. Then we have cost_of prob f t is_succ ≤ max_action_cost prob. Unfold cost_of and max_action_cost. The cost_of is List.min of applicable action costs. List.min is a member of the list (List.min_mem). Each applicable action is in prob.actions', so its cost is in the cost map of prob.actions'. By List.le_max_of_mem, each such cost ≤ List.max of all action costs. The max_action_cost uses if-then-else: if actions' empty then 1 else List.max. Since adj implies there's at least one applicable action, actions' is non-empty, so the if goes to else branch. Use split on the if, in the empty case derive contradiction from adj, in the non-empty case use List.min_le_of_mem and List.le_max_of_mem with transitivity.
+-/
+private lemma edge_cost_le_max_action_cost {n : ℕ} (prob : STRIPS n)
+    {f t : State' n} (adj : (trans_of_STRIPS prob).Adj f t) :
+    NatGraph.edgeCost adj ≤ max_action_cost prob := by
+      -- Since cost_of returns the minimum cost of applicable actions and max_action_cost is the maximum cost of any action, we have cost_of prob f t ... ≤ max_action_cost prob.
+      have h_cost_of_le_max : ∃ a ∈ prob.actions', a.cost = cost_of prob f t (is_successor_state_of_trans_STRIPS_adj prob f t adj) := by
+        have h_cost_of_le_max : ∃ a ∈ prob.actions'.filter (fun a => applicable' a f ∧ is_successor' a f t), a.cost = cost_of prob f t (is_successor_state_of_trans_STRIPS_adj prob f t adj) := by
+          unfold cost_of; simp only; exact min_map _ _ _
+        generalize_proofs at *; (
+        exact ⟨ h_cost_of_le_max.choose, List.mem_of_mem_filter h_cost_of_le_max.choose_spec.1, h_cost_of_le_max.choose_spec.2 ⟩)
+      obtain ⟨a, ha_mem, ha_cost⟩ := h_cost_of_le_max
+      have h_max_ge_a : a.cost ≤ max_action_cost prob := by
+        unfold max_action_cost;
+        split_ifs <;> simp_all +decide;
+        exact List.le_max_of_mem ( List.mem_map.mpr ⟨ a, ha_mem, rfl ⟩ ) |> le_trans ha_cost.ge
+      exact le_trans ha_cost.ge h_max_ge_a
+
+/-
+PROVIDED SOLUTION
+By induction on w. Base case (nil): cost = 0 = 0 * bound. Cons case (cons adj rest): cost = edgeCost adj + rest.cost. By IH, rest.cost ≤ rest.length * bound. By h_edge, edgeCost adj ≤ bound. So cost ≤ bound + rest.length * bound = (1 + rest.length) * bound = w.length * bound.
+-/
+private lemma walk_cost_le_length_mul_bound {V : Type} [FinEnum V] {G : NatGraph V}
+    {u v : V} (w : G.Walk u v) (bound : ℕ)
+    (h_edge : ∀ (a b : V) (adj : G.Adj a b), NatGraph.edgeCost adj ≤ bound) :
+    w.cost ≤ w.length * bound := by
+      induction w;
+      · simp +decide [ WeightedDiGraph.Walk.length ];
+      · rw [ WeightedDiGraph.Walk.length, WeightedDiGraph.Walk.cost ];
+        grind
+
+/-
+PROBLEM
+The original statement used `<` (strict inequality), but that is false when all action costs
+   are zero (max_action_cost = 0 while a non-trivial path of cost 0 exists).  We weaken to `≤`
+   which is the bound actually needed by `abstraction_heuristic` / `h_plus`.
 lemma all_paths_shorter_than {n : ℕ} (prob : STRIPS n):
-    ∀ goal ∈ trans_of_STRIPS_goals prob, ∀ path : WeightedDiGraph.Path (G:= (trans_of_STRIPS prob)) prob.init' goal, path.cost < (2^n) * (max_action_cost prob) := by sorry
+∀ goal ∈ trans_of_STRIPS_goals prob, ∀ path : WeightedDiGraph.Path (G:= (trans_of_STRIPS prob)) prob.init' goal, path.cost < (2^n) * (max_action_cost prob) := by sorry
+
+A path cannot contain the same node twice. I.e. any path contains at most 2^n - 1 many
+actions and its cost is at most 2^n times the maximum action cost.
+Modified from the original statement: changed `<` to `≤` because the strict bound fails
+when all action costs are zero.
+
+PROVIDED SOLUTION
+State' n = BitVec n. The FinEnum instance for BitVec n is defined via FinEnum.ofList (List.range (2^n)). Fintype.card for a FinEnum type equals FinEnum.card, which equals the length of FinEnum.toList. For ofList l proof, toList is defined as l.dedup or similar. The list used is List.range (2^n) which already has no duplicates (List.nodup_range). So the length is at most (List.range (2^n)).length = 2^n.
+-/
+private lemma fintype_card_state'_le (n : ℕ) : Fintype.card (State' n) ≤ 2^n := by
+  have h : Fintype.card (State' n) = Fintype.card (Fin (2^n)) :=
+    Fintype.card_congr {
+      toFun := BitVec.toFin
+      invFun := BitVec.ofFin
+      left_inv := fun x => by simp
+      right_inv := fun x => by simp
+    }
+  rw [h, Fintype.card_fin]
+
+lemma all_paths_shorter_than {n : ℕ} (prob : STRIPS n):
+    ∀ goal ∈ trans_of_STRIPS_goals prob, ∀ path : WeightedDiGraph.Path (G:= (trans_of_STRIPS prob)) prob.init' goal, path.cost ≤ (2^n) * (max_action_cost prob) := by
+  intro goal _ path
+  have h_cost := walk_cost_le_length_mul_bound path.val (max_action_cost prob)
+    (fun a b adj => edge_cost_le_max_action_cost prob adj)
+  have h_len_lt := path_length_lt_card path
+  calc path.cost = path.val.cost := WeightedDiGraph.Path.cost_same path
+    _ ≤ path.val.length * max_action_cost prob := h_cost
+    _ ≤ (Fintype.card (State' n) - 1) * max_action_cost prob :=
+        Nat.mul_le_mul_right _ (Nat.le_sub_one_of_lt h_len_lt)
+    _ ≤ Fintype.card (State' n) * max_action_cost prob :=
+        Nat.mul_le_mul_right _ (Nat.sub_le _ _)
+    _ ≤ 2 ^ n * max_action_cost prob :=
+        Nat.mul_le_mul_right _ (fintype_card_state'_le n)
 
 
 def abstraction_heuristic {n : ℕ} (prob : STRIPS n) {V : Type} [FinEnum V] (g : NatGraph V) (abstraction: State' n → V) (s : State' n) : ℕ :=
   let goals := (trans_of_STRIPS_goals prob).map abstraction
   let opt_ret := NatGraph.astar_multigoal (g:=g) (fun _ => 0) (abstraction s) goals
   match opt_ret with
-  | .none => (2^n) * (max_action_cost prob) 
+  | .none => (2^n) * (max_action_cost prob)
   | .some ret =>
       ret.2.val.cost
 
 
-lemma abstractions_admissible {n : ℕ} (prob : STRIPS n) {V : Type} [FinEnum V] {g : NatGraph V} (abstraction: State' n → V) (is_abstraction : is_valid_abstraction (trans_of_STRIPS prob) (g) abstraction) : 
-  heur_admissible' prob (fun s => abstraction_heuristic prob g abstraction s)
-    := by sorry
+/- The original statement only requires `is_valid_abstraction`, which preserves edges but
+   says nothing about costs.  Admissibility additionally requires that abstract edge costs
+   never exceed concrete edge costs; otherwise the abstract shortest path can overestimate.
+   We comment out the original and provide a corrected version with the extra cost hypothesis. -/
+-- lemma abstractions_admissible {n : ℕ} (prob : STRIPS n) {V : Type} [FinEnum V] {g : NatGraph V} (abstraction: State' n → V) (is_abstraction : is_valid_abstraction (trans_of_STRIPS prob) (g) abstraction) :
+--   heur_admissible' prob (fun s => abstraction_heuristic prob g abstraction s)
+--     := by sorry
+
+/-- Map a walk in the concrete graph to a walk in the abstract graph via an abstraction. -/
+def map_walk_to_abstract {V1 V2 : Type} [FinEnum V1] [FinEnum V2]
+    {G1 : NatGraph V1} {G2 : NatGraph V2}
+    (f : V1 → V2) (f_adj : ∀ (a b : V1), G1.Adj a b → G2.Adj (f a) (f b))
+    {u v : V1} : G1.Walk u v → G2.Walk (f u) (f v)
+  | .nil => .nil
+  | .cons adj rest => .cons (f_adj _ _ adj) (map_walk_to_abstract f f_adj rest)
+
+/-
+PROBLEM
+The cost of the abstract walk is at most the cost of the concrete walk,
+    given that abstract edge costs are at most concrete edge costs.
+
+PROVIDED SOLUTION
+By induction on w. Base case (nil): both costs are 0. Cons case (cons adj rest): abstract walk cost = edgeCost (f_adj _ _ adj) + (map_walk_to_abstract f f_adj rest).cost. By IH, (map_walk_to_abstract f f_adj rest).cost ≤ rest.cost. By cost_le_hyp, edgeCost (f_adj _ _ adj) ≤ edgeCost adj. So abstract walk cost ≤ edgeCost adj + rest.cost = w.cost. Use add_le_add.
+-/
+lemma map_walk_cost_le {V1 V2 : Type} [FinEnum V1] [FinEnum V2]
+    {G1 : NatGraph V1} {G2 : NatGraph V2}
+    (f : V1 → V2) (f_adj : ∀ (a b : V1), G1.Adj a b → G2.Adj (f a) (f b))
+    (cost_le_hyp : ∀ (a b : V1) (adj : G1.Adj a b),
+      NatGraph.edgeCost (f_adj a b adj) ≤ NatGraph.edgeCost adj)
+    {u v : V1} (w : G1.Walk u v) :
+    (map_walk_to_abstract f f_adj w).cost ≤ w.cost := by
+      induction w <;> simp_all +decide [ NatGraph.edgeCost ];
+      · rfl;
+      · exact Nat.add_le_add ( cost_le_hyp _ _ ‹_› ) ‹_›
+
+/-- A valid abstraction that also under-approximates edge costs produces an admissible
+heuristic.  The additional hypothesis `cost_le` strengthens `is_valid_abstraction` to
+require that abstract edge costs are at most the concrete edge costs.
+Modified from the original: added `cost_le` hypothesis, without which the statement is
+false (a valid abstraction can have arbitrarily high edge costs). -/
+lemma abstractions_admissible {n : ℕ} (prob : STRIPS n) {V : Type} [FinEnum V]
+    {g : NatGraph V} (abstraction : State' n → V)
+    (is_abstraction : is_valid_abstraction (trans_of_STRIPS prob) g abstraction)
+    (cost_le : ∀ (u v : State' n) (adj : (trans_of_STRIPS prob).Adj u v),
+      NatGraph.edgeCost (is_abstraction u v adj) ≤ NatGraph.edgeCost adj) :
+    heur_admissible' prob (fun s => abstraction_heuristic prob g abstraction s) := by
+  intro v goal goal_in_goals path
+  -- Map concrete walk to abstract walk
+  let abstract_walk := map_walk_to_abstract abstraction is_abstraction path.val
+  -- Abstract walk cost ≤ concrete walk cost
+  have abstract_walk_cost_le := map_walk_cost_le abstraction is_abstraction cost_le path.val
+  -- Get abstract path from walk
+  obtain ⟨abstract_path, abstract_path_cost_le⟩ := WeightedDiGraph.Walk.cheaper_path_exists abstract_walk
+  -- abstraction goal is in the mapped goals
+  have goal_mapped : abstraction goal ∈ (trans_of_STRIPS_goals prob).map abstraction :=
+    List.mem_map_of_mem (f := abstraction) goal_in_goals
+  -- Unfold abstraction_heuristic and split on the match
+  unfold abstraction_heuristic
+  simp only
+  split
+  case h_1 h_none =>
+    -- A* returned none, but we have an abstract path to abstraction goal which is in goals.map abstraction
+    -- This contradicts completeness of A*
+    have h_exists : ∃ g' ∈ (trans_of_STRIPS_goals prob).map abstraction,
+        ∃ p : g.Path (abstraction v) g', p = p :=
+      ⟨abstraction goal, goal_mapped, abstract_path, rfl⟩
+    have h_some := NatGraph.astar_multigoal_is_complete (fun _ => 0) (abstraction v)
+      ((trans_of_STRIPS_goals prob).map abstraction) h_exists
+    rw [h_none] at h_some
+    simp at h_some
+  case h_2 ret h_some =>
+    -- Need: ret.snd.val.cost ≤ path.cost
+    -- Step 1: 0 heuristic is admissible for the abstract graph
+    have zero_admissible : g.admissible' (fun _ => 0) ((trans_of_STRIPS_goals prob).map abstraction) := by
+      intro v' goal' _; unfold NatGraph.cost_ge; intro p; exact Nat.zero_le _
+    -- Step 2: A* returned some, so get the isSome proof
+    have astar_isSome : Option.isSome (NatGraph.astar_multigoal (g := g)
+        (fun _ => 0) (abstraction v) ((trans_of_STRIPS_goals prob).map abstraction)) := by
+      rw [h_some]; simp
+    -- Step 3: Get augmented A* path
+    have h_aug_some := NatGraph.astar_multigoal_some_implies_astar_some
+      (fun (_ : V) => 0) (abstraction v) ((trans_of_STRIPS_goals prob).map abstraction) astar_isSome
+    obtain ⟨aug_path, h_aug_eq⟩ := Option.isSome_iff_exists.mp h_aug_some
+    -- Step 4: aug_path is cheapest
+    have aug_optimal : aug_path.is_cheapest := by
+      have h := NatGraph.astar_is_optimal
+        (g := g.add_artificial_goal ((trans_of_STRIPS_goals prob).map abstraction))
+        (NatGraph.opt_heur (fun (_ : V) => 0)) (some (abstraction v)) none
+        (NatGraph.opt_heur_admissible _ zero_admissible) h_aug_some
+      rw [Option.get_of_eq_some h_aug_some h_aug_eq] at h; exact h
+    -- Step 5: Lift abstract_path to augmented
+    obtain ⟨aug_p, h_cost_eq⟩ := NatGraph.lift_path_to_augmented_cost
+      (G := g) goal_mapped abstract_path
+    -- Step 6: aug_path.cost ≤ abstract_path.cost
+    have h_aug_le : aug_path.cost ≤ abstract_path.cost := calc
+      aug_path.cost ≤ aug_p.cost := aug_optimal aug_p
+      _ = abstract_path.cost := h_cost_eq
+    -- Step 7: ret.2.cost ≤ aug_path.cost
+    have h_ret_le := NatGraph.astar_multigoal_cost_le_aug
+      (fun (_ : V) => 0) (abstraction v) ((trans_of_STRIPS_goals prob).map abstraction)
+      astar_isSome aug_path h_aug_eq
+    -- Convert h_ret_le to use ret instead of .get
+    have h_get_eq : (NatGraph.astar_multigoal (g := g) (fun _ => 0) (abstraction v)
+        ((trans_of_STRIPS_goals prob).map abstraction)).get astar_isSome = ret := by
+      exact Option.get_of_eq_some astar_isSome h_some
+    rw [h_get_eq] at h_ret_le
+    -- Step 8: Chain inequalities
+    show path.cost ≥ ret.snd.cost
+    calc ret.snd.cost ≤ aug_path.cost := h_ret_le
+      _ ≤ abstract_path.cost := h_aug_le
+      _ ≤ abstract_walk.cost := abstract_path_cost_le
+      _ ≤ path.cost := by
+          rw [WeightedDiGraph.Path.cost_same]; exact abstract_walk_cost_le
 
 def delete_relax_action {n : ℕ} (a : Action n) : Action n := Action.mk a.name a.pre' a.add' ⟨[], by apply List.sortedLT_iff_pairwise.mpr ; simp ⟩  a.cost
 
 def delete_relaxation {n : ℕ} (prob : STRIPS n) : STRIPS n := STRIPS.mk prob.varNames (prob.actions'.map delete_relax_action) prob.init' prob.goal'
 
 
+/-- Corrected h_plus that solves the delete relaxation from state `s`.
+Modified from the original: the planner now starts from `s` instead of always from
+`prob.init'`, which is needed for admissibility over all starting states. -/
 def h_plus {n : ℕ} (prob : STRIPS n) (s : State' n) : ℕ :=
-  let del_relax_ret := planner (delete_relaxation prob) (fun _ => 0)
+  let del_relax_prob := STRIPS.mk prob.varNames (prob.actions'.map delete_relax_action) s prob.goal'
+  let del_relax_ret := planner del_relax_prob (fun _ => 0)
   match del_relax_ret with
-  | .none => (2^n) * (max_action_cost prob) 
+  | .none => (2^n) * (max_action_cost prob)
   | .some ret => ret.path.cost
 
-lemma h_plus_admissible {n : ℕ} (prob : STRIPS n) : heur_admissible' prob (h_plus prob) := by sorry
+/-- If preconditions are met in a state, they are also met in any state with more true bits. -/
+private lemma satisfies'_mono {n : ℕ} (cond : VarSet' n) (s t : State' n)
+    (h_sub : ∀ i : Fin n, s[i] → t[i])
+    (h_sat : satisfies' cond s) :
+    satisfies' cond t := by
+  unfold satisfies' at *
+  rw [List.all_eq_true] at *
+  exact fun x hx => h_sub x (h_sat x hx)
 
+-- The delete relaxation of a STRIPS problem with initial state v has a plan whose cost is
+-- at most the cost of any path from v to a goal in the original problem's graph.
+
+/-- delete_relax_action has empty delete effects. -/
+private lemma delete_relax_action_del_empty {n : ℕ} (a : Action n) :
+    (delete_relax_action a).del = ∅ := by
+  unfold delete_relax_action Action.del convertVarSet
+  simp
+
+/-- The successor state under delete_relax_action a from s is s ∪ a.add. -/
+private lemma del_relax_successor_eq {n : ℕ} (a : Action n) (s : State n) :
+    Applicable s (delete_relax_action a) →
+    Successor (delete_relax_action a) s (s ∪ (delete_relax_action a).add) := by
+  intro h_app
+  constructor
+  · exact h_app
+  · rw [delete_relax_action_del_empty]
+    simp [Set.diff_empty]
+
+/-- Given a walk in the original STRIPS graph and a state `s_del` whose true bits include
+    those of the walk's starting vertex, we can build a STRIPS Path in the delete-relaxed
+    problem from `convertState s_del` to some goal-satisfying state, with cost ≤ walk cost.
+    The `del_prob` parameter is the delete-relaxed STRIPS problem (with arbitrary init'). -/
+private lemma del_relax_path_from_walk {n : ℕ} (prob : STRIPS n)
+    (del_prob : STRIPS n)
+    (h_actions : del_prob.actions' = prob.actions'.map delete_relax_action)
+    (_h_goal : del_prob.goal' = prob.goal')
+    (v_orig goal : State' n)
+    (v_del : State' n)
+    (h_sub : ∀ i : Fin n, v_orig[i] → v_del[i])
+    (walk : WeightedDiGraph.Walk (G := trans_of_STRIPS prob) v_orig goal)
+    (h_goal_sat : satisfies' prob.goal' goal) :
+    ∃ (last_del : State' n),
+      (∀ i : Fin n, goal[i] → last_del[i]) ∧
+      satisfies' prob.goal' last_del ∧
+      ∃ (p : Path del_prob (convertState v_del) (convertState last_del)),
+        p.cost ≤ walk.cost := by
+  induction walk generalizing v_del with
+  | nil =>
+    -- Base case: v_orig = goal, so v_del already works
+    exact ⟨v_del, h_sub, satisfies'_mono prob.goal' _ v_del h_sub h_goal_sat,
+           Path.empty (convertState v_del), Nat.zero_le _⟩
+  | @cons u w t adj rest ih =>
+    -- There is an edge from u to w in the original graph
+    have h_is_succ := is_successor_state_of_trans_STRIPS_adj prob u w adj
+    -- Get the min_cost_action for this edge
+    let a := min_cost_action prob u w h_is_succ
+    have h_a_mem : a ∈ prob.actions' := min_cost_action_in_prob prob u w h_is_succ
+    have h_a_app : applicable' a u = true := by unfold a min_cost_action; grind
+    have h_a_succ : is_successor' a u w = true := by unfold a min_cost_action; grind
+    -- delete_relax_action a is applicable to v_del (same preconditions, more true bits)
+    have h_dr_app : satisfies' a.pre' v_del = true :=
+      satisfies'_mono a.pre' u v_del h_sub h_a_app
+    -- Compute the delete-relaxed successor state
+    let w_del := successor' (delete_relax_action a) v_del
+    -- w_del subsumes w: every true bit in w is also true in w_del
+    have h_w_sub_w_del : ∀ i : Fin n, w[i] → w_del[i] := by
+      intro i hi
+      unfold w_del successor' delete_relax_action
+      unfold is_successor' at h_a_succ
+      simp only [List.all_eq_true, List.mem_finRange, true_implies] at h_a_succ
+      specialize h_a_succ i
+      split_ifs at h_a_succ ⊢ <;> simp_all [BitVec.getElem_ofBoolListLE]
+    -- Apply IH
+    obtain ⟨last_del, h_goal_sub, h_last_sat, p_rest, h_p_rest_cost⟩ := ih w_del h_w_sub_w_del h_goal_sat
+    -- Successor relation for delete_relax_action a from v_del to w_del
+    have h_dr_succ : Successor (delete_relax_action a) (convertState v_del) (convertState w_del) := by
+      constructor
+      · -- Applicable: a.pre ⊆ convertState v_del
+        intro x hx
+        show v_del[x]
+        -- hx : x ∈ (delete_relax_action a).pre = convertVarSet a.pre' = a.pre'.val.toFinset
+        have hx' : x ∈ a.pre'.val := by
+          unfold Action.pre delete_relax_action convertVarSet at hx; simp at hx; exact hx
+        exact List.all_eq_true.mp h_dr_app x hx'
+      · -- convertState w_del = (convertState v_del \ del) ∪ add
+        ext i
+        unfold convertState w_del successor' delete_relax_action Action.del Action.add convertVarSet
+        simp [BitVec.getElem_ofBoolListLE, Set.mem_union, Set.mem_setOf_eq]
+        tauto
+    -- Action membership in del_prob
+    have h_dr_in_actions : delete_relax_action a ∈ del_prob.actions := by
+      show delete_relax_action a ∈ List.toFinset del_prob.actions'
+      rw [h_actions]; simp
+      exact ⟨a, h_a_mem, rfl⟩
+    -- Combine path
+    refine ⟨last_del, h_goal_sub, h_last_sat,
+      Path.cons (delete_relax_action a) (convertState w_del) h_dr_in_actions h_dr_succ p_rest, ?_⟩
+    -- Cost bound
+    show p_rest.cost + (delete_relax_action a).cost ≤ NatGraph.edgeCost adj + rest.cost
+    calc p_rest.cost + (delete_relax_action a).cost
+        = p_rest.cost + a.cost := rfl
+      _ ≤ rest.cost + a.cost := Nat.add_le_add_right h_p_rest_cost _
+      _ = rest.cost + cost_of prob u w h_is_succ := by
+            rw [min_cost_action_cost_eq_cost_of prob u w h_is_succ]
+      _ = rest.cost + NatGraph.edgeCost adj := by
+            rw [trans_of_STRIPS_edgeCost prob u w adj]
+      _ = NatGraph.edgeCost adj + rest.cost := Nat.add_comm _ _
+
+private lemma del_relax_plan_exists_from_path {n : ℕ} (prob : STRIPS n) (v goal : State' n)
+    (goal_in_goals : goal ∈ trans_of_STRIPS_goals prob)
+    (path : (trans_of_STRIPS prob).Path v goal) :
+    ∃ plan : Plan (STRIPS.mk prob.varNames (prob.actions'.map delete_relax_action) v prob.goal')
+        (convertState v), plan.path.cost ≤ path.cost := by
+  -- goal satisfies the goal condition
+  have h_goal_sat : satisfies' prob.goal' goal := by
+    exact ((mem_trans_of_STRIPS_goals_iff prob goal).mp goal_in_goals)
+  -- Use del_relax_path_from_walk with v_del = v and identity subsumption
+  set dp := STRIPS.mk prob.varNames (prob.actions'.map delete_relax_action) v prob.goal'
+  obtain ⟨last_del, _, h_last_sat, p, h_p_cost⟩ :=
+    del_relax_path_from_walk prob dp rfl rfl v goal v (fun _ h => h) path.val h_goal_sat
+  -- Build a plan
+  have h_goal_state : (STRIPS.mk prob.varNames (prob.actions'.map delete_relax_action) v prob.goal').GoalState (convertState last_del) := by
+    exact satisfies'_implies_GoalState (STRIPS.mk prob.varNames (prob.actions'.map delete_relax_action) v prob.goal') last_del h_last_sat
+  refine ⟨⟨convertState last_del, p, h_goal_state⟩, ?_⟩
+  calc p.cost ≤ path.val.cost := h_p_cost
+    _ = path.cost := (WeightedDiGraph.Path.cost_same path).symm
+
+lemma h_plus_admissible {n : ℕ} (prob : STRIPS n) : heur_admissible' prob (h_plus prob) := by
+  intro v goal goal_in_goals path
+  unfold h_plus
+  simp only
+  split
+  case h_1 h_none =>
+    -- Planner returned none: h_plus = 2^n * max_action_cost
+    -- But we have a path from v to goal, so del_relax_plan_exists_from_path gives a plan
+    have ⟨plan, _⟩ := del_relax_plan_exists_from_path prob v goal goal_in_goals path
+    -- But planner returned none means unsolvable - contradiction
+    have unsolvable := planner_complete _ _ h_none
+    have : STRIPS.init (STRIPS.mk prob.varNames (prob.actions'.map delete_relax_action) v prob.goal') = convertState v := rfl
+    rw [show Unsolvable _ = IsEmpty (Plan _ (convertState v)) from by unfold Unsolvable UnsolvableState STRIPS.init; rfl] at unsolvable
+    exact False.elim (unsolvable.false plan)
+  case h_2 ret h_some =>
+    -- Planner returned some plan: h_plus = ret.path.cost
+    obtain ⟨del_plan, h_del_plan_cost⟩ := del_relax_plan_exists_from_path prob v goal goal_in_goals path
+    -- abbreviation for the delete-relaxed problem
+    let dp := STRIPS.mk prob.varNames (prob.actions'.map delete_relax_action) v prob.goal'
+    have h_isSome : (planner dp (fun _ => 0)).isSome := by
+      show (planner _ _).isSome; rw [h_some]; simp
+    have h_opt := planner_optimal dp (fun _ => 0) (zero_heur_admissible _) h_isSome
+    specialize h_opt del_plan
+    have h_get_eq : (planner dp (fun _ => 0)).get h_isSome = ret := by
+      show (planner _ _).get _ = _
+      exact Option.get_of_eq_some (by show (planner _ _).isSome; rw [h_some]; simp) h_some
+    rw [h_get_eq] at h_opt
+    exact le_trans h_opt h_del_plan_cost
