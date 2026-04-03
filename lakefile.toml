@@ -1,6 +1,6 @@
 name = "graphlib"
 version = "0.1.0"
-defaultTargets = ["Graphlib"]
+defaultTargets = ["Graphlib", "planner"]
 
 [[lean_lib]]
 name = "Graphlib"
@@ -14,3 +14,7 @@ rev = "v4.27.0"
 name = "unplanvalidator"
 git = "https://github.com/AmosNico/validator"
 rev = "main"
+
+[[lean_exe]]
+name = "planner"
+root = "Graphlib"
