@@ -4,7 +4,13 @@ import Graphlib.NatGraph
 import Graphlib.Planning
 import Graphlib.Heuristics
 
+import Graphlib.temp
+
 import Mathlib.Logic.Lemmas
+import Mathlib.Data.Fintype.Fin
+import Mathlib.Data.Finset.Card
+import Mathlib.Order.Interval.Finset.Fin
+import Mathlib.Data.Vector.Basic
 
 namespace Validator
 
@@ -144,5 +150,147 @@ lemma abstractions_admissible {n : ℕ} (prob : STRIPS n) {V : Type} [FinEnum V]
       _ ≤ abstract_walk.cost := abstract_path_cost_le
       _ ≤ path.cost := by
           rw [WeightedDiGraph.Path.cost_same]; exact abstract_walk_cost_le
+
+
+
+----------------------- Pattern DataBase Heuristics
+
+-- a pattern is a set of variable indices 
+abbrev pattern (n : ℕ) := Finset (Fin n)
+
+
+def project_pattern (n : ℕ) (pat : pattern n) (v : {v : Fin n // v ∈ pat}) : Fin (pat.card) :=
+  ⟨ ∑ v' ∈ pat, if v' < v then 1 else 0, by
+    simp
+    apply lt_of_le_of_ne
+    · rw [Finset.card_filter_le_iff]
+      intro s' s'_sub_pat pat_card_lt_s'card
+      apply Finset.card_le_card at s'_sub_pat
+      exact absurd (lt_of_lt_of_le pat_card_lt_s'card s'_sub_pat) (lt_irrefl _)
+    · intro eq
+      apply Finset.filter_card_eq at eq
+      specialize eq v.val v.prop
+      exact (lt_self_iff_false v).mp eq
+    ⟩
+
+lemma projeect_pattern_monotone {n : ℕ} (pat : pattern n) (u v : {x : Fin n // x ∈ pat}) (u_lt_v : u < v) : project_pattern n pat u < project_pattern n pat v := by
+  unfold project_pattern
+  simp only [Finset.sum_boole, Nat.cast_id, Fin.mk_lt_mk]
+  apply Finset.card_lt_card
+  apply Finset.ssubset_iff.mpr
+  use u
+  simp_all only [Finset.mem_filter, SetLike.coe_mem, lt_self_iff_false, and_false, not_false_eq_true, true_and]
+  apply Finset.subset_iff.mpr
+  intro x x_in
+  simp at x_in
+  cases x_in
+  case h.inl x_eq_u =>
+    simp_all only [Finset.mem_filter, SetLike.coe_mem, Subtype.coe_lt_coe, and_self]
+  case h.inr conj =>
+    simp_all only [Finset.mem_filter, true_and]
+    apply lt_trans
+    · exact conj.2
+    · apply u_lt_v
+
+--lemma project_pattern_injective {n : ℕ} (pat : pattern n) : Function.Injective (project_pattern n pat) := by sorry
+
+
+def project_pattern_List {n : ℕ} (pat : pattern n) (l : List (Fin n)) : List (Fin pat.card) := l.filterMap (fun e =>
+  if e_in_pat : e ∈ pat then
+    some (project_pattern n pat ⟨e,e_in_pat⟩) else none)
+
+def project_pattern_VarSet' {n : ℕ} (pat : pattern n) (vs : VarSet' n) : VarSet' (pat.card) := ⟨project_pattern_List pat vs.val, by
+    obtain ⟨val, property⟩ := vs
+    apply List.sortedLT_iff_pairwise.mpr
+    apply List.sortedLT_iff_pairwise.mp at property
+    unfold project_pattern_List
+    apply List.pairwise_filterMap.mpr
+    simp
+    apply List.Pairwise.imp ; rotate_left
+    · exact property
+    · intro a b a_lt_b a_in_pat b_in_pat
+      apply projeect_pattern_monotone
+      apply Subtype.mk_lt_mk.mpr
+      exact a_lt_b 
+    ⟩ 
+
+def project_pattern_action {n : ℕ} (a : Action n) (pat : pattern n) : Action (pat.card) := Action.mk a.name
+    (project_pattern_VarSet' pat a.pre')
+    (project_pattern_VarSet' pat a.add')
+    (project_pattern_VarSet' pat a.del')
+    a.cost
+
+
+def varset'_of_state' {n : ℕ} (s : State' n) : VarSet' n :=
+  let l : List (Fin n) := (List.finRange n).filter (fun i => s[i])
+  have l_s : l.SortedLT := by
+    apply List.sortedLT_iff_pairwise.mpr
+    unfold l
+    apply List.Pairwise.filter
+    apply List.pairwise_lt_finRange
+  ⟨l, l_s⟩
+
+def state'_of_varset' {n : ℕ} (v : VarSet' n) : State' n :=
+  let l : List Bool := (List.finRange n).map (fun i => i ∈ v.1)
+  have l_l : l.length = n := by unfold l; grind
+  l_l ▸ BitVec.ofBoolListLE l 
+
+def project_pattern_state {n : ℕ} (pat : pattern n) (s : State' n) : State' (pat.card) :=
+  let v : VarSet' n := varset'_of_state' s
+  let v' : VarSet' (pat.card) := project_pattern_VarSet' pat v
+  state'_of_varset' v'
+
+
+def project_pattern_STRIPS {n : ℕ} (prob : STRIPS n) (pat : pattern n) : STRIPS (pat.card) :=
+  let namesList : List String := (List.finRange pat.card).map (fun i : Fin (pat.card) => prob.varNames.get ⟨i, by 
+    unfold pattern at pat
+    apply lt_of_lt_of_le
+    · exact i.prop
+    · apply le_trans
+      · apply Finset.card_le_univ
+      · simp 
+    ⟩)
+  let names : Vector String (Finset.card pat) := ⟨ namesList.toArray , by grind⟩
+  let actions : Actions' (Finset.card pat) := prob.actions'.map (fun a =>
+    project_pattern_action a pat)
+  let init : State' (Finset.card pat) := project_pattern_state pat prob.init' 
+  let goal : VarSet' (Finset.card pat) := project_pattern_VarSet' pat prob.goal'
+  STRIPS.mk names actions init goal
+
+
+
+def pdb_heuristic {n : ℕ} (prob : STRIPS n) (pat : pattern n) (s : State' n) : ℕ :=
+  let pdb_trans : NatGraph (State' (pat.card)) := trans_of_STRIPS (project_pattern_STRIPS prob pat)
+  abstraction_heuristic prob pdb_trans (project_pattern_state pat) (s)
+
+
+
+lemma pdb_heurisitc_admissible {n : ℕ} (prob : STRIPS n) (pat : pattern n) : 
+    heur_admissible' prob (pdb_heuristic prob pat) := by
+  have val_abs : is_valid_abstraction (trans_of_STRIPS prob) (trans_of_STRIPS (project_pattern_STRIPS prob pat)) (project_pattern_state pat) := by
+    unfold is_valid_abstraction
+    intro v v' adj_prop
+    unfold trans_of_STRIPS at adj_prop ⊢
+    simp at adj_prop ⊢
+    obtain ⟨ a, is_act, appli, successor ⟩ := adj_prop
+    use (project_pattern_action a pat)
+    and_intros
+    · unfold project_pattern_STRIPS
+      simp
+      use a
+    · clear successor
+      unfold applicable' satisfies' at appli ⊢ 
+      unfold project_pattern_state
+      simp_all
+      intro x x_in_pre
+      unfold state'_of_varset'
+      unfold varset'_of_state'
+      simp
+      sorry
+    · sorry
+
+  apply abstractions_admissible
+  · sorry
+  · exact val_abs
 
 
