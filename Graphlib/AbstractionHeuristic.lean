@@ -272,8 +272,10 @@ lemma project_pattern_state_satisfies_pre {n : ℕ} (pat : pattern n) (a : Actio
     applicable' (project_pattern_action a pat) (project_pattern_state pat v) = true := by
       unfold applicable' project_pattern_action project_pattern_state at *;
       unfold project_pattern_VarSet';
-      unfold project_pattern_List at *; simp_all +decide [ satisfies', project_pattern_List ] ;
-      intro x hx; split_ifs <;> simp_all +decide [ state'_of_varset' ] ;
+      unfold project_pattern_List at *
+      simp_all [satisfies']
+      intro x hx
+      split_ifs <;> simp_all [state'_of_varset']
       -- Since x is in the pattern and in the preconditions, and v[x] is true, the project_pattern should map x to true in the projected state.
       have h_proj_true : (List.map (fun i => decide (i ∈ List.filterMap (fun e => if e_in_pat : e ∈ pat then some (project_pattern n pat ⟨e, e_in_pat⟩) else none) (varset'_of_state' v).1)) (List.finRange (Finset.card pat)))[project_pattern n pat ⟨x, by assumption⟩] = true := by
         unfold varset'_of_state' at *; simp_all +decide [ List.mem_filterMap ] ;
@@ -286,13 +288,13 @@ lemma project_pattern_state_satisfies_pre {n : ℕ} (pat : pattern n) (a : Actio
       rotate_left;
       exact List.map ( fun i => decide ( i ∈ List.filterMap ( fun e => if e_in_pat : e ∈ pat then some ( project_pattern n pat ⟨ e, e_in_pat ⟩ ) else none ) ( varset'_of_state' v ).1 ) ) ( List.finRange ( Finset.card pat ) );
       exact ⟨ project_pattern n pat ⟨ x, by assumption ⟩, by simp +decide ⟩;
-      · simp +decide [ Fin.ext_iff ];
-        congr! 1;
-        · grind;
-        · simp +decide [ List.length_map, List.length_finRange ];
-          congr! 1;
-        · grind +splitIndPred;
-        · grind;
+      · simp
+        congr! 1
+        · grind
+        · simp +decide [ List.length_map, List.length_finRange ]
+          congr! 1
+        · grind
+        · grind
       · grind
 
 private lemma getElem_eq_rec_BitVec' {m n : ℕ} (h : m = n) (bv : BitVec m) (i : ℕ)
@@ -304,7 +306,6 @@ private lemma getElem_eq_rec_BitVec' {m n : ℕ} (h : m = n) (bv : BitVec m) (i 
 lemma state'_of_varset'_getElem {n : ℕ} (v : VarSet' n) (i : Fin n) :
     (state'_of_varset' v)[i.val] = decide (i ∈ v.val) := by
   unfold state'_of_varset'
-  simp only
   rw [getElem_eq_rec_BitVec']
   rw [BitVec.getElem_ofBoolListLE]
   simp
@@ -337,24 +338,24 @@ If `a` transforms `v` into `v'`, then the projected action transforms the projec
     states.
 -/
 lemma project_pattern_preserves_successor {n : ℕ} (pat : pattern n) (a : Action n)
-    (v v' : State' n) (h_app : applicable' a v = true) (h_succ : is_successor' a v v' = true) :
+    (v v' : State' n) (h_succ : is_successor' a v v' = true) :
     is_successor' (project_pattern_action a pat) (project_pattern_state pat v)
       (project_pattern_state pat v') = true := by
         unfold is_successor' at *;
-        simp_all +decide [ project_pattern_action, project_pattern_VarSet', project_pattern_state ];
+        simp_all [ project_pattern_action, project_pattern_VarSet', project_pattern_state ];
         intro x;
-        split_ifs <;> simp_all +decide [ project_pattern_List ];
+        split_ifs <;> simp_all [ project_pattern_List ];
         · rw [ state'_of_varset'_getElem ];
-          simp_all +decide [ varset'_of_state' ];
+          simp_all [ varset'_of_state' ];
           grind;
         · obtain ⟨ y, hy, hy', rfl ⟩ := ‹_›;
-          simp_all +decide [ state'_of_varset'_getElem, varset'_of_state'_mem ];
-          intro x hx hx'; specialize h_succ x; split_ifs at h_succ <;> simp_all +decide ;
-          intro h; have := projeect_pattern_monotone pat ⟨ x, hx' ⟩ ⟨ y, hy' ⟩ ; simp_all +decide ;
-          have := projeect_pattern_monotone pat ⟨ y, hy' ⟩ ⟨ x, hx' ⟩ ; simp_all +decide ;
+          simp_all [ state'_of_varset'_getElem, varset'_of_state'_mem ];
+          intro x hx hx'; specialize h_succ x; split_ifs at h_succ <;> simp_all
+          intro h; have := projeect_pattern_monotone pat ⟨ x, hx' ⟩ ⟨ y, hy' ⟩ 
+          have := projeect_pattern_monotone pat ⟨ y, hy' ⟩ ⟨ x, hx' ⟩ ; simp_all 
           exact ‹x ∉ a.del'.val› ( by simpa [ le_antisymm this ‹y ≤ x› ] using hy );
         · rw [ state'_of_varset'_getElem, state'_of_varset'_getElem ];
-          simp +decide [ List.mem_filterMap, varset'_of_state'_mem ];
+          simp [ List.mem_filterMap, varset'_of_state'_mem ];
           grind
 
 /-- The projected action has the same cost as the original action. -/
@@ -377,7 +378,12 @@ lemma project_cost_le {n : ℕ} (prob : STRIPS n) (pat : pattern n)
       convert cost_of_le_action_cost ( project_pattern_STRIPS prob pat ) ( project_pattern_state pat u ) ( project_pattern_state pat v ) ( project_pattern_action a pat ) _ _ _ using 1;
       rotate_left;
       exact val_abs u v adj;
-      · unfold project_pattern_STRIPS; aesop;
+      · unfold project_pattern_STRIPS;
+        simp_all only [List.mem_map]
+        apply Exists.intro
+        · apply And.intro
+          on_goal 2 => { rfl }
+          · simp_all only
       · exact project_pattern_state_satisfies_pre pat a u h_price.1;
       · grind +suggestions
 
@@ -394,7 +400,7 @@ lemma pdb_heurisitc_admissible {n : ℕ} (prob : STRIPS n) (pat : pattern n) :
     refine ⟨?_, ?_, ?_⟩
     · unfold project_pattern_STRIPS; simp; use a
     · exact project_pattern_state_satisfies_pre pat a v appli
-    · exact project_pattern_preserves_successor pat a v v' appli successor
+    · exact project_pattern_preserves_successor pat a v v' successor
   exact abstractions_admissible prob (project_pattern_state pat) val_abs
     (fun u v adj => project_cost_le prob pat u v adj val_abs)
 
