@@ -155,7 +155,7 @@ lemma abstractions_admissible {n : ℕ} (prob : STRIPS n) {V : Type} [FinEnum V]
 
 ----------------------- Pattern DataBase Heuristics
 
--- a pattern is a set of variable indices 
+-- a pattern is a set of variable indices
 abbrev pattern (n : ℕ) := Finset (Fin n)
 
 
@@ -211,8 +211,8 @@ def project_pattern_VarSet' {n : ℕ} (pat : pattern n) (vs : VarSet' n) : VarSe
     · intro a b a_lt_b a_in_pat b_in_pat
       apply projeect_pattern_monotone
       apply Subtype.mk_lt_mk.mpr
-      exact a_lt_b 
-    ⟩ 
+      exact a_lt_b
+    ⟩
 
 def project_pattern_action {n : ℕ} (a : Action n) (pat : pattern n) : Action (pat.card) := Action.mk a.name
     (project_pattern_VarSet' pat a.pre')
@@ -233,7 +233,7 @@ def varset'_of_state' {n : ℕ} (s : State' n) : VarSet' n :=
 def state'_of_varset' {n : ℕ} (v : VarSet' n) : State' n :=
   let l : List Bool := (List.finRange n).map (fun i => i ∈ v.1)
   have l_l : l.length = n := by unfold l; grind
-  l_l ▸ BitVec.ofBoolListLE l 
+  l_l ▸ BitVec.ofBoolListLE l
 
 def project_pattern_state {n : ℕ} (pat : pattern n) (s : State' n) : State' (pat.card) :=
   let v : VarSet' n := varset'_of_state' s
@@ -242,18 +242,18 @@ def project_pattern_state {n : ℕ} (pat : pattern n) (s : State' n) : State' (p
 
 
 def project_pattern_STRIPS {n : ℕ} (prob : STRIPS n) (pat : pattern n) : STRIPS (pat.card) :=
-  let namesList : List String := (List.finRange pat.card).map (fun i : Fin (pat.card) => prob.varNames.get ⟨i, by 
+  let namesList : List String := (List.finRange pat.card).map (fun i : Fin (pat.card) => prob.varNames.get ⟨i, by
     unfold pattern at pat
     apply lt_of_lt_of_le
     · exact i.prop
     · apply le_trans
       · apply Finset.card_le_univ
-      · simp 
+      · simp
     ⟩)
   let names : Vector String (Finset.card pat) := ⟨ namesList.toArray , by grind⟩
   let actions : Actions' (Finset.card pat) := prob.actions'.map (fun a =>
     project_pattern_action a pat)
-  let init : State' (Finset.card pat) := project_pattern_state pat prob.init' 
+  let init : State' (Finset.card pat) := project_pattern_state pat prob.init'
   let goal : VarSet' (Finset.card pat) := project_pattern_VarSet' pat prob.goal'
   STRIPS.mk names actions init goal
 
@@ -263,34 +263,138 @@ def pdb_heuristic {n : ℕ} (prob : STRIPS n) (pat : pattern n) (s : State' n) :
   let pdb_trans : NatGraph (State' (pat.card)) := trans_of_STRIPS (project_pattern_STRIPS prob pat)
   abstraction_heuristic prob pdb_trans (project_pattern_state pat) (s)
 
+/-
+If action `a` is applicable in state `v`, then its projection is applicable in the
+    projected state.
+-/
+lemma project_pattern_state_satisfies_pre {n : ℕ} (pat : pattern n) (a : Action n)
+    (v : State' n) (h : applicable' a v = true) :
+    applicable' (project_pattern_action a pat) (project_pattern_state pat v) = true := by
+      unfold applicable' project_pattern_action project_pattern_state at *;
+      unfold project_pattern_VarSet';
+      unfold project_pattern_List at *; simp_all +decide [ satisfies', project_pattern_List ] ;
+      intro x hx; split_ifs <;> simp_all +decide [ state'_of_varset' ] ;
+      -- Since x is in the pattern and in the preconditions, and v[x] is true, the project_pattern should map x to true in the projected state.
+      have h_proj_true : (List.map (fun i => decide (i ∈ List.filterMap (fun e => if e_in_pat : e ∈ pat then some (project_pattern n pat ⟨e, e_in_pat⟩) else none) (varset'_of_state' v).1)) (List.finRange (Finset.card pat)))[project_pattern n pat ⟨x, by assumption⟩] = true := by
+        unfold varset'_of_state' at *; simp_all +decide [ List.mem_filterMap ] ;
+        exact ⟨ x, h x hx, by assumption, rfl ⟩;
+      -- By definition of `BitVec.ofBoolListLE`, the element at position `i` in the BitVec is the same as the element at position `i` in the original list.
+      have h_bitvec_eq_list : ∀ (l : List Bool), ∀ (i : Fin l.length), (BitVec.ofBoolListLE l)[i] = l[i] := by
+        grind +suggestions;
+      convert h_bitvec_eq_list _ _ using 1;
+      rotate_left;
+      rotate_left;
+      exact List.map ( fun i => decide ( i ∈ List.filterMap ( fun e => if e_in_pat : e ∈ pat then some ( project_pattern n pat ⟨ e, e_in_pat ⟩ ) else none ) ( varset'_of_state' v ).1 ) ) ( List.finRange ( Finset.card pat ) );
+      exact ⟨ project_pattern n pat ⟨ x, by assumption ⟩, by simp +decide ⟩;
+      · simp +decide [ Fin.ext_iff ];
+        congr! 1;
+        · grind;
+        · simp +decide [ List.length_map, List.length_finRange ];
+          congr! 1;
+        · grind +splitIndPred;
+        · grind;
+      · grind
 
+private lemma getElem_eq_rec_BitVec' {m n : ℕ} (h : m = n) (bv : BitVec m) (i : ℕ)
+    (hi : i < n) :
+    (show BitVec n from h ▸ bv)[i] = bv[i]'(by omega) := by
+  subst h; rfl
 
-lemma pdb_heurisitc_admissible {n : ℕ} (prob : STRIPS n) (pat : pattern n) : 
+/-- `state'_of_varset'` at index `i` checks membership in the var-set list. -/
+lemma state'_of_varset'_getElem {n : ℕ} (v : VarSet' n) (i : Fin n) :
+    (state'_of_varset' v)[i.val] = decide (i ∈ v.val) := by
+  unfold state'_of_varset'
+  simp only
+  rw [getElem_eq_rec_BitVec']
+  rw [BitVec.getElem_ofBoolListLE]
+  simp
+
+/-- A variable is in `varset'_of_state'` iff it is true in the state. -/
+lemma varset'_of_state'_mem {n : ℕ} (s : State' n) (i : Fin n) :
+    i ∈ (varset'_of_state' s).val ↔ s[i.val] = true := by
+  unfold varset'_of_state'
+  simp [List.mem_filter]
+
+/-- `project_pattern_state` at a projected index checks whether the corresponding
+    original variable is in the pattern and true in the state. -/
+lemma project_pattern_state_getElem {n : ℕ} (pat : pattern n) (s : State' n) (i : Fin pat.card) :
+    (project_pattern_state pat s)[i.val] =
+      decide (i ∈ (project_pattern_VarSet' pat (varset'_of_state' s)).val) := by
+  unfold project_pattern_state
+  rw [state'_of_varset'_getElem]
+
+/-- Membership in `project_pattern_VarSet'` iff there exists a variable in the pattern
+    and in the original var-set that projects to the given index. -/
+lemma mem_project_pattern_VarSet' {n : ℕ} (pat : pattern n) (vs : VarSet' n)
+    (x : Fin pat.card) :
+    x ∈ (project_pattern_VarSet' pat vs).val ↔
+      ∃ j ∈ vs.val, ∃ hj : j ∈ pat, project_pattern n pat ⟨j, hj⟩ = x := by
+  unfold project_pattern_VarSet' project_pattern_List
+  simp [List.mem_filterMap]
+
+/-
+If `a` transforms `v` into `v'`, then the projected action transforms the projected
+    states.
+-/
+lemma project_pattern_preserves_successor {n : ℕ} (pat : pattern n) (a : Action n)
+    (v v' : State' n) (h_app : applicable' a v = true) (h_succ : is_successor' a v v' = true) :
+    is_successor' (project_pattern_action a pat) (project_pattern_state pat v)
+      (project_pattern_state pat v') = true := by
+        unfold is_successor' at *;
+        simp_all +decide [ project_pattern_action, project_pattern_VarSet', project_pattern_state ];
+        intro x;
+        split_ifs <;> simp_all +decide [ project_pattern_List ];
+        · rw [ state'_of_varset'_getElem ];
+          simp_all +decide [ varset'_of_state' ];
+          grind;
+        · obtain ⟨ y, hy, hy', rfl ⟩ := ‹_›;
+          simp_all +decide [ state'_of_varset'_getElem, varset'_of_state'_mem ];
+          intro x hx hx'; specialize h_succ x; split_ifs at h_succ <;> simp_all +decide ;
+          intro h; have := projeect_pattern_monotone pat ⟨ x, hx' ⟩ ⟨ y, hy' ⟩ ; simp_all +decide ;
+          have := projeect_pattern_monotone pat ⟨ y, hy' ⟩ ⟨ x, hx' ⟩ ; simp_all +decide ;
+          exact ‹x ∉ a.del'.val› ( by simpa [ le_antisymm this ‹y ≤ x› ] using hy );
+        · rw [ state'_of_varset'_getElem, state'_of_varset'_getElem ];
+          simp +decide [ List.mem_filterMap, varset'_of_state'_mem ];
+          grind
+
+/-- The projected action has the same cost as the original action. -/
+lemma project_pattern_action_cost {n : ℕ} (a : Action n) (pat : pattern n) :
+    (project_pattern_action a pat).cost = a.cost := by
+  unfold project_pattern_action
+  rfl
+
+/-
+The abstract edge cost in the projected graph is at most the concrete edge cost.
+-/
+lemma project_cost_le {n : ℕ} (prob : STRIPS n) (pat : pattern n)
+    (u v : State' n) (adj : (trans_of_STRIPS prob).Adj u v)
+    (val_abs : is_valid_abstraction (trans_of_STRIPS prob)
+      (trans_of_STRIPS (project_pattern_STRIPS prob pat)) (project_pattern_state pat)) :
+    NatGraph.edgeCost (val_abs u v adj) ≤ NatGraph.edgeCost adj := by
+      obtain ⟨a, ha, h_price⟩ : ∃ a ∈ prob.actions', applicable' a u ∧ is_successor' a u v ∧ a.cost = cost_of prob u v (is_successor_state_of_trans_STRIPS_adj prob u v adj) := by
+        have := min_cost_action_cost_eq_cost_of prob u v ( is_successor_state_of_trans_STRIPS_adj prob u v adj );
+        exact ⟨ _, min_cost_action_in_prob prob u v ( is_successor_state_of_trans_STRIPS_adj prob u v adj ), successor_implies_applicable ( min_cost_action_creates_successor prob u v adj ), successor_implies_is_successor ( min_cost_action_creates_successor prob u v adj ), this ⟩;
+      convert cost_of_le_action_cost ( project_pattern_STRIPS prob pat ) ( project_pattern_state pat u ) ( project_pattern_state pat v ) ( project_pattern_action a pat ) _ _ _ using 1;
+      rotate_left;
+      exact val_abs u v adj;
+      · unfold project_pattern_STRIPS; aesop;
+      · exact project_pattern_state_satisfies_pre pat a u h_price.1;
+      · grind +suggestions
+
+lemma pdb_heurisitc_admissible {n : ℕ} (prob : STRIPS n) (pat : pattern n) :
     heur_admissible' prob (pdb_heuristic prob pat) := by
-  have val_abs : is_valid_abstraction (trans_of_STRIPS prob) (trans_of_STRIPS (project_pattern_STRIPS prob pat)) (project_pattern_state pat) := by
+  have val_abs : is_valid_abstraction (trans_of_STRIPS prob)
+      (trans_of_STRIPS (project_pattern_STRIPS prob pat)) (project_pattern_state pat) := by
     unfold is_valid_abstraction
     intro v v' adj_prop
     unfold trans_of_STRIPS at adj_prop ⊢
     simp at adj_prop ⊢
-    obtain ⟨ a, is_act, appli, successor ⟩ := adj_prop
+    obtain ⟨a, is_act, appli, successor⟩ := adj_prop
     use (project_pattern_action a pat)
-    and_intros
-    · unfold project_pattern_STRIPS
-      simp
-      use a
-    · clear successor
-      unfold applicable' satisfies' at appli ⊢ 
-      unfold project_pattern_state
-      simp_all
-      intro x x_in_pre
-      unfold state'_of_varset'
-      unfold varset'_of_state'
-      simp
-      sorry
-    · sorry
-
-  apply abstractions_admissible
-  · sorry
-  · exact val_abs
-
+    refine ⟨?_, ?_, ?_⟩
+    · unfold project_pattern_STRIPS; simp; use a
+    · exact project_pattern_state_satisfies_pre pat a v appli
+    · exact project_pattern_preserves_successor pat a v v' appli successor
+  exact abstractions_admissible prob (project_pattern_state pat) val_abs
+    (fun u v adj => project_cost_le prob pat u v adj val_abs)
 
