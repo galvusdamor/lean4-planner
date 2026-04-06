@@ -41,6 +41,21 @@ abbrev admissible (heur : V → ℕ) (goal : V) :=
 abbrev admissible' (heur : V → ℕ) (goals : List V) :=
   ∀ v : V, ∀ goal ∈ goals, g.cost_ge v goal (heur v)
 
+
+abbrev goal_aware (heur : V → ℕ) (goal : V) := heur goal = 0
+
+abbrev goal_aware' (heur : V → ℕ) (goals : List V) := ∀ goal ∈ goals, heur goal = 0
+
+abbrev consistent (heur : V → ℕ) :=
+  ∀ v : V, ∀ w : V, ∀ adj : g.Adj v w, (heur v) ≤ (heur w) + g.edgeCost adj
+
+lemma admissible_of_goal_aware_consistent (heur : V → ℕ) (goal : V) :
+    goal_aware heur goal ∧ consistent (g:=g) heur → admissible (g:=g) heur goal := by sorry
+
+lemma admissible'_of_goal_aware_consistent (heur : V → ℕ) (goals : List V) :
+    goal_aware' heur goals ∧ consistent (g:=g) heur → admissible' (g:=g) heur goals := by sorry
+
+
 variable (heur : V → ℕ)
 
 def astar (start : V) (goal : V): Option (g.Path start goal) :=

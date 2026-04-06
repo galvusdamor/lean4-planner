@@ -14,6 +14,12 @@ abbrev heur_admissible {n : ℕ} (prob : STRIPS n) (heur : State' n → ℕ):=
 abbrev heur_admissible' {n : ℕ} (prob : STRIPS n) (heur : State' n → ℕ):=
   ∀ v : State' n, ∀ goal ∈ trans_of_STRIPS_goals prob, ∀ path : WeightedDiGraph.Path (G:=trans_of_STRIPS prob) v goal, path.cost ≥ (heur v)
 
+abbrev heur_goal_aware {n : ℕ} (prob : STRIPS n) (heur : State' n → ℕ) :=
+  ∀ v : State' n, satisfies' prob.goal' v → (heur v = 0)
+
+abbrev heur_consistent {n : ℕ} (prob : STRIPS n) (heur : State' n → ℕ) :=
+  ∀ v : State' n, ∀ a ∈ prob.actions', applicable' a v → heur v ≤ heur (successor' a v) + a.cost
+
 lemma admissible_of_admissible' {n : ℕ} (prob : STRIPS n) (heur : State' n → ℕ):
     heur_admissible' prob heur → heur_admissible prob heur := by
   intro h' v plan
@@ -66,6 +72,8 @@ lemma admissible_of_dominated_by_admissible {n : ℕ} (prob : STRIPS n) (h1 h2 :
   intro v goal goal_in_goals p
   exact le_trans (dominated v) (admissible v goal goal_in_goals p)
 
+lemma heur_admissible_of_goal_aware_and_consistent {n : ℕ} (prob : STRIPS n) (h : State' n → ℕ):
+    heur_goal_aware prob h ∧ heur_consistent prob h → heur_admissible prob h := by sorry
 
 
 
