@@ -112,6 +112,11 @@ lemma heur_admissible_of_goal_aware_and_consistent {n : ℕ} (prob : STRIPS n) (
 
 
 
+def heur_is_perfect {n : ℕ} (prob : STRIPS n) (h : State' n → ℕ) : Prop :=
+  heur_admissible prob h ∧ 
+    ∀ v : State' n, Nonempty (Plan prob (convertState v)) → ∃ plan : Plan prob (convertState v), plan.path.cost = (h v)
+
+
 ------------------------------- Particular Heuristics
 
 lemma zero_heur_admissible' {n : ℕ} (prob : STRIPS n) : heur_admissible' prob (fun _ => 0) := by
@@ -120,5 +125,7 @@ lemma zero_heur_admissible' {n : ℕ} (prob : STRIPS n) : heur_admissible' prob 
 lemma zero_heur_admissible {n : ℕ} (prob : STRIPS n) : heur_admissible prob (fun _ => 0) := by
   apply admissible_of_admissible' prob
   apply zero_heur_admissible'
+
+
 
 
