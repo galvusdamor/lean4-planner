@@ -14,6 +14,49 @@ instance {n : ℕ} : FinEnum (BitVec n) :=
     use BitVec.toNat x
     grind)
 
+def varset'_of_state' {n : ℕ} (s : State' n) : VarSet' n :=
+  let l : List (Fin n) := (List.finRange n).filter (fun i => s[i])
+  have l_s : l.SortedLT := by
+    apply List.sortedLT_iff_pairwise.mpr
+    unfold l
+    apply List.Pairwise.filter
+    apply List.pairwise_lt_finRange
+  ⟨l, l_s⟩
+
+def state'_of_varset' {n : ℕ} (v : VarSet' n) : State' n :=
+  let l : List Bool := (List.finRange n).map (fun i => i ∈ v.1)
+  have l_l : l.length = n := by unfold l; grind
+  l_l ▸ BitVec.ofBoolListLE l
+
+
+private lemma getElem_eq_rec_BitVec' {m n : ℕ} (h : m = n) (bv : BitVec m) (i : ℕ)
+    (hi : i < n) :
+    (show BitVec n from h ▸ bv)[i] = bv[i]'(by omega) := by
+  subst h; rfl
+
+theorem BitVec.getElem_ofBoolListLE {i : Nat} {bs : List Bool} (h : i < bs.length) :
+  (BitVec.ofBoolListLE bs)[i] = bs[i] := by
+  rw [← BitVec.getLsbD_eq_getElem, BitVec.getLsbD_ofBoolListLE]
+  simp only [List.getD_eq_getElem?_getD]
+  rw [List.getElem?_eq_getElem h]
+  simp
+
+
+/-- `state'_of_varset'` at index `i` checks membership in the var-set list. -/
+lemma state'_of_varset'_getElem {n : ℕ} (v : VarSet' n) (i : Fin n) :
+    (state'_of_varset' v)[i.val] = decide (i ∈ v.val) := by
+  unfold state'_of_varset'
+  rw [getElem_eq_rec_BitVec']
+  rw [BitVec.getElem_ofBoolListLE]
+  simp
+
+/-- A variable is in `varset'_of_state'` iff it is true in the state. -/
+lemma varset'_of_state'_mem {n : ℕ} (s : State' n) (i : Fin n) :
+    i ∈ (varset'_of_state' s).val ↔ s[i.val] = true := by
+  unfold varset'_of_state'
+  simp [List.mem_filter]
+
+
 
 def satisfies' {n : ℕ} (cond : VarSet' n) (state : State' n) : Bool :=
   cond.val.all (fun x => state[x])
@@ -40,13 +83,19 @@ def successor' {n : ℕ} (a : Action n) (f : State' n) : State' n :=
     else
       f[x])))
 
+-- an action can regress through a state if it does not delete anything that is true in the successor state
+def regressable' {n : ℕ} (a : Action n) (s : State' n) : Bool :=
+  a.del'.val.all (fun x => !s[x] ∨ (state'_of_varset' a.add')[x])
 
-theorem BitVec.getElem_ofBoolListLE {i : Nat} {bs : List Bool} (h : i < bs.length) :
-  (BitVec.ofBoolListLE bs)[i] = bs[i] := by
-  rw [← BitVec.getLsbD_eq_getElem, BitVec.getLsbD_ofBoolListLE]
-  simp only [List.getD_eq_getElem?_getD]
-  rw [List.getElem?_eq_getElem h]
-  simp
+-- regress a through s. Note that this returns the minimally necessary state for the regression to be possible
+def regress' {n : ℕ} (a : Action n) (s : State' n) : State' n :=
+  BitVec.cast (by simp) (BitVec.ofBoolListLE ((List.finRange n).map (fun x =>
+    if a.pre'.val.contains x then
+      True
+    else if a.add'.val.contains x then
+      False -- after regression the state feature can be false
+    else
+      s[x])))
 
 
 lemma successor'_is_successor' {n : ℕ} (a : Action n) (f : State' n) :
@@ -66,9 +115,32 @@ lemma is_successor'_eq_successor' {n : ℕ} (a : Action n) (f t : State' n)
   specialize h ⟨i, by omega⟩
   split_ifs at h ⊢ <;> simp_all
 
+lemma successor_regressable {n : ℕ} (a : Action n) (f : State' n):
+    applicable' a f → regressable' a (successor' a f) := by
+      unfold regressable';
+      unfold successor';
+      simp_all +decide [ BitVec.getElem_ofBoolListLE ];
+      intro appli x x_in_del
+      rw [state'_of_varset'_getElem]
+      simp
+      tauto
+/-
+f and (regress' a (successor' a f)) can differ in facts added and delete by a
+-/
+lemma successor_regress {n : ℕ} (a : Action n) (f : State' n) :
+    applicable' a f → successor' a (regress' a (successor' a f)) = successor' a f := by
+      intro ha
+      ext x;
+      erw [ BitVec.getElem_ofBoolListLE ];
+      rw [ List.getElem_map, List.getElem_finRange ];
+      erw [ BitVec.getElem_ofBoolListLE ] ; simp +decide [ List.getElem_finRange ] ;
+      all_goals simp_all +decide [ successor' ];
+      erw [ BitVec.getElem_ofBoolListLE ] ; simp +decide [ List.getElem_finRange ] ;
+      unfold applicable' at ha; simp_all +decide [ satisfies' ] ;
+      grind
+
 abbrev is_successor_state {n : ℕ} (prob : STRIPS n) (f t : State' n) :=
     prob.actions'.any (fun a => applicable' a f ∧ is_successor' a f t)
-
 
 def cost_of {n : ℕ} (prob : STRIPS n) (f t : State' n) (is_succ : is_successor_state prob f t): ℕ :=
     let applicableActs := prob.actions'.filter (fun a => applicable' a f ∧ is_successor' a f t)
