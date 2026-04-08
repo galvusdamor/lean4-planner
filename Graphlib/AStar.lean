@@ -49,11 +49,25 @@ abbrev goal_aware' (heur : V → ℕ) (goals : List V) := ∀ goal ∈ goals, he
 abbrev consistent (heur : V → ℕ) :=
   ∀ v : V, ∀ w : V, ∀ adj : g.Adj v w, (heur v) ≤ (heur w) + g.edgeCost adj
 
+private lemma walk_cost_ge_heur (heur : V → ℕ) (goal : V)
+    (ga : goal_aware heur goal) (hcons : consistent (g:=g) heur)
+    {v : V} (w : g.Walk v goal) : w.cost ≥ heur v := by
+  induction w with
+  | nil => simp [Walk.cost, ga]
+  | cons adj rest ih =>
+    have ih' := ih ga
+    calc heur _ ≤ heur _ + g.edgeCost adj := hcons _ _ adj
+      _ ≤ rest.cost + g.edgeCost adj := Nat.add_le_add_right ih' _
+      _ = g.edgeCost adj + rest.cost := Nat.add_comm _ _
 lemma admissible_of_goal_aware_consistent (heur : V → ℕ) (goal : V) :
-    goal_aware heur goal ∧ consistent (g:=g) heur → admissible (g:=g) heur goal := by sorry
+    goal_aware heur goal ∧ consistent (g:=g) heur → admissible (g:=g) heur goal := by
+  intro ⟨ga, cons⟩ v p
+  exact walk_cost_ge_heur heur goal ga cons p.val
 
 lemma admissible'_of_goal_aware_consistent (heur : V → ℕ) (goals : List V) :
-    goal_aware' heur goals ∧ consistent (g:=g) heur → admissible' (g:=g) heur goals := by sorry
+    goal_aware' heur goals ∧ consistent (g:=g) heur → admissible' (g:=g) heur goals := by
+  intro ⟨ga, cons⟩ v goal goal_in_goals p
+  exact walk_cost_ge_heur heur goal (ga goal goal_in_goals) cons p.val
 
 
 variable (heur : V → ℕ)

@@ -72,8 +72,43 @@ lemma admissible_of_dominated_by_admissible {n : ℕ} (prob : STRIPS n) (h1 h2 :
   intro v goal goal_in_goals p
   exact le_trans (dominated v) (admissible v goal goal_in_goals p)
 
+private lemma strips_path_cost_ge_heur {n : ℕ} (prob : STRIPS n) (h : State' n → ℕ)
+    (ga : heur_goal_aware prob h) (hc : heur_consistent prob h)
+    (k : ℕ) {start : State' n} {goal : State n}
+    (path : Path prob (convertState start) goal)
+    (hlen : path.length ≤ k)
+    (goal_state : prob.GoalState goal) :
+    path.cost ≥ h start := by
+  induction k generalizing start goal with
+  | zero =>
+    generalize hs : convertState start = s at path
+    cases path with
+    | empty =>
+      simp [Path.cost]
+      exact ga start (GoalState_implies_satisfies' prob start (hs ▸ goal_state))
+    | cons => simp [Path.length] at hlen
+  | succ k ih =>
+    generalize hs : convertState start = s at path
+    cases path with
+    | empty =>
+      simp [Path.cost]
+      exact ga start (GoalState_implies_satisfies' prob start (hs ▸ goal_state))
+    | cons a s2 ha succ path' =>
+      subst hs
+      haveI := successor_dec a (convertState start) s2 succ
+      obtain ⟨s2', rfl⟩ := state_has_bitvec s2
+      have a_app : applicable' a start = true := successor_implies_applicable succ
+      have s2'_eq : s2' = successor' a start :=
+        is_successor'_eq_successor' a start s2' (successor_implies_is_successor succ)
+      subst s2'_eq
+      have ih' := ih path' (by simp [Path.length] at hlen; exact hlen) goal_state
+      calc h start ≤ h (successor' a start) + a.cost := hc start a (mem_actions'_of_mem_actions ha) a_app
+        _ ≤ path'.cost + a.cost := Nat.add_le_add_right ih' _
+        _ = (Path.cons a (convertState (successor' a start)) ha succ path').cost := by simp [Path.cost]
 lemma heur_admissible_of_goal_aware_and_consistent {n : ℕ} (prob : STRIPS n) (h : State' n → ℕ):
-    heur_goal_aware prob h ∧ heur_consistent prob h → heur_admissible prob h := by sorry
+    heur_goal_aware prob h ∧ heur_consistent prob h → heur_admissible prob h := by
+  intro ⟨ga, hc⟩ v plan
+  exact strips_path_cost_ge_heur prob h ga hc plan.path.length plan.path (le_refl _) plan.goal
 
 
 

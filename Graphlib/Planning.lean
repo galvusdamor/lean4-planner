@@ -57,7 +57,14 @@ lemma successor'_is_successor' {n : ℕ} (a : Action n) (f : State' n) :
   split_ifs <;> try (simp_all [BitVec.getElem_ofBoolListLE])
 
 
-
+lemma is_successor'_eq_successor' {n : ℕ} (a : Action n) (f t : State' n)
+    (h : is_successor' a f t = true) : t = successor' a f := by
+  unfold is_successor' at h
+  unfold successor'
+  ext i
+  simp [BitVec.getElem_ofBoolListLE] at *
+  specialize h ⟨i, by omega⟩
+  split_ifs at h ⊢ <;> simp_all
 
 abbrev is_successor_state {n : ℕ} (prob : STRIPS n) (f t : State' n) :=
     prob.actions'.any (fun a => applicable' a f ∧ is_successor' a f t)
