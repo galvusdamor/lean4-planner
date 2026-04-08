@@ -220,21 +220,6 @@ def project_pattern_action {n : ℕ} (a : Action n) (pat : pattern n) : Action (
     (project_pattern_VarSet' pat a.del')
     a.cost
 
-
-def varset'_of_state' {n : ℕ} (s : State' n) : VarSet' n :=
-  let l : List (Fin n) := (List.finRange n).filter (fun i => s[i])
-  have l_s : l.SortedLT := by
-    apply List.sortedLT_iff_pairwise.mpr
-    unfold l
-    apply List.Pairwise.filter
-    apply List.pairwise_lt_finRange
-  ⟨l, l_s⟩
-
-def state'_of_varset' {n : ℕ} (v : VarSet' n) : State' n :=
-  let l : List Bool := (List.finRange n).map (fun i => i ∈ v.1)
-  have l_l : l.length = n := by unfold l; grind
-  l_l ▸ BitVec.ofBoolListLE l
-
 def project_pattern_state {n : ℕ} (pat : pattern n) (s : State' n) : State' (pat.card) :=
   let v : VarSet' n := varset'_of_state' s
   let v' : VarSet' (pat.card) := project_pattern_VarSet' pat v
@@ -296,25 +281,6 @@ lemma project_pattern_state_satisfies_pre {n : ℕ} (pat : pattern n) (a : Actio
         · grind
         · grind
       · grind
-
-private lemma getElem_eq_rec_BitVec' {m n : ℕ} (h : m = n) (bv : BitVec m) (i : ℕ)
-    (hi : i < n) :
-    (show BitVec n from h ▸ bv)[i] = bv[i]'(by omega) := by
-  subst h; rfl
-
-/-- `state'_of_varset'` at index `i` checks membership in the var-set list. -/
-lemma state'_of_varset'_getElem {n : ℕ} (v : VarSet' n) (i : Fin n) :
-    (state'_of_varset' v)[i.val] = decide (i ∈ v.val) := by
-  unfold state'_of_varset'
-  rw [getElem_eq_rec_BitVec']
-  rw [BitVec.getElem_ofBoolListLE]
-  simp
-
-/-- A variable is in `varset'_of_state'` iff it is true in the state. -/
-lemma varset'_of_state'_mem {n : ℕ} (s : State' n) (i : Fin n) :
-    i ∈ (varset'_of_state' s).val ↔ s[i.val] = true := by
-  unfold varset'_of_state'
-  simp [List.mem_filter]
 
 /-- `project_pattern_state` at a projected index checks whether the corresponding
     original variable is in the pattern and true in the state. -/
