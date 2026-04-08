@@ -114,7 +114,10 @@ lemma perfect_heuristic_weak_dominates_admissible {n : ℕ} (prob : STRIPS n) (h
 
 -- A perfect heuristic has for all solvable states that the heuristic value is determine by considering the "cheapest" applicable action and the heuristic of the successor
 def perfect_heuristic_invariant {n : ℕ} (prob : STRIPS n) (h : State' n → ℕ):=
-  ∀ s : State' n, Nonempty (Plan prob (convertState s)) →(
+  ∀ s : State' n, Nonempty (Plan prob (convertState s)) →
+  if satisfies' prob.goal' s  then h s = 0
+  else
+  (
     let appli : List (Action n) := prob.actions'.filter (fun a => applicable' a s)
 
     appli ≠ [] ∧ Option.some (h s) = (appli.map (fun a => a.cost + h (successor' a s))).min?
@@ -127,10 +130,15 @@ lemma invariant_gives_le {n : ℕ} (prob : STRIPS n) (h : State' n → ℕ)
     (s : State' n) (hs : Nonempty (Plan prob (convertState s)))
     (a : Action n) (ha : a ∈ prob.actions') (happ : applicable' a s = true) :
     h s ≤ a.cost + h (successor' a s) := by
-      obtain ⟨ _, heq ⟩ := hi s hs;
-      have h_min_le : ∀ {l : List ℕ}, a.cost + h (successor' a s) ∈ l → (List.min? l).getD 0 ≤ a.cost + h (successor' a s) := by
-        exact fun {l} a_1 => List.min?_getD_le_of_mem a_1;
-      grind
+      specialize hi s hs
+      split_ifs at hi
+      case pos hi =>
+        grind
+      case neg hi =>
+        obtain ⟨ _, heq ⟩ := hi
+        have h_min_le : ∀ {l : List ℕ}, a.cost + h (successor' a s) ∈ l → (List.min? l).getD 0 ≤ a.cost + h (successor' a s) := by
+          exact fun {l} a_1 => List.min?_getD_le_of_mem a_1;
+        grind
 
 /-! ### Path cost bound via invariant -/
 
@@ -187,17 +195,16 @@ lemma admissible_of_perfect_heuristic_invariant {n : ℕ} (prob : STRIPS n) (h :
   intro hi v plan
   exact path_cost_ge_heur_of_invariant prob h ga hi plan.path.length plan.path (le_refl _) plan.goal
 
-/-- The statement `perfect_heuristic_has_invariant` is **false** for problems where
-    a solvable goal state has no applicable actions. Counterexample: `n = 1`, no actions,
-    goal = `[]` (all states are goals). `h ≡ 0` is perfect but `appli = []`,
-    violating the `appli ≠ []` clause of `perfect_heuristic_invariant`. -/
--- lemma perfect_heuristic_has_invariant {n : ℕ} (prob : STRIPS n) (h : State' n → ℕ):
---   heur_is_perfect prob h → perfect_heuristic_invariant prob h
---   := by sorry
+lemma perfect_heuristic_has_invariant {n : ℕ} (prob : STRIPS n) (h : State' n → ℕ):
+  heur_is_perfect prob h → perfect_heuristic_invariant prob h
+  := by sorry
 
 -- weakening of perfect invariant: the heuristic can also be lower. That can't make it inadmissible
 def weaker_than_perfect_heuristic_invariant {n : ℕ} (prob : STRIPS n) (h : State' n → ℕ):=
-  ∀ s : State' n, Nonempty (Plan prob (convertState s)) →(
+  ∀ s : State' n, Nonempty (Plan prob (convertState s)) →
+  if satisfies' prob.goal' s  then h s = 0
+  else
+  (
     let appli : List (Action n) := prob.actions'.filter (fun a => applicable' a s)
 
     appli ≠ [] ∧ Option.some (h s) ≤ (appli.map (fun a => a.cost + h (successor' a s))).min?
@@ -211,7 +218,11 @@ lemma weak_invariant_gives_le {n : ℕ} (prob : STRIPS n) (h : State' n → ℕ)
       have := hi s hs;
       rcases k : List.min? ( List.map ( fun a => a.cost + h ( successor' a s ) ) ( List.filter ( fun a => applicable' a s ) prob.actions' ) ) with ( _ | k ) <;> simp_all +decide;
       rw [ List.min?_eq_some_iff ] at k;
-      exact this.2.trans ( k.2 _ ( List.mem_map.mpr ⟨ a, List.mem_filter.mpr ⟨ ha, happ ⟩, rfl ⟩ ) )
+      split_ifs at this
+      case pos hi =>
+        grind
+      case neg hi =>
+        exact this.2.trans ( k.2 _ ( List.mem_map.mpr ⟨ a, List.mem_filter.mpr ⟨ ha, happ ⟩, rfl ⟩ ) )
 
 /-- Auxiliary: path cost ≥ h(start) using weak invariant + goal-awareness. -/
 private lemma path_cost_ge_heur_of_weak_invariant {n : ℕ} (prob : STRIPS n) (h : State' n → ℕ)
