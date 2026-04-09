@@ -114,7 +114,8 @@ lemma heur_admissible_of_goal_aware_and_consistent {n : ℕ} (prob : STRIPS n) (
 
 def heur_is_perfect {n : ℕ} (prob : STRIPS n) (h : State' n → ℕ) : Prop :=
   heur_admissible prob h ∧ 
-    ∀ v : State' n, Nonempty (Plan prob (convertState v)) → ∃ plan : Plan prob (convertState v), plan.path.cost = (h v)
+    ∀ v : State' n, Nonempty (Plan prob (convertState v)) → ∃ plan : Plan prob (convertState v), plan.path.cost = (h v) ∧
+    ∀ v : State' n, IsEmpty (Plan prob (convertState v)) → (h v) ≥ (2^n) * (max_action_cost prob)
 
 
 ------------------------------- Particular Heuristics
