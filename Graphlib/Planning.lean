@@ -455,6 +455,22 @@ def cost {n} {pt : STRIPS n} {s s'} : Path pt s s' → ℕ
 | Path.empty _ => 0
 | Path.cons a _ _ _ π => π.cost + a.cost
 
+/-
+The cost of a snoc path equals the prefix cost plus the appended action cost.
+-/
+lemma cost_snoc {n} {pt : STRIPS n} {a : Action n} {s1 s2 s3 : State n}
+    {ha : a ∈ pt.actions} {path : Path pt s1 s2} {succ : Successor a s2 s3} :
+    (Path.snoc a s2 ha path succ).cost = path.cost + a.cost := by
+      unfold snoc;
+      cases path <;> simp_all +arith +decide [ Path.cost ];
+      rename_i a' s2' ha' succ' π';
+      have h_ind : ∀ {s s' : State n} (a : Action n) (s1 s2 : State n) (ha : a ∈ pt.actions) (succ : Successor a s1 s2) (π : Path pt s s1), (snoc a s1 ha π succ).cost = π.cost + a.cost := by
+        intros s s' a s1 s2 ha succ π;
+        induction π;
+        · exact?;
+        · unfold snoc; simp_all +arith +decide [ Path.cost ] ;
+      rw [ h_ind a s2 s3 ha succ π', add_comm ];
+      exact s1
 end Path
 
 /-! ### Helper lemmas for planner optimality -/
@@ -738,4 +754,61 @@ lemma all_paths_shorter_than {n : ℕ} (prob : STRIPS n):
     _ ≤ 2 ^ n * max_action_cost prob :=
         Nat.mul_le_mul_right _ (fintype_card_state'_le n)
 
+/-
+If an action produces a goal state from some predecessor, the action is regressable
+    through the goal. This follows from the Successor definition: for each deleted variable
+    that is in the goal, it must also be added (since it's in the successor despite deletion).
+-/
+lemma successor_goal_implies_regressable {n : ℕ} (a : Action n)
+    (s goal : State n) (g : VarSet' n)
+    (hsucc : Successor a s goal)
+    (hgoal : convertVarSet g ⊆ goal) :
+    regressable' a (state'_of_varset' g) = true := by
+      simp_all +decide [ regressable', Applicable ];
+      intro x hx; specialize hgoal; simp_all +decide [ convertVarSet, Set.subset_def ] ;
+      contrapose! hgoal; simp_all +decide [ state'_of_varset'_getElem ] ;
+      use x;
+      exact ⟨ hgoal.1, fun hx' => by
+        have h_mem : ∀ (l : List (Fin n)), x ∈ l → x ∈ l.toFinset := by
+          aesop;
+        exact h_mem _ hx, fun hx' => hgoal.2 <| by
+        exact? ⟩
 
+/-
+If action a produces a goal state from s_prev, and a is regressable through g,
+    then s_prev satisfies the regressed goal.
+-/
+lemma predecessor_satisfies_regressed_goal {n : ℕ} (a : Action n)
+    (s_prev goal : State n) (g : VarSet' n)
+    (hsucc : Successor a s_prev goal)
+    (hgoal : convertVarSet g ⊆ goal) :
+    convertVarSet (varset'_of_state' (regress' a (state'_of_varset' g))) ⊆ s_prev := by
+      unfold Successor at hsucc; unfold convertVarSet;
+      intro x hx; simp_all +decide [ Set.subset_def ] ;
+      unfold varset'_of_state' at hx; unfold regress' at hx; simp_all +decide [ List.finRange ] ;
+      rw [ BitVec.getElem_ofBoolListLE ] at hx ; simp_all +decide [ List.getElem_ofFn ] ;
+      cases hx <;> simp_all +decide [ convertVarSet ];
+      · convert hsucc.1 x _;
+        exact ( show x ∈ convertVarSet a.pre' from by simp [ convertVarSet, * ] );
+      · cases hgoal x ( by
+          rw [ state'_of_varset'_getElem ] at * ; aesop ) <;> simp_all +decide [ state'_of_varset'_getElem ];
+        rename_i h₁ h₂;
+        cases h₁.1 ( by
+          exact? )
+
+/-- Any graph path in the STRIPS transition graph has cost ≤ 2^n * max_action_cost,
+    regardless of its start and end states. -/
+lemma graph_path_cost_le_bound {n : ℕ} (prob : STRIPS n) (s g : State' n)
+    (path : WeightedDiGraph.Path (G := trans_of_STRIPS prob) s g) :
+    path.cost ≤ 2 ^ n * max_action_cost prob := by
+  have h_cost := walk_cost_le_length_mul_bound path.val (max_action_cost prob)
+    (fun a b adj => edge_cost_le_max_action_cost prob adj)
+  have h_len_lt := path.path_length_lt_card
+  calc path.cost = path.val.cost := WeightedDiGraph.Path.cost_same path
+    _ ≤ path.val.length * max_action_cost prob := h_cost
+    _ ≤ (Fintype.card (State' n) - 1) * max_action_cost prob :=
+        Nat.mul_le_mul_right _ (Nat.le_sub_one_of_lt h_len_lt)
+    _ ≤ Fintype.card (State' n) * max_action_cost prob :=
+        Nat.mul_le_mul_right _ (Nat.sub_le _ _)
+    _ ≤ 2 ^ n * max_action_cost prob :=
+        Nat.mul_le_mul_right _ (fintype_card_state'_le n)
