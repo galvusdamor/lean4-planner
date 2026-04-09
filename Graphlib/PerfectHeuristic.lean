@@ -114,14 +114,17 @@ lemma perfect_heuristic_weak_dominates_admissible {n : ℕ} (prob : STRIPS n) (h
 
 -- A perfect heuristic has for all solvable states that the heuristic value is determine by considering the "cheapest" applicable action and the heuristic of the successor
 def perfect_heuristic_invariant {n : ℕ} (prob : STRIPS n) (h : State' n → ℕ):=
-  ∀ s : State' n, Nonempty (Plan prob (convertState s)) →
+  (∀ s : State' n, Nonempty (Plan prob (convertState s)) →
   if satisfies' prob.goal' s  then h s = 0
   else
   (
     let appli : List (Action n) := prob.actions'.filter (fun a => applicable' a s)
 
     appli ≠ [] ∧ Option.some (h s) = (appli.map (fun a => a.cost + h (successor' a s))).min?
-  )
+  ))
+  ∧
+  ∀ s : State' n, IsEmpty (Plan prob (convertState s)) → 
+    h s ≥ (2^n) * (max_action_cost prob)
 
 /-! ### Helper: the invariant implies h(s) ≤ a.cost + h(succ(a,s)) -/
 
@@ -130,6 +133,7 @@ lemma invariant_gives_le {n : ℕ} (prob : STRIPS n) (h : State' n → ℕ)
     (s : State' n) (hs : Nonempty (Plan prob (convertState s)))
     (a : Action n) (ha : a ∈ prob.actions') (happ : applicable' a s = true) :
     h s ≤ a.cost + h (successor' a s) := by
+      obtain ⟨ hi, _ ⟩ := hi
       specialize hi s hs
       split_ifs at hi
       case pos hi =>
@@ -184,16 +188,23 @@ private lemma path_cost_ge_heur_of_invariant {n : ℕ} (prob : STRIPS n) (h : St
         _ = path'.cost + a.cost := Nat.add_comm _ _
         _ = (Path.cons a (convertState (successor' a start)) ha succ path').cost := by simp [Path.cost]
 
+lemma goal_aware_of_perfect_heuristic_invariant {n : ℕ} (prob : STRIPS n) (h : State' n → ℕ):
+  perfect_heuristic_invariant prob h → heur_goal_aware prob h := by
+    intro invar s s_is_goal
+    obtain ⟨invar,_⟩ := invar
+    specialize invar s (by sorry) -- since s is a goal state, the empty Plan suffices
+    simp [s_is_goal] at invar
+    exact invar
+
 /-- The original statement `admissible_of_perfect_heuristic_invariant` is false without
     goal-awareness. Counterexample: `n = 1`, one noop action (cost 0), goal = `[]`
     (all states are goals), `h ≡ 1`. The invariant holds (`h(s) = min(0 + 1) = 1`)
     but `h` is not admissible (the empty plan has cost `0 < 1`).
     We add `heur_goal_aware` as a hypothesis. -/
-lemma admissible_of_perfect_heuristic_invariant {n : ℕ} (prob : STRIPS n) (h : State' n → ℕ)
-    (ga : heur_goal_aware prob h) :
+lemma admissible_of_perfect_heuristic_invariant {n : ℕ} (prob : STRIPS n) (h : State' n → ℕ):
   perfect_heuristic_invariant prob h → heur_admissible prob h := by
   intro hi v plan
-  exact path_cost_ge_heur_of_invariant prob h ga hi plan.path.length plan.path (le_refl _) plan.goal
+  exact path_cost_ge_heur_of_invariant prob h (goal_aware_of_perfect_heuristic_invariant prob h hi) hi plan.path.length plan.path (le_refl _) plan.goal
 
 /-! ### Helper lemmas for perfect_heuristic_has_invariant -/
 
@@ -300,17 +311,8 @@ lemma perfect_achieves_min {n : ℕ} (prob : STRIPS n) (h : State' n → ℕ)
           have := hp.1 ( successor' a₀ s ) ⟨ last, rest, goal_sat ⟩ ; simp_all +decide [ Path.cost ] ;
           exact ⟨ a₀, ⟨ mem_actions'_of_mem_actions ha₀, successor_implies_applicable succ₀ ⟩, by linarith [ perfect_le_action_succ prob h hp s a₀ ( mem_actions'_of_mem_actions ha₀ ) ( successor_implies_applicable succ₀ ) ⟨ last, rest, goal_sat ⟩ ] ⟩
 
-/-- The original statement without `heur_consistent` is false: a perfect heuristic can assign
-    arbitrary values to unsolvable successor states, breaking the Bellman equation.
-    Counterexample: `n = 2`, actions a₁ (pre={0}, add={1}, del={0}, cost=2) and
-    a₂ (pre={0}, add={}, del={0}, cost=1), goal={1}. State s={0} is solvable with optimal
-    cost 2, but succ(a₂, s) = {} is unsolvable. If h({}) = 0, then
-    min(2+0, 1+0) = 1 ≠ 2 = h(s).
 
-    We add `heur_consistent` as a hypothesis, which ensures h(s) ≤ a.cost + h(succ(a,s))
-    even for actions leading to unsolvable states. -/
-lemma perfect_heuristic_has_invariant {n : ℕ} (prob : STRIPS n) (h : State' n → ℕ)
-    (hc : heur_consistent prob h) :
+lemma perfect_heuristic_has_invariant {n : ℕ} (prob : STRIPS n) (h : State' n → ℕ):
     heur_is_perfect prob h → perfect_heuristic_invariant prob h := by
   intro hp s hs
   split_ifs with hgoal
@@ -412,52 +414,50 @@ def replace_goal {n : ℕ} (prob : STRIPS n) (new_goal : VarSet' n) : STRIPS n :
   STRIPS.mk prob.varNames prob.actions' prob.init' new_goal
 
 def perfect_heuristic_regression_invariant {n : ℕ} (prob : STRIPS n) (h : STRIPS n → State' n → ℕ):=
-  ∀ s : State' n, Nonempty (Plan prob (convertState s)) → (
-    -- consider any potential goal
-    ∀ g : VarSet' n,
-      (satisfies' g s → h (replace_goal prob g) s = 0) ∧
+  ∀ s : State' n, ∀ g : VarSet' n,(
+    Nonempty (Plan (replace_goal prob g) (convertState s)) → (
+      -- consider any potential goal
+      if satisfies' g s then h (replace_goal prob g) s = 0
+      else
       (
         let regressi : List (Action n) := prob.actions'.filter (fun a => regressable' a (state'_of_varset' g))
         regressi ≠ [] ∧ Option.some (h (replace_goal prob g) s) =
           (regressi.map (fun a => a.cost + h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g)))) s)).min?
     )
-  )
+  )) ∧
+    (IsEmpty (Plan (replace_goal prob g) (convertState s)) → (h (replace_goal prob g) s) ≥ (2^n) * (max_action_cost prob))
 
 
-/-- The original statement `perfect_regression_invar_of_perfect_invar` requires that the
-    regression invariant holds for ALL goals `g` and ALL solvable states `s`. However, the
-    forward invariant for goal `g` talks about applicable actions from `s` (expanding
-    forward), while the regression invariant talks about regressable actions through `g`
-    (regressing backward). These are fundamentally different operations:
-    1. Solvability in `prob` does not imply solvability in `replace_goal prob g`.
-    2. `regressi ≠ []` is not guaranteed for arbitrary `g` (some goals may have no
-       regressable actions).
-    3. The min over regressable actions through `g` ≠ min over applicable actions from `s`.
-    Therefore the statement is false as formulated. -/
 lemma perfect_regression_invar_of_perfect_invar {n : ℕ} (prob : STRIPS n)
     (h : STRIPS n → State' n → ℕ) :
-    (∀ g : VarSet' n, perfect_heuristic_invariant prob (h (replace_goal prob g))) →
+    (∀ g : VarSet' n, perfect_heuristic_invariant (replace_goal prob g) (h (replace_goal prob g))) →
       perfect_heuristic_regression_invariant prob h := by
-  intro _hinv _s _hs _g
+  intro _hinv _s _hs 
   constructor
-  · intro hsat
-    -- The forward invariant for goal g tells us that when s satisfies g, h(prob_g)(s) = 0,
-    -- but only if s is solvable in (replace_goal prob g). Since s is solvable in prob (with
-    -- a different goal), solvability in replace_goal prob g is NOT guaranteed.
-    sorry
-  · -- The regression equation involves regressable actions through g, which is a completely
-    -- different set than applicable actions from s. The forward invariant cannot provide this.
-    sorry
+  · intro _g
+    split_ifs
+    case pos hsat =>
+      specialize _hinv _hs --
+      obtain ⟨_hinv, _ ⟩ := _hinv
+      specialize _hinv _s _g
+      have : satisfies' (replace_goal prob _hs).goal' _s := by 
+        unfold replace_goal
+        simp [hsat]
+      simp [this] at _hinv
+      exact _hinv
+    · constructor
+      · sorry  -- plan type is non empty and state does not satisfy the goal. Then the existing plan must have a last action that is regressible
+      · sorry -- the idea is to "invert" the plan that we consider the the perfect forward heuristic
+  · intro isEmpty
+    specialize _hinv _hs
+    obtain ⟨_ ,_hinv⟩ := _hinv
+    specialize _hinv _s isEmpty
+    convert _hinv using 1
 
-/-- See comment on `perfect_regression_invar_of_perfect_invar`. The reverse direction has
-    the same structural issues. -/
 lemma perfect_invar_of_perfect_regression_invar {n : ℕ} (prob : STRIPS n)
     (h : STRIPS n → State' n → ℕ) :
     perfect_heuristic_regression_invariant prob h →
-    (∀ g : VarSet' n, perfect_heuristic_invariant prob (h (replace_goal prob g))) := by
-  intro _hreg _g _s _hs
-  -- The regression invariant talks about regressable actions through g,
-  -- while the forward invariant needs applicable actions from s.
+    (∀ g : VarSet' n, perfect_heuristic_invariant (replace_goal prob g) (h (replace_goal prob g))) := by
   sorry
 
 end Validator
