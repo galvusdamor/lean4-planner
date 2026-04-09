@@ -657,7 +657,7 @@ lemma heur_eq_last_action_cost {n : ℕ} (prob : STRIPS n)
               apply (hperf (varset'_of_state' (regress' a (state'_of_varset' g)))).left s ⟨prefix_path, path, h_goal⟩;
             exact h_admissible ( cast_path_replace_goal prob g ( varset'_of_state' ( regress' a ( state'_of_varset' g ) ) ) ha ) |> le_trans <| by simp +decide [ cast_path_replace_goal_cost ] ;
           have h_eq : h (replace_goal prob g) s ≤ a.cost + h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g)))) s := by
-            exact?;
+            exact heur_le_regressable_action_cost prob h g s hperf hs a s_prev hreg
           grind
 
 def perfect_heuristic_regression_invariant {n : ℕ} (prob : STRIPS n) (h : STRIPS n → State' n → ℕ):=
@@ -739,7 +739,7 @@ lemma regression_invariant_le {n : ℕ} (prob : STRIPS n)
       contrapose! hinv;
       intro H;
       have := H s g;
-      simp_all +decide [ List.min?_eq_some_iff ];
+      simp_all 
       rw [ eq_comm, List.min?_eq_some_iff ] at this;
       exact not_lt_of_ge ( this.2.2 _ ( List.mem_map.mpr ⟨ a, List.mem_filter.mpr ⟨ ha, hreg ⟩, rfl ⟩ ) ) hinv
 
@@ -758,7 +758,7 @@ lemma goal_aware_of_regression_invariant {n : ℕ} (prob : STRIPS n)
       · refine' ⟨ ⟨ _, _, _ ⟩ ⟩;
         exact convertState s;
         · exact Path.empty _;
-        · exact?
+        · exact satisfies'_implies_GoalState (replace_goal prob g) s hsat
 
 /-- Auxiliary lemma: plan cost ≥ h for the regression invariant, by induction on plan length.
     Quantified over ALL goals simultaneously so the IH applies to regressed goals. -/
@@ -856,5 +856,333 @@ The correct equivalence is:
 `(∀ g, heur_is_perfect (replace_goal prob g) (h ...)) ↔ perfect_heuristic_regression_invariant prob h`
 where `heur_is_perfect` additionally requires optimal plan existence.
 -/
+
+
+
+
+def weaker_than_perfect_heuristic_regression_invariant {n : ℕ} (prob : STRIPS n) (h : STRIPS n → State' n → ℕ):=
+  ∀ s : State' n, ∀ g : VarSet' n,(
+    Nonempty (Plan (replace_goal prob g) (convertState s)) → (
+      -- consider any potential goal
+      if satisfies' g s then h (replace_goal prob g) s = 0
+      else
+      (
+        let regressi : List (Action n) := prob.actions'.filter (fun a => regressable' a (state'_of_varset' g))
+        regressi ≠ [] ∧ Option.some (h (replace_goal prob g) s) ≤ -- actual heuristic value might be lower
+          (regressi.map (fun a => a.cost + h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g)))) s)).min?
+    )
+  )) ∧
+    (IsEmpty (Plan (replace_goal prob g) (convertState s)) → (h (replace_goal prob g) s) ≥ (2^n) * (max_action_cost prob))
+
+/-
+From the weaker regression invariant, extract the key inequality: h(g,s) ≤ a.cost + h(regress(a,g), s).
+-/
+lemma weaker_regression_invariant_le {n : ℕ} (prob : STRIPS n)
+    (h : STRIPS n → State' n → ℕ)
+    (hinv : weaker_than_perfect_heuristic_regression_invariant prob h)
+    (g : VarSet' n) (s : State' n)
+    (hs : Nonempty (Plan (replace_goal prob g) (convertState s)))
+    (hng : ¬ satisfies' g s = true)
+    (a : Action n) (ha : a ∈ prob.actions')
+    (hreg : regressable' a (state'_of_varset' g) = true) :
+    h (replace_goal prob g) s ≤ a.cost + h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g)))) s := by
+  contrapose! hinv;
+  intro H;
+  obtain ⟨regressi, hregressi⟩ : ∃ regressi : List (Action n), regressi = prob.actions'.filter (fun a => regressable' a (state'_of_varset' g)) ∧ Option.some (h (replace_goal prob g) s) ≤ (regressi.map (fun a => a.cost + h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g)))) s)).min? := by
+    have := H s g; aesop;
+  have h_min_le : ∀ {l : List ℕ}, l ≠ [] → ∀ x ∈ l, (List.min? l).getD 0 ≤ x := by
+    exact fun {l} a x a_1 => List.min?_getD_le_of_mem a_1
+  specialize h_min_le ( show List.map ( fun a => a.cost + h ( replace_goal prob ( varset'_of_state' ( regress' a ( state'_of_varset' g ) ) ) ) s ) regressi ≠ [ ] from ?_ ) ( a.cost + h ( replace_goal prob ( varset'_of_state' ( regress' a ( state'_of_varset' g ) ) ) ) s ) ?_ <;> simp_all +decide;
+  · exact ⟨ a, ha, hreg ⟩;
+  · exact ⟨ a, ⟨ ha, hreg ⟩, rfl ⟩;
+  · cases h : List.min? ( List.map ( fun a => a.cost + h ( replace_goal prob ( varset'_of_state' ( regress' a ( state'_of_varset' g ) ) ) ) s ) ( List.filter ( fun a => regressable' a ( state'_of_varset' g ) ) prob.actions' ) ) <;> simp_all +decide;
+    grind
+
+/-
+Goal-awareness from the weaker regression invariant.
+-/
+lemma goal_aware_of_weaker_regression_invariant {n : ℕ} (prob : STRIPS n)
+    (h : STRIPS n → State' n → ℕ)
+    (hinv : weaker_than_perfect_heuristic_regression_invariant prob h)
+    (g : VarSet' n) (s : State' n)
+    (hsat : satisfies' g s = true) :
+    h (replace_goal prob g) s = 0 := by
+  convert hinv s g |>.1 _ using 1;
+  · lia;
+  · refine' ⟨ ⟨ convertState s, Path.empty _, _ ⟩ ⟩;
+    exact satisfies'_implies_GoalState (replace_goal prob g) s hsat
+
+/-- Auxiliary: plan cost ≥ h for the weaker regression invariant, by induction on plan length. -/
+private lemma plan_cost_ge_heur_of_weaker_regression_aux {n : ℕ} (prob : STRIPS n)
+    (h : STRIPS n → State' n → ℕ)
+    (hinv : weaker_than_perfect_heuristic_regression_invariant prob h)
+    (k : ℕ) (g : VarSet' n) {start : State' n} {goal : State n}
+    (path : Path (replace_goal prob g) (convertState start) goal)
+    (hlen : path.length ≤ k)
+    (goal_state : (replace_goal prob g).GoalState goal) :
+    path.cost ≥ h (replace_goal prob g) start := by
+  induction k generalizing g start goal with
+  | zero =>
+    generalize hs : convertState start = s at path
+    cases path with
+    | empty =>
+      simp [Path.cost]
+      exact goal_aware_of_weaker_regression_invariant prob h hinv g start
+        (GoalState_implies_satisfies' _ start (hs ▸ goal_state))
+    | cons => simp [Path.length] at hlen
+  | succ k ih =>
+    generalize hs : convertState start = s at path
+    cases path with
+    | empty =>
+      simp [Path.cost]
+      exact goal_aware_of_weaker_regression_invariant prob h hinv g start
+        (GoalState_implies_satisfies' _ start (hs ▸ goal_state))
+    | cons a s_mid ha succ rest =>
+      subst hs
+      have h_solvable : Nonempty (Plan (replace_goal prob g) (convertState start)) :=
+        ⟨⟨goal, Path.cons a s_mid ha succ rest, goal_state⟩⟩
+      by_cases hsat : satisfies' g start = true
+      · have := goal_aware_of_weaker_regression_invariant prob h hinv g start hsat
+        simp [this]
+      · obtain ⟨s_prev, a_last, ha_last, prefix_path, succ_last, hpath_eq, hlen_eq⟩ :=
+          Path.cons_to_snoc ha succ rest
+        have ha_last_mem : a_last ∈ prob.actions' := mem_actions'_of_mem_actions ha_last
+        have hreg_last := successor_goal_implies_regressable a_last s_prev goal g succ_last goal_state
+        have hgoal_prev := predecessor_satisfies_regressed_goal a_last s_prev goal g succ_last goal_state
+        set rg := varset'_of_state' (regress' a_last (state'_of_varset' g))
+        have hprefix_len : prefix_path.length ≤ k := by
+          simp [Path.length] at hlen; omega
+        have ih_result := ih rg (cast_path_replace_goal prob g rg prefix_path) (by
+          simp [cast_path_replace_goal_length]; exact hprefix_len) hgoal_prev
+        have h_le := weaker_regression_invariant_le prob h hinv g start h_solvable hsat
+          a_last ha_last_mem hreg_last
+        have hcost : (Path.cons a s_mid ha succ rest).cost = prefix_path.cost + a_last.cost := by
+          rw [hpath_eq]; exact Path.cost_snoc
+        have ih_cost : h (replace_goal prob rg) start ≤ prefix_path.cost := by
+          calc h (replace_goal prob rg) start
+              ≤ (cast_path_replace_goal prob g rg prefix_path).cost := ih_result
+            _ = prefix_path.cost := cast_path_replace_goal_cost prob g rg prefix_path
+        calc h (replace_goal prob g) start
+            ≤ a_last.cost + h (replace_goal prob rg) start := h_le
+          _ ≤ a_last.cost + prefix_path.cost := Nat.add_le_add_left ih_cost _
+          _ = prefix_path.cost + a_last.cost := Nat.add_comm _ _
+          _ = (Path.cons a s_mid ha succ rest).cost := hcost.symm
+
+-- weaker_than_perfect_heuristic_regression_invariant requires same bellman-style equation, but now with a ≤ instead of a =. Thus we should have pointwise domination, but only on solvable states
+lemma perfect_regression_dominates_weaker_regression_invariant {n : ℕ} (prob : STRIPS n) (h h_weak : STRIPS n → State' n → ℕ):
+  perfect_heuristic_regression_invariant prob h ∧
+  weaker_than_perfect_heuristic_regression_invariant prob h_weak →
+    ∀ s : State' n, ∀ g : VarSet' n, Nonempty (Plan (replace_goal prob g) (convertState s)) → h (replace_goal prob g) s ≥ h_weak (replace_goal prob g) s := by
+  sorry
+
+
+
+/-- The weaker regression invariant implies admissibility for all goals. -/
+lemma admissible_of_weaker_regression_invariant {n : ℕ} (prob : STRIPS n)
+    (h : STRIPS n → State' n → ℕ) :
+    weaker_than_perfect_heuristic_regression_invariant prob h →
+    (∀ g : VarSet' n, heur_admissible (replace_goal prob g) (h (replace_goal prob g))) := by
+  intro hinv g v plan
+  exact plan_cost_ge_heur_of_weaker_regression_aux prob h hinv plan.path.length g plan.path
+    (le_refl _) plan.goal
+
+
+def bellman_heuristic_regression_invariant {n : ℕ} (prob : STRIPS n) (h : STRIPS n → State' n → ℕ):=
+∀ s : State' n, ∀ g : VarSet' n,
+-- consider any potential goal
+if satisfies' g s then h (replace_goal prob g) s = 0
+else
+let regressi : List (Action n) := prob.actions'.filter (fun a => regressable' a (state'_of_varset' g))
+if r : regressi = [] then
+h (replace_goal prob g) s = (2^n) * (max_action_cost prob)
+else
+let minCostPredecessor := (regressi.map (fun a => a.cost + h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g)))) s)).min (by simp_all)
+
+if minCostPredecessor ≥ (2^n) * (max_action_cost prob) then -- if unsolvable then still unsolvable
+h (replace_goal prob g) s = (2^n) * (max_action_cost prob)
+else
+h (replace_goal prob g) s ≤ minCostPredecessor
+
+/-
+From the bellman regression invariant, extract the key inequality: h(g,s) ≤ a.cost + h(regress(a,g), s)
+    when g is not satisfied and the min regression cost is below threshold.
+-/
+lemma bellman_regression_invariant_le {n : ℕ} (prob : STRIPS n)
+    (h : STRIPS n → State' n → ℕ)
+    (hinv : bellman_heuristic_regression_invariant prob h)
+    (g : VarSet' n) (s : State' n)
+    (hng : ¬ satisfies' g s = true)
+    (a : Action n) (ha : a ∈ prob.actions')
+    (hreg : regressable' a (state'_of_varset' g) = true)
+    (h_below_threshold : h (replace_goal prob g) s < (2^n) * (max_action_cost prob)) :
+    h (replace_goal prob g) s ≤ a.cost + h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g)))) s := by
+  have := hinv s g
+  split_ifs at this <;> simp_all +decide only [List.mem_filter]
+  split_ifs at this <;> try omega
+  exact le_trans this (List.min_le_of_mem (List.mem_map.mpr ⟨a, List.mem_filter.mpr ⟨ha, hreg⟩, rfl⟩))
+
+/-
+Goal-awareness from the bellman regression invariant.
+-/
+lemma goal_aware_of_bellman_regression_invariant {n : ℕ} (prob : STRIPS n)
+    (h : STRIPS n → State' n → ℕ)
+    (hinv : bellman_heuristic_regression_invariant prob h)
+    (g : VarSet' n) (s : State' n)
+    (hsat : satisfies' g s = true) :
+    h (replace_goal prob g) s = 0 := by
+  have := hinv s g; aesop;
+
+/-- Auxiliary: plan cost ≥ h for the bellman regression invariant, by induction on plan length. -/
+private lemma plan_cost_ge_heur_of_bellman_regression_aux {n : ℕ} (prob : STRIPS n)
+    (h : STRIPS n → State' n → ℕ)
+    (hinv : bellman_heuristic_regression_invariant prob h)
+    (k : ℕ) (g : VarSet' n) {start : State' n} {goal : State n}
+    (path : Path (replace_goal prob g) (convertState start) goal)
+    (hlen : path.length ≤ k)
+    (goal_state : (replace_goal prob g).GoalState goal) :
+    path.cost ≥ h (replace_goal prob g) start := by
+  induction k generalizing g start goal with
+  | zero =>
+    generalize hs : convertState start = s at path
+    cases path with
+    | empty =>
+      simp [Path.cost]
+      exact goal_aware_of_bellman_regression_invariant prob h hinv g start
+        (GoalState_implies_satisfies' _ start (hs ▸ goal_state))
+    | cons => simp [Path.length] at hlen
+  | succ k ih =>
+    generalize hs : convertState start = s at path
+    cases path with
+    | empty =>
+      simp [Path.cost]
+      exact goal_aware_of_bellman_regression_invariant prob h hinv g start
+        (GoalState_implies_satisfies' _ start (hs ▸ goal_state))
+    | cons a s_mid ha succ rest =>
+      subst hs
+      by_cases hsat : satisfies' g start = true
+      · have := goal_aware_of_bellman_regression_invariant prob h hinv g start hsat
+        simp [this]
+      · obtain ⟨s_prev, a_last, ha_last, prefix_path, succ_last, hpath_eq, hlen_eq⟩ :=
+          Path.cons_to_snoc ha succ rest
+        have ha_last_mem : a_last ∈ prob.actions' := mem_actions'_of_mem_actions ha_last
+        have hreg_last := successor_goal_implies_regressable a_last s_prev goal g succ_last goal_state
+        have hgoal_prev := predecessor_satisfies_regressed_goal a_last s_prev goal g succ_last goal_state
+        set rg := varset'_of_state' (regress' a_last (state'_of_varset' g))
+        have hprefix_len : prefix_path.length ≤ k := by
+          simp [Path.length] at hlen; omega
+        have ih_result := ih rg (cast_path_replace_goal prob g rg prefix_path) (by
+          simp [cast_path_replace_goal_length]; exact hprefix_len) hgoal_prev
+        have hcost : (Path.cons a s_mid ha succ rest).cost = prefix_path.cost + a_last.cost := by
+          rw [hpath_eq]; exact Path.cost_snoc
+        have ih_cost : h (replace_goal prob rg) start ≤ prefix_path.cost := by
+          calc h (replace_goal prob rg) start
+              ≤ (cast_path_replace_goal prob g rg prefix_path).cost := ih_result
+            _ = prefix_path.cost := cast_path_replace_goal_cost prob g rg prefix_path
+        -- Use the bellman invariant
+        have h_bellman := hinv start g
+        simp [hsat] at h_bellman
+        -- regressi is not empty since a_last is regressable
+        have h_in_regressi : a_last ∈ prob.actions'.filter (fun a => regressable' a (state'_of_varset' g)) :=
+          List.mem_filter.mpr ⟨ha_last_mem, hreg_last⟩
+        -- Split the bellman invariant into cases
+        split_ifs at h_bellman with h_no_regress h_min_ge_threshold
+        · -- regressi = [] case: impossible since a_last is regressable
+          exact absurd hreg_last (by rw [h_no_regress a_last ha_last_mem]; decide)
+        · -- min ≥ threshold case: h = threshold
+          have h_min_le : (List.map (fun a => a.cost + h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g)))) start)
+              (List.filter (fun a => regressable' a (state'_of_varset' g)) prob.actions')).min (by simp_all [List.ne_nil_of_mem h_in_regressi]) ≤
+              a_last.cost + h (replace_goal prob rg) start :=
+            List.min_le_of_mem (List.mem_map.mpr ⟨a_last, h_in_regressi, rfl⟩)
+          calc h (replace_goal prob g) start
+              = (2^n) * (max_action_cost prob) := h_bellman
+            _ ≤ _ := h_min_ge_threshold
+            _ ≤ a_last.cost + h (replace_goal prob rg) start := h_min_le
+            _ ≤ a_last.cost + prefix_path.cost := Nat.add_le_add_left ih_cost _
+            _ = prefix_path.cost + a_last.cost := Nat.add_comm _ _
+            _ = (Path.cons a s_mid ha succ rest).cost := hcost.symm
+        · -- min < threshold case: h ≤ min
+          have h_min_le : (List.map (fun a => a.cost + h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g)))) start)
+              (List.filter (fun a => regressable' a (state'_of_varset' g)) prob.actions')).min (by simp_all [List.ne_nil_of_mem h_in_regressi]) ≤
+              a_last.cost + h (replace_goal prob rg) start :=
+            List.min_le_of_mem (List.mem_map.mpr ⟨a_last, h_in_regressi, rfl⟩)
+          calc h (replace_goal prob g) start
+              ≤ _ := h_bellman
+            _ ≤ a_last.cost + h (replace_goal prob rg) start := h_min_le
+            _ ≤ a_last.cost + prefix_path.cost := Nat.add_le_add_left ih_cost _
+            _ = prefix_path.cost + a_last.cost := Nat.add_comm _ _
+            _ = (Path.cons a s_mid ha succ rest).cost := hcost.symm
+
+/-- The bellman regression invariant implies admissibility for all goals. -/
+lemma admissible_of_bellman_regression_invariant {n : ℕ} (prob : STRIPS n)
+    (h : STRIPS n → State' n → ℕ) :
+    bellman_heuristic_regression_invariant prob h →
+    (∀ g : VarSet' n, heur_admissible (replace_goal prob g) (h (replace_goal prob g))) := by
+  sorry
+
+
+
+def h_1_heuristic_regression_invariant {n : ℕ} (prob : STRIPS n) (h : STRIPS n → State' n → ℕ):=
+  ∀ s : State' n, ∀ g : VarSet' n,
+      -- consider any potential goal
+      if satisfies' g s then h (replace_goal prob g) s = 0
+      else
+        if g_at_least_two : g.1.length > 1 then
+          h (replace_goal prob g) s ≤ (g.1.map (fun g' => h (replace_goal prob ⟨[g'], by simp [List.SortedLT, StrictMono]⟩) s)).max (by intro h2; simp_all)
+        else
+          let regressi : List (Action n) := prob.actions'.filter (fun a => regressable' a (state'_of_varset' g))
+          if r : regressi = [] then
+            h (replace_goal prob g) s = (2^n) * (max_action_cost prob)
+          else
+            let minCostPredecessor := (regressi.map (fun a => a.cost + h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g)))) s)).min (by simp_all)
+            if minCostPredecessor ≥ (2^n) * (max_action_cost prob) then -- if unsolvable then still unsolvable
+              h (replace_goal prob g) s = (2^n) * (max_action_cost prob)
+            else
+              h (replace_goal prob g) s ≤ minCostPredecessor
+
+/-
+The h_1 regression invariant implies the bellman regression invariant for single-atom goals.
+-/
+lemma h_1_implies_bellman_for_singletons {n : ℕ} (prob : STRIPS n)
+    (h : STRIPS n → State' n → ℕ)
+    (hinv : h_1_heuristic_regression_invariant prob h)
+    (g : Fin n) (s : State' n) :
+    (if satisfies' ⟨[g], by simp [List.SortedLT, StrictMono]⟩ s
+     then h (replace_goal prob ⟨[g], by simp [List.SortedLT, StrictMono]⟩) s = 0
+     else
+       let regressi := prob.actions'.filter (fun a => regressable' a (state'_of_varset' ⟨[g], by simp [List.SortedLT, StrictMono]⟩))
+       if r : regressi = [] then
+         h (replace_goal prob ⟨[g], by simp [List.SortedLT, StrictMono]⟩) s ≥ (2^n) * (max_action_cost prob)
+       else
+         let minCostPredecessor := (regressi.map (fun a => a.cost + h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' ⟨[g], by simp [List.SortedLT, StrictMono]⟩)))) s)).min (by simp_all)
+         if minCostPredecessor ≥ (2^n) * (max_action_cost prob) then
+           h (replace_goal prob ⟨[g], by simp [List.SortedLT, StrictMono]⟩) s ≥ (2^n) * (max_action_cost prob)
+         else
+           h (replace_goal prob ⟨[g], by simp [List.SortedLT, StrictMono]⟩) s ≤ minCostPredecessor) := by
+  contrapose! hinv;
+  unfold h_1_heuristic_regression_invariant;
+  grind
+
+/-
+Any plan that achieves a conjunction of goals also achieves each individual goal atom.
+-/
+lemma plan_for_conjunction_gives_plan_for_atom {n : ℕ} (prob : STRIPS n)
+    (g : VarSet' n) (g' : Fin n) (hg' : g' ∈ g.1)
+    (s : State' n) (plan : Plan (replace_goal prob g) (convertState s)) :
+    Nonempty (Plan (replace_goal prob ⟨[g'], by simp [List.SortedLT, StrictMono]⟩) (convertState s)) := by
+  refine' ⟨ ⟨ _, _, _ ⟩ ⟩;
+  exact plan.last;
+  · exact cast_path_replace_goal prob g ⟨[g'], by simp [List.SortedLT, StrictMono]⟩ plan.path;
+  · have := plan.goal; simp_all +decide [ replace_goal, STRIPS.GoalState ] ;
+    exact fun x hx => this <| by simp_all +decide [ convertVarSet ] ;
+
+/-- The h_1 regression invariant implies admissibility for all goals.
+    For multi-atom goals: h ≤ max of single-atom values, each ≤ plan cost.
+    For single-atom goals: bellman invariant applies directly. -/
+lemma admissible_of_h_1_regression_invariant {n : ℕ} (prob : STRIPS n)
+    (h : STRIPS n → State' n → ℕ) :
+    h_1_heuristic_regression_invariant prob h →
+    (∀ g : VarSet' n, heur_admissible (replace_goal prob g) (h (replace_goal prob g))) := by
+  sorry
+
 
 end Validator
