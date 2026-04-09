@@ -549,7 +549,7 @@ lemma apply_regressable_achieves_goal {n : ℕ} (a : Action n)
       generalize_proofs at *;
       simp_all +decide [ convertVarSet, state'_of_varset'_getElem ];
       have hconvert : convertVarSet a.del' = a.del ∧ convertVarSet a.add' = a.add := by
-        exact?;
+        exact Prod.mk_inj.mp rfl
       simp_all +decide [ Finset.ext_iff, Set.ext_iff ];
       exact ⟨ by simpa [ convertVarSet ] using hconvert.1 x |>.2 ( hreg.1 ( hprev ( by
         unfold regress' at *; simp_all +decide [ convertVarSet ] ;
@@ -968,12 +968,12 @@ private lemma plan_cost_ge_heur_of_weaker_regression_aux {n : ℕ} (prob : STRIP
           _ = prefix_path.cost + a_last.cost := Nat.add_comm _ _
           _ = (Path.cons a s_mid ha succ rest).cost := hcost.symm
 
--- weaker_than_perfect_heuristic_regression_invariant requires same bellman-style equation, but now with a ≤ instead of a =. Thus we should have pointwise domination, but only on solvable states
-lemma perfect_regression_dominates_weaker_regression_invariant {n : ℕ} (prob : STRIPS n) (h h_weak : STRIPS n → State' n → ℕ):
-  perfect_heuristic_regression_invariant prob h ∧
-  weaker_than_perfect_heuristic_regression_invariant prob h_weak →
-    ∀ s : State' n, ∀ g : VarSet' n, Nonempty (Plan (replace_goal prob g) (convertState s)) → h (replace_goal prob g) s ≥ h_weak (replace_goal prob g) s := by
-  sorry
+---- weaker_than_perfect_heuristic_regression_invariant requires same bellman-style equation, but now with a ≤ instead of a =. Thus we should have pointwise domination, but only on solvable states
+--lemma perfect_regression_dominates_weaker_regression_invariant {n : ℕ} (prob : STRIPS n) (h h_weak : STRIPS n → State' n → ℕ):
+--  perfect_heuristic_regression_invariant prob h ∧
+--  weaker_than_perfect_heuristic_regression_invariant prob h_weak →
+--    ∀ s : State' n, ∀ g : VarSet' n, Nonempty (Plan (replace_goal prob g) (convertState s)) → h (replace_goal prob g) s ≥ h_weak (replace_goal prob g) s := by
+--  sorry
 
 
 

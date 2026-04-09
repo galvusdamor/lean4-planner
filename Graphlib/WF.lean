@@ -551,10 +551,18 @@ instance : WellFoundedRelation (WithTop (ℕ × ℕ)):=
     (wf_with_top (WellFoundedRelation.mk (Prod.Lex Nat.lt Nat.lt)
       (Prod.instWellFoundedRelation (α := ℕ) (β := ℕ)).wf))
 
+instance : WellFoundedRelation (WithTop (ℕ)):=
+  WellFoundedRelation.mk (withTop.lex Nat.lt)
+    (wf_with_top inferInstance)
+
 
 instance (n : ℕ) : WellFoundedRelation (Vector (WithTop (ℕ × ℕ)) n) :=
   WellFoundedRelation.mk (Vector.Lex n (withTop.lex (Prod.Lex Nat.lt Nat.lt)))
     (wf_list n inferInstance)
+
+
+instance wf_vector_n_with_top (n : ℕ) : WellFoundedRelation (Vector (WithTop (ℕ)) n) :=
+  WellFoundedRelation.mk (Vector.Lex n (withTop.lex Nat.lt)) (wf_list n inferInstance)
 
 
 instance (priority:=high) (n : ℕ) : WellFoundedRelation ((Vector (WithTop (ℕ × ℕ)) n) × ℕ) :=
