@@ -739,7 +739,7 @@ lemma regression_invariant_le {n : ℕ} (prob : STRIPS n)
       contrapose! hinv;
       intro H;
       have := H s g;
-      simp_all 
+      simp_all
       rw [ eq_comm, List.min?_eq_some_iff ] at this;
       exact not_lt_of_ge ( this.2.2 _ ( List.mem_map.mpr ⟨ a, List.mem_filter.mpr ⟨ ha, hreg ⟩, rfl ⟩ ) ) hinv
 
@@ -1112,12 +1112,16 @@ private lemma plan_cost_ge_heur_of_bellman_regression_aux {n : ℕ} (prob : STRI
             _ = prefix_path.cost + a_last.cost := Nat.add_comm _ _
             _ = (Path.cons a s_mid ha succ rest).cost := hcost.symm
 
-/-- The bellman regression invariant implies admissibility for all goals. -/
+/-
+The bellman regression invariant implies admissibility for all goals.
+-/
 lemma admissible_of_bellman_regression_invariant {n : ℕ} (prob : STRIPS n)
     (h : STRIPS n → State' n → ℕ) :
     bellman_heuristic_regression_invariant prob h →
     (∀ g : VarSet' n, heur_admissible (replace_goal prob g) (h (replace_goal prob g))) := by
-  sorry
+  intro hinv g;
+  intro s hs;
+  exact plan_cost_ge_heur_of_bellman_regression_aux prob h hinv hs.path.length g hs.path ( by rfl ) hs.goal
 
 
 
@@ -1129,38 +1133,24 @@ def h_1_heuristic_regression_invariant {n : ℕ} (prob : STRIPS n) (h : STRIPS n
         if g_at_least_two : g.1.length > 1 then
           h (replace_goal prob g) s ≤ (g.1.map (fun g' => h (replace_goal prob ⟨[g'], by simp [List.SortedLT, StrictMono]⟩) s)).max (by intro h2; simp_all)
         else
-          let regressi : List (Action n) := prob.actions'.filter (fun a => regressable' a (state'_of_varset' g))
-          if r : regressi = [] then
-            h (replace_goal prob g) s = (2^n) * (max_action_cost prob)
-          else
-            let minCostPredecessor := (regressi.map (fun a => a.cost + h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g)))) s)).min (by simp_all)
-            if minCostPredecessor ≥ (2^n) * (max_action_cost prob) then -- if unsolvable then still unsolvable
-              h (replace_goal prob g) s = (2^n) * (max_action_cost prob)
-            else
-              h (replace_goal prob g) s ≤ minCostPredecessor
+          ∀ a ∈ prob.actions', regressable' a (state'_of_varset' g) = true →
+            h (replace_goal prob g) s ≤ a.cost + h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g)))) s
 
 /-
-The h_1 regression invariant implies the bellman regression invariant for single-atom goals.
+The h_1 regression invariant implies the pointwise bellman bound for single-atom goals.
 -/
 lemma h_1_implies_bellman_for_singletons {n : ℕ} (prob : STRIPS n)
     (h : STRIPS n → State' n → ℕ)
     (hinv : h_1_heuristic_regression_invariant prob h)
-    (g : Fin n) (s : State' n) :
-    (if satisfies' ⟨[g], by simp [List.SortedLT, StrictMono]⟩ s
-     then h (replace_goal prob ⟨[g], by simp [List.SortedLT, StrictMono]⟩) s = 0
-     else
-       let regressi := prob.actions'.filter (fun a => regressable' a (state'_of_varset' ⟨[g], by simp [List.SortedLT, StrictMono]⟩))
-       if r : regressi = [] then
-         h (replace_goal prob ⟨[g], by simp [List.SortedLT, StrictMono]⟩) s ≥ (2^n) * (max_action_cost prob)
-       else
-         let minCostPredecessor := (regressi.map (fun a => a.cost + h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' ⟨[g], by simp [List.SortedLT, StrictMono]⟩)))) s)).min (by simp_all)
-         if minCostPredecessor ≥ (2^n) * (max_action_cost prob) then
-           h (replace_goal prob ⟨[g], by simp [List.SortedLT, StrictMono]⟩) s ≥ (2^n) * (max_action_cost prob)
-         else
-           h (replace_goal prob ⟨[g], by simp [List.SortedLT, StrictMono]⟩) s ≤ minCostPredecessor) := by
-  contrapose! hinv;
-  unfold h_1_heuristic_regression_invariant;
-  grind
+    (g : Fin n) (s : State' n)
+    (hng : ¬ satisfies' ⟨[g], by simp [List.SortedLT, StrictMono]⟩ s = true)
+    (a : Action n) (ha : a ∈ prob.actions')
+    (hreg : regressable' a (state'_of_varset' ⟨[g], by simp [List.SortedLT, StrictMono]⟩) = true) :
+    h (replace_goal prob ⟨[g], by simp [List.SortedLT, StrictMono]⟩) s ≤
+      a.cost + h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' ⟨[g], by simp [List.SortedLT, StrictMono]⟩)))) s := by
+  have := hinv s ⟨[g], by simp [List.SortedLT, StrictMono]⟩
+  simp [hng] at this
+  exact this a ha hreg
 
 /-
 Any plan that achieves a conjunction of goals also achieves each individual goal atom.
@@ -1175,6 +1165,164 @@ lemma plan_for_conjunction_gives_plan_for_atom {n : ℕ} (prob : STRIPS n)
   · have := plan.goal; simp_all +decide [ replace_goal, STRIPS.GoalState ] ;
     exact fun x hx => this <| by simp_all +decide [ convertVarSet ] ;
 
+/-- Goal-awareness from the h_1 regression invariant: if the state satisfies the goal, h = 0. -/
+lemma goal_aware_of_h_1_regression_invariant {n : ℕ} (prob : STRIPS n)
+    (h : STRIPS n → State' n → ℕ)
+    (hinv : h_1_heuristic_regression_invariant prob h)
+    (g : VarSet' n) (s : State' n)
+    (hsat : satisfies' g s = true) :
+    h (replace_goal prob g) s = 0 := by
+  have := hinv s g; simp [hsat] at this; exact this
+
+/-- For any goal g with the h_1 regression invariant, h(g,s) ≤ max of singleton values when |g| > 1. -/
+lemma h_1_multi_atom_le_singletons {n : ℕ} (prob : STRIPS n)
+    (h : STRIPS n → State' n → ℕ)
+    (hinv : h_1_heuristic_regression_invariant prob h)
+    (g : VarSet' n) (s : State' n)
+    (hng : ¬ satisfies' g s = true)
+    (hlen : g.1.length > 1) :
+    h (replace_goal prob g) s ≤ (g.1.map (fun g' => h (replace_goal prob ⟨[g'], by simp [List.SortedLT, StrictMono]⟩) s)).max (by intro h2; simp_all) := by
+  have := hinv s g; simp [hng] at this; simp [hlen] at this; exact this
+
+/-
+Given bounds on singleton goals, derive bounds on any goal.
+    If every singleton goal [g'] has h([g'],s) ≤ C, then h(g,s) ≤ C for any g.
+-/
+lemma h_1_any_goal_le_of_singleton_bound {n : ℕ} (prob : STRIPS n)
+    (h : STRIPS n → State' n → ℕ)
+    (hinv : h_1_heuristic_regression_invariant prob h)
+    (g : VarSet' n) (start : State' n) (C : ℕ)
+    (hsat_or_bound :
+      satisfies' g start = true ∨
+      (∀ g' ∈ g.1, h (replace_goal prob ⟨[g'], by simp [List.SortedLT, StrictMono]⟩) start ≤ C)) :
+    h (replace_goal prob g) start ≤ C := by
+  by_cases hsat : satisfies' g start <;> simp_all +decide only [not_false_iff];
+  · have := goal_aware_of_h_1_regression_invariant prob h hinv g start hsat; aesop;
+  · by_cases hlen : g.1.length > 1;
+    · have := h_1_multi_atom_le_singletons prob h hinv g start hsat hlen;
+      refine le_trans this ?_;
+      rw [ List.max_le_iff ];
+      aesop;
+    · rcases g with ⟨ l, hl ⟩ ; rcases l with ( _ | ⟨ g', _ | ⟨ g'', l ⟩ ⟩ ) <;> simp_all +decide [ List.SortedLT ] ;
+      unfold satisfies' at hsat; aesop;
+
+/-
+The h_1 invariant for a singleton goal (length = 1) gives the bellman regression structure.
+-/
+private lemma h_1_invariant_singleton_bellman {n : ℕ} (prob : STRIPS n)
+    (h : STRIPS n → State' n → ℕ)
+    (hinv : h_1_heuristic_regression_invariant prob h)
+    (g_atom : Fin n) (s : State' n)
+    (hng : ¬ satisfies' ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩ s = true)
+    (a : Action n) (ha : a ∈ prob.actions')
+    (hreg : regressable' a (state'_of_varset' ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩) = true) :
+    h (replace_goal prob ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩) s ≤
+      a.cost + h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩)))) s := by
+  have := hinv s ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩
+  simp [hng] at this
+  exact this a ha hreg
+
+/-
+If s_prev satisfies rg as a GoalState, and g' ∈ rg.1, then s_prev satisfies [g'] as a GoalState.
+-/
+private lemma goalState_atom_of_goalState_conjunction {n : ℕ} (prob : STRIPS n)
+    (rg : VarSet' n) (g' : Fin n) (hg' : g' ∈ rg.1)
+    {s_prev : State n}
+    (hgoal : (replace_goal prob rg).GoalState s_prev) :
+    (replace_goal prob ⟨[g'], by simp [List.SortedLT, StrictMono]⟩).GoalState s_prev := by
+  unfold replace_goal; simp_all +decide [ STRIPS.GoalState ] ;
+  exact fun x hx => hgoal <| by unfold convertVarSet at *; aesop;
+
+/-- Auxiliary: for singleton goals, plan cost ≥ h by induction on path length.
+    When the regressed goal is multi-atom, we use h_1_any_goal_le_of_singleton_bound to
+    reduce to singletons, then apply the IH. -/
+private lemma h_1_singleton_plan_cost_ge_heur_aux {n : ℕ} (prob : STRIPS n)
+    (h : STRIPS n → State' n → ℕ)
+    (hinv : h_1_heuristic_regression_invariant prob h)
+    (k : ℕ) (g_atom : Fin n) {start : State' n} {goal : State n}
+    (path : Path (replace_goal prob ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩) (convertState start) goal)
+    (hlen : path.length ≤ k)
+    (goal_state : (replace_goal prob ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩).GoalState goal) :
+    path.cost ≥ h (replace_goal prob ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩) start := by
+  induction k generalizing g_atom start goal with
+  | zero =>
+    generalize hs : convertState start = s at path
+    cases path with
+    | empty =>
+      simp [Path.cost]
+      exact goal_aware_of_h_1_regression_invariant prob h hinv _ start
+        (GoalState_implies_satisfies' _ start (hs ▸ goal_state))
+    | cons => simp [Path.length] at hlen
+  | succ k ih =>
+    generalize hs : convertState start = s at path
+    cases path with
+    | empty =>
+      simp [Path.cost]
+      exact goal_aware_of_h_1_regression_invariant prob h hinv _ start
+        (GoalState_implies_satisfies' _ start (hs ▸ goal_state))
+    | cons a s_mid ha succ rest =>
+      subst hs
+      by_cases hsat : satisfies' ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩ start = true
+      · have := goal_aware_of_h_1_regression_invariant prob h hinv _ start hsat
+        simp [this]
+      · obtain ⟨s_prev, a_last, ha_last, prefix_path, succ_last, hpath_eq, hlen_eq⟩ :=
+          Path.cons_to_snoc ha succ rest
+        have ha_last_mem : a_last ∈ prob.actions' := mem_actions'_of_mem_actions ha_last
+        have hreg_last := successor_goal_implies_regressable a_last s_prev goal
+          ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩ succ_last goal_state
+        have hgoal_prev := predecessor_satisfies_regressed_goal a_last s_prev goal
+          ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩ succ_last goal_state
+        set rg := varset'_of_state' (regress' a_last
+          (state'_of_varset' ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩))
+        have hprefix_len : prefix_path.length ≤ k := by
+          simp [Path.length] at hlen; omega
+        -- Bound h(rg, start) ≤ prefix.cost
+        have ih_cost : h (replace_goal prob rg) start ≤ prefix_path.cost := by
+          apply h_1_any_goal_le_of_singleton_bound prob h hinv rg start prefix_path.cost
+          right
+          intro g' hg'
+          -- For each g' in rg, get a path for [g'] from the prefix
+          have hgoal_g' : (replace_goal prob ⟨[g'], by simp [List.SortedLT, StrictMono]⟩).GoalState s_prev :=
+            goalState_atom_of_goalState_conjunction prob rg g' hg' hgoal_prev
+          have ih_g' := ih g'
+            (cast_path_replace_goal prob ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩
+              ⟨[g'], by simp [List.SortedLT, StrictMono]⟩ prefix_path)
+            (by rw [cast_path_replace_goal_length]; exact hprefix_len) hgoal_g'
+          calc h (replace_goal prob ⟨[g'], by simp [List.SortedLT, StrictMono]⟩) start
+              ≤ _ := ih_g'
+            _ = prefix_path.cost :=
+              cast_path_replace_goal_cost prob ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩
+                ⟨[g'], by simp [List.SortedLT, StrictMono]⟩ prefix_path
+        -- Apply bellman for singleton
+        have h_le := h_1_invariant_singleton_bellman prob h hinv g_atom start hsat
+          a_last ha_last_mem hreg_last
+        have hcost : (Path.cons a s_mid ha succ rest).cost =
+            prefix_path.cost + a_last.cost := by
+          rw [hpath_eq]; exact Path.cost_snoc
+        calc h (replace_goal prob ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩) start
+            ≤ a_last.cost + h (replace_goal prob rg) start := h_le
+          _ ≤ a_last.cost + prefix_path.cost := Nat.add_le_add_left ih_cost _
+          _ = prefix_path.cost + a_last.cost := Nat.add_comm _ _
+          _ = (Path.cons a s_mid ha succ rest).cost := hcost.symm
+
+/-
+For any goal g (including multi-atom), plan cost ≥ h.
+-/
+private lemma h_1_any_goal_plan_cost_ge_heur {n : ℕ} (prob : STRIPS n)
+    (h : STRIPS n → State' n → ℕ)
+    (hinv : h_1_heuristic_regression_invariant prob h)
+    (g : VarSet' n) {start : State' n} {goal : State n}
+    (path : Path (replace_goal prob g) (convertState start) goal)
+    (goal_state : (replace_goal prob g).GoalState goal) :
+    path.cost ≥ h (replace_goal prob g) start := by
+  apply h_1_any_goal_le_of_singleton_bound;
+  · assumption;
+  · right;
+    intro g' hg';
+    apply le_trans (h_1_singleton_plan_cost_ge_heur_aux prob h hinv path.length g' (cast_path_replace_goal prob g ⟨[g'], by simp [List.SortedLT, StrictMono]⟩ path) (by
+    rw [ cast_path_replace_goal_length ]) (by
+    exact goalState_atom_of_goalState_conjunction prob g g' hg' goal_state)) (by
+    rw [ cast_path_replace_goal_cost ])
 /-- The h_1 regression invariant implies admissibility for all goals.
     For multi-atom goals: h ≤ max of single-atom values, each ≤ plan cost.
     For single-atom goals: bellman invariant applies directly. -/
@@ -1182,7 +1330,8 @@ lemma admissible_of_h_1_regression_invariant {n : ℕ} (prob : STRIPS n)
     (h : STRIPS n → State' n → ℕ) :
     h_1_heuristic_regression_invariant prob h →
     (∀ g : VarSet' n, heur_admissible (replace_goal prob g) (h (replace_goal prob g))) := by
-  sorry
+  intro hinv g v plan
+  exact h_1_any_goal_plan_cost_ge_heur prob h hinv g plan.path plan.goal
 
 
 end Validator
