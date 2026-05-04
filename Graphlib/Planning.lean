@@ -764,15 +764,16 @@ lemma successor_goal_implies_regressable {n : ℕ} (a : Action n)
     (hsucc : Successor a s goal)
     (hgoal : convertVarSet g ⊆ goal) :
     regressable' a (state'_of_varset' g) = true := by
-      simp_all +decide [ regressable', Applicable ];
-      intro x hx; specialize hgoal; simp_all +decide [ convertVarSet, Set.subset_def ] ;
-      contrapose! hgoal; simp_all +decide [ state'_of_varset'_getElem ] ;
+      simp_all [ regressable' ];
+      intro x hx; specialize hgoal; simp [ convertVarSet, Set.subset_def ] at hgoal
+      contrapose! hgoal; simp [ state'_of_varset'_getElem ] at hgoal
       use x;
       exact ⟨ hgoal.1, fun hx' => by
         have h_mem : ∀ (l : List (Fin n)), x ∈ l → x ∈ l.toFinset := by
-          aesop;
+          intro l a_1
+          simp_all only [List.mem_toFinset]
         exact h_mem _ hx, fun hx' => hgoal.2 <| by
-        exact? ⟩
+        exact List.mem_dedup.mp hx' ⟩
 
 /-
 If action a produces a goal state from s_prev, and a is regressable through g,
@@ -785,16 +786,17 @@ lemma predecessor_satisfies_regressed_goal {n : ℕ} (a : Action n)
     convertVarSet (varset'_of_state' (regress' a (state'_of_varset' g))) ⊆ s_prev := by
       unfold Successor at hsucc; unfold convertVarSet;
       intro x hx; simp_all +decide [ Set.subset_def ] ;
-      unfold varset'_of_state' at hx; unfold regress' at hx; simp_all +decide [ List.finRange ] ;
-      rw [ BitVec.getElem_ofBoolListLE ] at hx ; simp_all +decide [ List.getElem_ofFn ] ;
-      cases hx <;> simp_all +decide [ convertVarSet ];
+      unfold varset'_of_state' at hx; unfold regress' at hx; simp_all [ List.finRange ] ;
+      rw [ BitVec.getElem_ofBoolListLE ] at hx ; simp_all [ List.getElem_ofFn ] ;
+      cases hx <;> simp_all [ convertVarSet ];
       · convert hsucc.1 x _;
         exact ( show x ∈ convertVarSet a.pre' from by simp [ convertVarSet, * ] );
       · cases hgoal x ( by
-          rw [ state'_of_varset'_getElem ] at * ; aesop ) <;> simp_all +decide [ state'_of_varset'_getElem ];
+          rw [ state'_of_varset'_getElem ] at * ; aesop ) <;> simp_all [ state'_of_varset'_getElem ];
         rename_i h₁ h₂;
-        cases h₁.1 ( by
-          exact? )
+        cases h₁.1 (by
+          exact List.mem_dedup.mp h₂
+        )
 
 /-- Any graph path in the STRIPS transition graph has cost ≤ 2^n * max_action_cost,
     regardless of its start and end states. -/
