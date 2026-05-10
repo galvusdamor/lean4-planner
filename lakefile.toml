@@ -17,4 +17,4 @@ rev = "main"
 
 [[lean_exe]]
 name = "planner"
-root = "Graphlib"
+root = "Planner.Main"

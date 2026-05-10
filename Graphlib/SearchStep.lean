@@ -1,4 +1,3 @@
-import Graphlib.SearchState
 import Graphlib.SearchAlgorithm
 
 
@@ -17,8 +16,8 @@ abbrev search_expand (G : WeightedDiGraph V E) (D : Type) [FValueComp D]
 
 section
 variable {state_type : Type}
-variable {D : Type} [FValueComp D] 
-variable {T : Type} [WellFoundedRelation T] 
+variable {D : Type} [FValueComp D]
+variable {T : Type} [WellFoundedRelation T]
 variable {G : WeightedDiGraph V E}
 variable {start : V}
 variable [G.has_base_search_state D state_type]
@@ -78,7 +77,7 @@ lemma search_stack_step_goal_stack_head_if_terminated
 
 abbrev base_invar_carries_over_expand
     (invar : base_search_state G D → Prop) :=
-      ∀ s : state_type, ∀ head : V, ∀ tail : List V, 
+      ∀ s : state_type, ∀ head : V, ∀ tail : List V,
         invar (has_base_search_state.to_base_state s)
           ∧ ¬ head = goal
           ∧ (has_base_search_state.to_base_state (G:=G) (D:=D) s).stack = head :: tail
@@ -86,7 +85,7 @@ abbrev base_invar_carries_over_expand
 
 
 
-lemma base_invar_carries_over_stack_step 
+lemma base_invar_carries_over_stack_step
     (invar : base_search_state G D → Prop)
     (invar_carries : base_invar_carries_over_expand expand goal invar):
   base_invar_carries_over_step (goal:=goal) (search_stack_step expand) invar := by
@@ -95,14 +94,14 @@ lemma base_invar_carries_over_stack_step
   unfold search_stack_step
   simp
   split
-  · exact invar_holds_for_s 
+  · exact invar_holds_for_s
   · split
-    · exact invar_holds_for_s 
+    · exact invar_holds_for_s
     · next head tail compose head_not_goal=>
       apply invar_carries
       and_intros
       · exact invar_holds_for_s
-      · exact head_not_goal 
+      · exact head_not_goal
       · exact compose
 
 
@@ -129,7 +128,7 @@ lemma stack_step_stack_empty_if_terminated_without_goal
 lemma stack_step_keeps_goal_on_stack
     (priorState : state_type)
     (goal_on_stack_carries_expand : base_invar_carries_over_expand expand goal (search_prop_goal_on_stack goal)):
-    search_prop_goal_on_stack goal (has_base_search_state.to_base_state (G:=G) (D:=D) priorState) → 
+    search_prop_goal_on_stack goal (has_base_search_state.to_base_state (G:=G) (D:=D) priorState) →
     search_prop_goal_on_stack goal (has_base_search_state.to_base_state (G:=G) (D:=D) (search_stack_step expand goal priorState).1) := by
       unfold search_prop_goal_on_stack
       intro goal_prior_on_stack
@@ -143,24 +142,24 @@ lemma stack_step_keeps_goal_on_stack
           apply goal_on_stack_carries_expand
           constructor
           · apply goal_prior_on_stack
-          · exact ⟨ head_not_goal, compose ⟩ 
+          · exact ⟨ head_not_goal, compose ⟩
 
 
 lemma stack_step_terminates_when_goal_stack_head
     (priorState : state_type)
     :
-    (∃ tail : List V, (has_base_search_state.to_base_state (G:=G) (D:=D) priorState).stack = goal :: tail) → 
+    (∃ tail : List V, (has_base_search_state.to_base_state (G:=G) (D:=D) priorState).stack = goal :: tail) →
     (search_stack_step expand goal priorState).2 = some true := by
-      intro ⟨ tail, goal_head ⟩ 
+      intro ⟨ tail, goal_head ⟩
       unfold search_stack_step
       simp_all
 
 
 abbrev goal_becomes_visited_puts_it_on_stack
     :=
-      ∀ s : state_type, ∀ head : V, ∀ tail : List V, 
+      ∀ s : state_type, ∀ head : V, ∀ tail : List V,
             goal ∉ (has_base_search_state.to_base_state (G:=G) (D:=D) s).visited
-          ∧ goal ∈ (has_base_search_state.to_base_state (G:=G) (D:=D) (expand s head tail)).visited 
+          ∧ goal ∈ (has_base_search_state.to_base_state (G:=G) (D:=D) (expand s head tail)).visited
           ∧ ¬ head = goal
           ∧ (has_base_search_state.to_base_state (G:=G) (D:=D) s).stack = head :: tail
         → search_prop_goal_on_stack goal (has_base_search_state.to_base_state (G:=G) (D:=D) (expand s head tail))
@@ -173,10 +172,10 @@ lemma stack_step_goal_becomes_visited_it_is_on_stack
     (goal_trigger : goal_becomes_visited_puts_it_on_stack expand goal)
   :
     goal ∉ (has_base_search_state.to_base_state (G:=G) (D:=D) priorState).visited
-  ∧ goal ∈ (has_base_search_state.to_base_state (G:=G) (D:=D) (search_stack_step expand goal priorState).1).visited 
+  ∧ goal ∈ (has_base_search_state.to_base_state (G:=G) (D:=D) (search_stack_step expand goal priorState).1).visited
   → search_prop_goal_on_stack goal (has_base_search_state.to_base_state (G:=G) (D:=D) (search_stack_step expand goal priorState).1)
-    := by 
-  intro ⟨ goal_was_not_visited, goal_now_visited ⟩  
+    := by
+  intro ⟨ goal_was_not_visited, goal_now_visited ⟩
   unfold search_stack_step at goal_now_visited ⊢
   dsimp
   split
@@ -203,15 +202,15 @@ abbrev termination_proof_for_expand
     --  (termination_metric (expand state head tail)).1 = (termination_metric state).1 ∧
     --    (termination_metric (expand state head tail)).2 < (termination_metric state).2
 
-lemma search_stack_step_reduces_metric 
+lemma search_stack_step_reduces_metric
   (termination_metric : state_type → T)
   (termination_dfs_recurse : termination_proof_for_expand expand goal termination_metric)
   :
-    ∀ s : state_type, (search_stack_step expand goal s).2 = none → 
-        WellFoundedRelation.rel 
+    ∀ s : state_type, (search_stack_step expand goal s).2 = none →
+        WellFoundedRelation.rel
         (termination_metric (search_stack_step expand goal s).1) (termination_metric s) := by
     intro state did_not_terminate
-    
+
     unfold search_stack_step at did_not_terminate
     simp_all
 
@@ -223,9 +222,9 @@ lemma search_stack_step_reduces_metric
 
     unfold search_prop_stack_empty at h
     apply List.length_pos_iff_ne_nil.mpr at h
-    obtain ⟨ head, tail, compose ⟩ := List.exists_of_length_succ (n:=(has_base_search_state.to_base_state (G:=G) (D:=D) state).stack.length - 1) (has_base_search_state.to_base_state (G:=G) (D:=D) state).stack (by omega) 
+    obtain ⟨ head, tail, compose ⟩ := List.exists_of_length_succ (n:=(has_base_search_state.to_base_state (G:=G) (D:=D) state).stack.length - 1) (has_base_search_state.to_base_state (G:=G) (D:=D) state).stack (by omega)
 
-    unfold search_stack_step 
+    unfold search_stack_step
     simp_all
     split
     · simp_all
@@ -254,7 +253,7 @@ def search_exe_with_stack_step
       apply search_stack_step_goal_on_stack_if_terminated
 
     let base_invars_carry : base_invar_carries_over_step step (search_invar_all_basic start) := by
-      apply base_invar_carries_over_stack_step 
+      apply base_invar_carries_over_stack_step
       exact invar_carries
 
     search_exe (start := start) (goal:=goal) (start_state:=start_state) (search_step:=step) (termination_metric := termination_metric) (termination_proof) start_is_base_init base_invars_carry goal_on_stack_if_terminated
@@ -265,16 +264,16 @@ def search_with_stack_step
     (metric_for_expand_proof : termination_proof_for_expand expand goal termination_metric)
     :
     state_type × Bool:=
-    
+
     let step : search_step_function G D state_type := search_stack_step expand
     let termination_proof : termination_metric_decreasing_proof goal step termination_metric :=
       search_stack_step_reduces_metric expand goal termination_metric metric_for_expand_proof
 
-    search_internal (goal:=goal) (start_state:=start_state) (search_step:=step) (termination_metric := termination_metric) (termination_proof) 
+    search_internal (goal:=goal) (start_state:=start_state) (search_step:=step) (termination_metric := termination_metric) (termination_proof)
 
 
 
-theorem search_with_stack_step_is_sound 
+theorem search_with_stack_step_is_sound
     (metric_for_expand_proof : termination_proof_for_expand expand goal termination_metric)
     (invar_carries : base_invar_carries_over_expand expand goal (search_invar_all_basic start))
     (start_is_base_init : (has_base_search_state.to_base_state (G:=G) (D:=D) start_state) = (base_search_state_initial start d))
@@ -283,12 +282,12 @@ theorem search_with_stack_step_is_sound
   intro h -- Option.isSome true on some and false on none, x = x since we need a formula
   unfold search_exe_with_stack_step at h
   simp at h
-  apply search_is_sound (state_type := state_type) (D:=D) (T:=T) 
+  apply search_is_sound (state_type := state_type) (D:=D) (T:=T)
   apply h
 
 
 
-theorem search_with_stack_step_is_complete 
+theorem search_with_stack_step_is_complete
     (metric_for_expand_proof : termination_proof_for_expand expand goal termination_metric)
     (invar_carries : base_invar_carries_over_expand expand goal (search_invar_all_basic start))
     (start_is_base_init : (has_base_search_state.to_base_state (G:=G) (D:=D) start_state) = (base_search_state_initial start d))
@@ -307,7 +306,7 @@ theorem search_with_stack_step_is_complete
       apply goal_on_stack_carries_expand
     · unfold step_goal_becomes_visited_it_is_on_stack
       intro s
-      apply stack_step_goal_becomes_visited_it_is_on_stack 
+      apply stack_step_goal_becomes_visited_it_is_on_stack
       apply goal_trigger
     · apply stack_step_terminates_when_goal_stack_head
     · exact path

@@ -131,7 +131,7 @@ theorem length_diff_ends_ne_zero {u v : V} (h : u ≠ v) (p : G.Walk u v):
   · simp
   · contradiction
 
-theorem walk_support_length 
+theorem walk_support_length
     {u v : V} (w : G.Walk u v) : w.support.length = w.length + 1 := by
   induction w with
   | nil => simp [WeightedDiGraph.Walk.support, WeightedDiGraph.Walk.length]
@@ -292,7 +292,7 @@ theorem split_at_end_length_one (p : G.Walk u v) (len_ne_zero : p.length > 0):
         congr
 
 def snoc' (p : G.Walk u v)  (len_ne_zero : p.length > 0):
-    Σ w : V, { p : G.Walk u w // G.Adj w v }:= by
+    Σ w : V, { _p : G.Walk u w // G.Adj w v }:= by
     cases p
     · simp_all [length]
     · next u' u_adj_u' p_u' =>
@@ -309,7 +309,7 @@ def snoc' (p : G.Walk u v)  (len_ne_zero : p.length > 0):
 
 
 def snoc (p : G.Walk u v) (not_nil : u ≠ v):
-    Σ w : V, { p : G.Walk u w // G.Adj w v }:= by
+    Σ w : V, { _p : G.Walk u w // G.Adj w v }:= by
     have len_ne_zero : p.length > 0 := by
       cases p
       · contradiction
@@ -592,7 +592,7 @@ theorem split_at_end (p : G.Path u v) (not_nil : u ≠ v):
     ∃ w : V, ∃ p' : G.Path u w, ∃ w_adj_v : G.Adj w v,
       v ∉ p'.support ∧ p.val = p'.val.concat w_adj_v := by
     obtain ⟨ w, p_w, w_adj_v, walk_extended ⟩ := p.val.split_at_end not_nil
-    
+
     have supp_compose : p.support = p_w.support ++ [v] := by simp [walk_extended]
 
     have nodup : p_w.support.Nodup := by
@@ -620,7 +620,7 @@ Induction on p.val (the underlying walk). p.val can't be nil since u ≠ v. So p
 Alternative simpler approach: use Walk.snoc p.val not_nil to get ⟨w, ⟨walk, adj⟩⟩. Then show walk.support is nodup because it's a sublist of p.val.support (which is nodup). The key is that walk.support ++ [v] = p.val.support (by the concatenation property of Walk.snoc/split_at_end).
 -/
 def snoc (p : G.Path u v) (not_nil : u ≠ v):
-    Σ w : V, { p' : G.Path u w // G.Adj w v } :=
+    Σ w : V, { _p' : G.Path u w // G.Adj w v } :=
   let len_pos : p.val.length > 0 := Walk.length_diff_ends_ne_zero not_nil p.val
   let ⟨w, walk, ⟨adj, concat_eq⟩⟩ := p.val.snoc_with_proof len_pos
   have walk_nodup : walk.support.Nodup := by
@@ -631,7 +631,7 @@ def snoc (p : G.Path u v) (not_nil : u ≠ v):
 
 theorem contains_subpath {u v w : V} (p : G.Path u v) (w_in_path : w ∈ p.support) (w_ne_v : w ≠ v):
     ∃ p' : G.Path u w, p'.length  < p.length := by
-    obtain ⟨w',len,supp⟩ := p.val.contains_subwalk w_in_path w_ne_v 
+    obtain ⟨w',len,supp⟩ := p.val.contains_subwalk w_in_path w_ne_v
     have p_nodup : w'.support.Nodup := by
       apply List.Nodup.sublist (l₂ := p.support)
       · apply List.IsPrefix.sublist
@@ -708,10 +708,10 @@ lemma walk_trans (h : G.Adj u u') (w' : G.Walk u' v)  :
     grind
 
 @[simp]
-lemma support_Drop_Until_Suffix (w : G.Walk u v) (u : V) (u_in_supp : u ∈ w.support): 
+lemma support_Drop_Until_Suffix (w : G.Walk u v) (u : V) (u_in_supp : u ∈ w.support):
   (w.dropUntil u u_in_supp).support <:+ w.support := by
   induction w with
-  | nil => 
+  | nil =>
     unfold dropUntil support
     split
     · next nil_eq_cons =>
@@ -745,7 +745,7 @@ theorem dropUntilMakesShorter (p : G.Walk u v) (f : V) (h : f ∈ p.support):
       apply walk_trans (V:=V)
       apply nil_eq_cons
     · simp
-  | cons _ p' ih => 
+  | cons _ p' ih =>
     unfold dropUntil
     split
     · rename_i h_2
@@ -802,7 +802,7 @@ theorem length_bypass_le (p : G.Walk u v) : p.bypass.length ≤ p.length:= by
       trans
       · apply dropUntilMakesShorter
       · grind
-    · unfold length 
+    · unfold length
       grind
 
 theorem shorter_path_exists (w : G.Walk u v):
@@ -820,7 +820,7 @@ lemma Walk.append_support_prefix {a b c: V} (w : G.Walk a b) (w' : G.Walk b c):
     w.support <+: (w.append w').support := by
     cases compose : w
     · unfold Walk.support Walk.append
-      split <;> simp 
+      split <;> simp
     case cons a' h p =>
       unfold Walk.support Walk.append
       simp
@@ -835,7 +835,7 @@ lemma Walk.append_support_suffix {a b c: V} (w : G.Walk a b) (w' : G.Walk b c):
     w'.support <:+ (w.append w').support := by
     cases compose : w
     · unfold Walk.support Walk.append
-      split <;> simp 
+      split <;> simp
     case cons a' h p =>
       conv =>
         right ; unfold Walk.support Walk.append
@@ -861,8 +861,8 @@ lemma Walk.recompose {s v u: V} (p : G.Walk s v) (u_on_p : u ∈ p.support) (u_n
         use Walk.nil
         use h
         use p'
-        unfold Walk.concat Walk.append Walk.append 
-        simp 
+        unfold Walk.concat Walk.append Walk.append
+        simp
       · have u_on_p' : u ∈ p'.support := by
           rw [compose] at u_on_p
           unfold Walk.support at u_on_p
@@ -903,7 +903,7 @@ lemma Path.recompose {s v u: V} (p : G.Path s v) (u_on_p : u ∈ p.support) (u_n
             apply List.IsPrefix.trans ; rotate_left
             · apply Walk.append_support_prefix
             · apply Walk.concat_support_prefix
-        use ⟨w_s_u,s_u_nodup⟩ 
+        use ⟨w_s_u,s_u_nodup⟩
         use adj_u_u'
         have u'_v_nodup : w_u'_v.support.Nodup := by
           apply List.Sublist.nodup ; rotate_left
@@ -911,10 +911,10 @@ lemma Path.recompose {s v u: V} (p : G.Path s v) (u_on_p : u ∈ p.support) (u_n
           · rw [compose]
             apply List.IsSuffix.sublist
             apply Walk.append_support_suffix
-        use ⟨w_u'_v, u'_v_nodup⟩ 
+        use ⟨w_u'_v, u'_v_nodup⟩
         have u'_supp : u' ∉ w_s_u.support := by
           by_contra u'_in_w_s_u
-          obtain ⟨walk,prop⟩ := p 
+          obtain ⟨walk,prop⟩ := p
           simp at compose
           rw [compose] at prop
           rw [Walk.support_of_append] at prop
@@ -956,9 +956,9 @@ lemma Walk.internal_contact_to_cons_walk {s v u : V}
       unfold Walk.concat
       conv => left ; left ; unfold Walk.append
       conv => right ; unfold Walk.append
-      nth_rw 1 [Walk.append] 
+      nth_rw 1 [Walk.append]
       congr 1
-      conv => right ; rw [← Walk.internal_contact_to_cons_walk] 
+      conv => right ; rw [← Walk.internal_contact_to_cons_walk]
       unfold Walk.concat
       rfl
 
@@ -1022,7 +1022,7 @@ example : WeightedDiGraph (Fin 3) (Nat) where
             case zero => simp; exact instDecidableTrue
             case succ x => simp; exact instDecidableFalse
 
-#eval List.dropLast [1, 2, 3, 4]  -- Output: [1, 2, 3]
+--#eval List.dropLast [1, 2, 3, 4]  -- Output: [1, 2, 3]
 
 --#eval graph1.Adj 1 0 -- none
 --#eval dfs graph1 1 0  -- false

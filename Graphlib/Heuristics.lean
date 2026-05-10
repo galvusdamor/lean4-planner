@@ -1,6 +1,5 @@
 import Validator.PlanningTask.Core
 import Validator.PlanningTask.Basic
-import Graphlib.NatGraph
 import Graphlib.Planning
 
 import Mathlib.Logic.Lemmas
@@ -126,7 +125,3 @@ lemma zero_heur_admissible' {n : ℕ} (prob : STRIPS n) : heur_admissible' prob 
 lemma zero_heur_admissible {n : ℕ} (prob : STRIPS n) : heur_admissible prob (fun _ => 0) := by
   apply admissible_of_admissible' prob
   apply zero_heur_admissible'
-
-
-
-
