@@ -465,11 +465,11 @@ lemma cost_snoc {n} {pt : STRIPS n} {a : Action n} {s1 s2 s3 : State n}
       cases path <;> simp_all +arith +decide [ Path.cost ];
       rename_i a' s2' ha' succ' π';
       have h_ind : ∀ {s s' : State n} (a : Action n) (s1 s2 : State n) (ha : a ∈ pt.actions) (succ : Successor a s1 s2) (π : Path pt s s1), (snoc a s1 ha π succ).cost = π.cost + a.cost := by
-        intros s s' a s1 s2 ha succ π;
+        intro s s' a s1 s2 ha succ π
         induction π;
-        · exact?;
-        · unfold snoc; simp_all +arith +decide [ Path.cost ] ;
-      rw [ h_ind a s2 s3 ha succ π', add_comm ];
+        case empty s_1 => exact Eq.symm (Nat.add_zero ((empty s_1).cost.add a.cost))
+        · unfold snoc; simp_all +arith +decide [ Path.cost ]
+      rw [ h_ind a s2 s3 ha succ π', add_comm ]
       exact s1
 end Path
 

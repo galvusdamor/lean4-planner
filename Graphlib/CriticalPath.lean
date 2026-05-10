@@ -71,7 +71,7 @@ def h_1_step (n : ℕ) (prob : STRIPS n) (bef : Vector (WithTop ℕ) n) : Vector
           .some (a.cost + preMax)
       else .none -- action not applicable given the facts that are currently .some
     else .none)
-    
+
     if appli_nil : applicable = [] then bef[i]
     else
       let minCost : ℕ := applicable.min appli_nil
@@ -85,7 +85,7 @@ def h_1 {n : ℕ} (prob : STRIPS n) (s : State' n) : ℕ :=
     h_1_step n prob a
   let result := (List.finRange prob.actions'.length).foldl f (h_1_base n s)
   let s_b := vec_to_state n result
-  
+
   -- check if the goal has been reached
   if h_sat : satisfies' prob.goal' s_b then
     let pre_cost : List ℕ := prob.goal'.val.attach.map (fun x : { x : Fin n // x ∈ prob.goal'.val } =>
@@ -662,7 +662,7 @@ lemma fixpoint_persistent {n : ℕ} (prob : STRIPS n) (base : Vector (WithTop �
 --    -- The contradiction comes from the fact that precondition values
 --    -- at step m+1 (= R values) would have to be strictly lower than
 --    -- at step m (= iter(m-1) values) for the cost to drop below c+1.
---    sorry
+--    ...
 --
 --/-- After the fixpoint, h_1_step is idempotent on values. -/
 --lemma h_1_value_fixpoint {n : ℕ} (prob : STRIPS n) (v : State' n) :

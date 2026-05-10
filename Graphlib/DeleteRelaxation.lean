@@ -3,7 +3,8 @@ import Validator.PlanningTask.Basic
 import Graphlib.NatGraph
 import Graphlib.Planning
 import Graphlib.Heuristics
-import Graphlib.Planner -- h^+ calls the planner with h_zero on the delete relaxed task
+import Graphlib.Planner
+-- h^+ calls the planner with h_zero on the delete relaxed task
 
 import Mathlib.Logic.Lemmas
 

@@ -973,7 +973,6 @@ private lemma plan_cost_ge_heur_of_weaker_regression_aux {n : ℕ} (prob : STRIP
 --  perfect_heuristic_regression_invariant prob h ∧
 --  weaker_than_perfect_heuristic_regression_invariant prob h_weak →
 --    ∀ s : State' n, ∀ g : VarSet' n, Nonempty (Plan (replace_goal prob g) (convertState s)) → h (replace_goal prob g) s ≥ h_weak (replace_goal prob g) s := by
---  sorry
 
 
 

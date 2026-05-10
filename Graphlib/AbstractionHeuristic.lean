@@ -43,7 +43,7 @@ def abstraction_heuristic {n : ℕ} (prob : STRIPS n) {V : Type} [FinEnum V] (g 
    We comment out the original and provide a corrected version with the extra cost hypothesis. -/
 -- lemma abstractions_admissible {n : ℕ} (prob : STRIPS n) {V : Type} [FinEnum V] {g : NatGraph V} (abstraction: State' n → V) (is_abstraction : is_valid_abstraction (trans_of_STRIPS prob) (g) abstraction) :
 --   heur_admissible' prob (fun s => abstraction_heuristic prob g abstraction s)
---     := by sorry
+--     := ...
 
 /-- Map a walk in the concrete graph to a walk in the abstract graph via an abstraction. -/
 def map_walk_to_abstract {V1 V2 : Type} [FinEnum V1] [FinEnum V2]
@@ -192,7 +192,7 @@ lemma projeect_pattern_monotone {n : ℕ} (pat : pattern n) (u v : {x : Fin n //
     · exact conj.2
     · apply u_lt_v
 
---lemma project_pattern_injective {n : ℕ} (pat : pattern n) : Function.Injective (project_pattern n pat) := by sorry
+--lemma project_pattern_injective {n : ℕ} (pat : pattern n) : Function.Injective (project_pattern n pat) := ...
 
 
 def project_pattern_List {n : ℕ} (pat : pattern n) (l : List (Fin n)) : List (Fin pat.card) := l.filterMap (fun e =>
@@ -317,8 +317,8 @@ lemma project_pattern_preserves_successor {n : ℕ} (pat : pattern n) (a : Actio
         · obtain ⟨ y, hy, hy', rfl ⟩ := ‹_›;
           simp_all [ state'_of_varset'_getElem, varset'_of_state'_mem ];
           intro x hx hx'; specialize h_succ x; split_ifs at h_succ <;> simp_all
-          intro h; have := projeect_pattern_monotone pat ⟨ x, hx' ⟩ ⟨ y, hy' ⟩ 
-          have := projeect_pattern_monotone pat ⟨ y, hy' ⟩ ⟨ x, hx' ⟩ ; simp_all 
+          intro h; have := projeect_pattern_monotone pat ⟨ x, hx' ⟩ ⟨ y, hy' ⟩
+          have := projeect_pattern_monotone pat ⟨ y, hy' ⟩ ⟨ x, hx' ⟩ ; simp_all
           exact ‹x ∉ a.del'.val› ( by simpa [ le_antisymm this ‹y ≤ x› ] using hy );
         · rw [ state'_of_varset'_getElem, state'_of_varset'_getElem ];
           simp [ List.mem_filterMap, varset'_of_state'_mem ];
@@ -369,4 +369,3 @@ lemma pdb_heurisitc_admissible {n : ℕ} (prob : STRIPS n) (pat : pattern n) :
     · exact project_pattern_preserves_successor pat a v v' successor
   exact abstractions_admissible prob (project_pattern_state pat) val_abs
     (fun u v adj => project_cost_le prob pat u v adj val_abs)
-
