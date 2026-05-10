@@ -30,5 +30,8 @@ jobs:
           key: lakeBuild-${{ hashFiles('lake-manifest.json') }}
           restore-keys: lakeBuild-
 
+      - name: Get mathlib cache
+        run: lake exe cache get
+
       - name: Build
         run: lake build
