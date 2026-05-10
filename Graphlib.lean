@@ -10,6 +10,7 @@ import Graphlib.Heuristics
 import Graphlib.Planner
 import Graphlib.AbstractionHeuristic
 import Graphlib.DeleteRelaxation
+import Graphlib.H1
 
 import Validator.PlanningTask.Parser
 
@@ -19,7 +20,7 @@ def main (args : List String) : IO Unit := do
   | [] => IO.println "Usage: myexe <path>"
   | path :: _ =>
     let ⟨n, prob⟩ ← Validator.STRIPS.parse path
-    match Validator.planner prob (fun _ => 0) with
+    match Validator.planner prob (fun s => Validator.h_1_new prob s) with
     | some _ => IO.println "Solution found!"
     | none   => IO.println "No solution found."
 
