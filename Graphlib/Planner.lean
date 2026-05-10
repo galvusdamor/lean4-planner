@@ -265,9 +265,12 @@ lemma plan_cost_ge_astar {n : ℕ} (prob : STRIPS n) (heur : State' n → ℕ)
       · simp
         constructor
         · exact ⟨ g'.toFin, rfl ⟩
-        · have := plan.goal; unfold STRIPS.GoalState at this; unfold convertState at hg'
-          unfold convertVarSet at this; unfold satisfies'; simp_all +decide [ Set.subset_def ] ;
-          exact fun x hx => hg'.symm.subset ( this x hx );
+        · have := plan.goal
+          unfold STRIPS.GoalState at this; unfold convertState at hg'
+          unfold convertVarSet at this
+          unfold satisfies'
+          simp_all [ Set.subset_def ]
+          exact fun x hx => hg'.symm.subset ( this x hx )
   grind
 
 
