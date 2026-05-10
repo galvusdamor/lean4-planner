@@ -1,10 +1,5 @@
-import Validator.PlanningTask.Core
-import Validator.PlanningTask.Basic
-import Graphlib.NatGraph
-import Graphlib.Planning
+import Graphlib.AStar
 import Graphlib.Heuristics
-
-import Mathlib.Logic.Lemmas
 
 namespace Validator
 
@@ -279,5 +274,3 @@ lemma planner_optimal {n : ℕ} (prob : STRIPS n) (heur : State' n → ℕ)
   intro plan
   rw [planner_path_cost_eq_astar]
   exact plan_cost_ge_astar prob heur admissible (planner_isSome_implies_astar_isSome prob heur ret_plan) plan
-
-

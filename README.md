@@ -6,7 +6,6 @@ We define various graph search algorithms:
 - BFS
 - Dijksta
 - A*
-- H1
 
 And prove their correctness.
 

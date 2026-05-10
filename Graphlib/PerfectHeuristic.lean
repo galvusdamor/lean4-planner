@@ -1,17 +1,4 @@
-import Validator.PlanningTask.Core
-import Validator.PlanningTask.Basic
-import Graphlib.NatGraph
-import Graphlib.Planning
-import Graphlib.Heuristics
 import Graphlib.Planner
-
-import Graphlib.temp
-
-import Mathlib.Logic.Lemmas
-import Mathlib.Data.Fintype.Fin
-import Mathlib.Data.Finset.Card
-import Mathlib.Order.Interval.Finset.Fin
-import Mathlib.Data.Vector.Basic
 
 namespace Validator
 
@@ -537,12 +524,11 @@ If a is regressable through g, then applying a to a state satisfying regress(a,g
 -/
 lemma apply_regressable_achieves_goal {n : ℕ} (a : Action n)
     (s_prev : State n) (g : VarSet' n)
-    (happ : Applicable s_prev a)
     (hreg : regressable' a (state'_of_varset' g) = true)
     (hprev : convertVarSet (varset'_of_state' (regress' a (state'_of_varset' g))) ⊆ s_prev) :
     convertVarSet g ⊆ (s_prev \ a.del) ∪ a.add := by
       intro x hx;
-      unfold regressable' at hreg; simp_all +decide [ List.mem_filter ] ;
+      unfold regressable' at hreg; simp_all
       contrapose! hreg;
       use ⟨ x, by
         exact x.2 ⟩
@@ -550,7 +536,7 @@ lemma apply_regressable_achieves_goal {n : ℕ} (a : Action n)
       simp_all +decide [ convertVarSet, state'_of_varset'_getElem ];
       have hconvert : convertVarSet a.del' = a.del ∧ convertVarSet a.add' = a.add := by
         exact Prod.mk_inj.mp rfl
-      simp_all +decide [ Finset.ext_iff, Set.ext_iff ];
+      simp_all [ Set.ext_iff ]
       exact ⟨ by simpa [ convertVarSet ] using hconvert.1 x |>.2 ( hreg.1 ( hprev ( by
         unfold regress' at *; simp_all +decide [ convertVarSet ] ;
         unfold varset'_of_state' at *; simp_all +decide [ BitVec.getElem_ofBoolListLE ] ;
@@ -605,10 +591,10 @@ lemma heur_le_regressable_action_cost {n : ℕ} (prob : STRIPS n)
               unfold replace_goal; simp_all +decide [ convertVarSet ] ;
               unfold regress' at *; simp_all +decide [ state'_of_varset', varset'_of_state' ] ;
               unfold regressable' at hreg; simp_all +decide [ Action.pre ] ;
-              unfold convertVarSet at hx; simp_all +decide [ List.mem_map, List.mem_finRange ] ;
+              unfold convertVarSet at hx; simp_all
               rw [ BitVec.getElem_ofBoolListLE ] ; simp +decide [ hx ] ;
           generalize_proofs at *; (
-          exact ⟨ _, h_succ, apply_regressable_achieves_goal a plan_rg.last g h_succ.1 hreg plan_rg.goal ⟩)
+          exact ⟨ _, h_succ, apply_regressable_achieves_goal a plan_rg.last g hreg plan_rg.goal ⟩)
         generalize_proofs at *; (
         -- Construct the new plan by extending the plan for the regressed goal with the action a.
         obtain ⟨plan_g, hplan_g⟩ : ∃ plan_g : Plan (replace_goal prob g) (convertState s), plan_g.path.cost = plan_rg.path.cost + a.cost := by
@@ -623,7 +609,7 @@ lemma heur_le_regressable_action_cost {n : ℕ} (prob : STRIPS n)
         generalize_proofs at *; (
         have := hperf g |>.1;
         grind));
-      · have := hperf ( varset'_of_state' ( regress' a ( state'_of_varset' g ) ) ) |>.2.2 s ( by simpa using h_solvable ) ; simp_all +decide [ Nat.mul_comm ] ;
+      · have := hperf ( varset'_of_state' ( regress' a ( state'_of_varset' g ) ) ) |>.2.2 s ( by simpa using h_solvable ) ; simp_all
         refine' le_trans _ ( Nat.le_add_left _ _ ) |> le_trans <| Nat.add_le_add_left this _;
         convert perfect_heur_solvable_le_bound ( replace_goal prob g ) ( h ( replace_goal prob g ) ) ( hperf _ _ ) s hs using 1
 
@@ -1016,7 +1002,7 @@ lemma bellman_regression_invariant_le {n : ℕ} (prob : STRIPS n)
     (h_below_threshold : h (replace_goal prob g) s < (2^n) * (max_action_cost prob)) :
     h (replace_goal prob g) s ≤ a.cost + h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g)))) s := by
   have := hinv s g
-  split_ifs at this <;> simp_all +decide only [List.mem_filter]
+  split_ifs at this; simp_all only
   split_ifs at this <;> try omega
   exact le_trans this (List.min_le_of_mem (List.mem_map.mpr ⟨a, List.mem_filter.mpr ⟨ha, hreg⟩, rfl⟩))
 
@@ -1118,8 +1104,7 @@ lemma admissible_of_bellman_regression_invariant {n : ℕ} (prob : STRIPS n)
     (h : STRIPS n → State' n → ℕ) :
     bellman_heuristic_regression_invariant prob h →
     (∀ g : VarSet' n, heur_admissible (replace_goal prob g) (h (replace_goal prob g))) := by
-  intro hinv g;
-  intro s hs;
+  intro hinv g s hs;
   exact plan_cost_ge_heur_of_bellman_regression_aux prob h hinv hs.path.length g hs.path ( by rfl ) hs.goal
 
 
@@ -1195,14 +1180,14 @@ lemma h_1_any_goal_le_of_singleton_bound {n : ℕ} (prob : STRIPS n)
       satisfies' g start = true ∨
       (∀ g' ∈ g.1, h (replace_goal prob ⟨[g'], by simp [List.SortedLT, StrictMono]⟩) start ≤ C)) :
     h (replace_goal prob g) start ≤ C := by
-  by_cases hsat : satisfies' g start <;> simp_all +decide only [not_false_iff];
+  by_cases hsat : satisfies' g start <;> simp_all only
   · have := goal_aware_of_h_1_regression_invariant prob h hinv g start hsat; aesop;
   · by_cases hlen : g.1.length > 1;
     · have := h_1_multi_atom_le_singletons prob h hinv g start hsat hlen;
       refine le_trans this ?_;
       rw [ List.max_le_iff ];
       aesop;
-    · rcases g with ⟨ l, hl ⟩ ; rcases l with ( _ | ⟨ g', _ | ⟨ g'', l ⟩ ⟩ ) <;> simp_all +decide [ List.SortedLT ] ;
+    · rcases g with ⟨ l, hl ⟩ ; rcases l with ( _ | ⟨ g', _ | ⟨ g'', l ⟩ ⟩ ) <;> simp_all [ List.SortedLT ]
       unfold satisfies' at hsat; aesop;
 
 /-

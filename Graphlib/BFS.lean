@@ -1,17 +1,4 @@
-import Mathlib.Data.Bool.AllAny
-import Mathlib.Data.FinEnum
-import Mathlib.Data.Finset.Empty
-import Mathlib.Data.List.MinMax
-
-import Graphlib.Lists
-import Graphlib.FinEnum
-import Graphlib.Basic
-import Graphlib.SearchState
-import Graphlib.SearchAlgorithm
 import Graphlib.SearchStep
-
-set_option trace.split.failure true
---set_option diagnostics true
 
 -- def local global variable for a graph
 variable {V : Type} {E : Type} [FinEnum V] [DecidableEq V]

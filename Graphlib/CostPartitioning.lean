@@ -1,10 +1,4 @@
-import Validator.PlanningTask.Core
-import Validator.PlanningTask.Basic
-import Graphlib.NatGraph
-import Graphlib.Planning
 import Graphlib.Heuristics
-
-import Mathlib.Logic.Lemmas
 
 namespace Validator
 

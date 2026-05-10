@@ -1,11 +1,8 @@
-import Validator.PlanningTask.Core
-import Validator.PlanningTask.Basic
-import Graphlib.NatGraph
-import Graphlib.Planning
-import Graphlib.Heuristics
+
+import Mathlib.Tactic.Linarith
+
 import Graphlib.CriticalPath
 import Graphlib.PerfectHeuristic
-import Graphlib.WF
 
 import Graphlib.temp
 
@@ -19,11 +16,12 @@ lemma vector_le_ne_implies_lex {n : ℕ} (v1 v2 : Vector (WithTop ℕ) n)
     Vector.Lex n (withTop.lex Nat.lt) v1 v2 := by
   have h_lex : ∀ (l1 l2 : List (WithTop ℕ)), (∀ i < l1.length, l1[i]! ≤ l2[i]!) → l1 ≠ l2 → l1.length = l2.length → List.Lex (withTop.lex Nat.lt) l1 l2 := by
     intros l1 l2 hle hne hlen;
-    induction' l1 with x l1 ih generalizing l2 <;> induction' l2 with y l2 ih' <;> simp_all +decide [ List.Lex ];
+    induction' l1 with x l1 ih generalizing l2 <;> induction' l2 with y l2 ih' <;> simp_all
     by_cases hxy : x = y;
     · grind +suggestions;
     · have hxy_lt : x < y := by
-        exact lt_of_le_of_ne ( hle 0 bot_le ) hxy;
+        refine lt_of_le_of_ne (hle 0 ?_) hxy
+        linarith
       exact List.Lex.rel (by
       cases x <;> cases y <;> simp_all +decide [ withTop.lex ]);
   convert h_lex _ _ _ _ _ <;> simp_all +decide [ Vector.ext_iff ];
@@ -38,12 +36,12 @@ lemma h_1_step_lex_decreasing {n : ℕ} (prob : STRIPS n) (bef : Vector (WithTop
 -- termination by the fact that h_1_step is monotone in its bef argument
 def h_1_iter_fix (n : ℕ) (prob : STRIPS n) (bef : Vector (WithTop ℕ) n) : Vector (WithTop ℕ) n :=
   let next := h_1_step n prob bef
-  if h : next = bef then
+  if _forTermination : next = bef then
     bef
   else
     h_1_iter_fix n prob next
 termination_by bef
-decreasing_by exact h_1_step_lex_decreasing prob bef h
+decreasing_by exact h_1_step_lex_decreasing prob bef _forTermination
 
 /-- At the fixpoint, h_1_step is idempotent. -/
 lemma h_1_iter_fix_is_fixpoint (n : ℕ) (prob : STRIPS n) (bef : Vector (WithTop ℕ) n) :
@@ -87,7 +85,7 @@ lemma Vector.le_maxFinite {n : ℕ} {v : Vector (WithTop ℕ) n} {i : Fin n} {c 
 def h_1_new {n : ℕ} (prob : STRIPS n) (s : State' n) : ℕ :=
   let result := h_1_iter_fix n prob (h_1_base n s)
   let s_b := vec_to_state n result
-  
+
   -- check if the goal has been reached
   if h_sat : satisfies' prob.goal' s_b then
     let pre_cost : List ℕ := prob.goal'.val.attach.map (fun x : { x : Fin n // x ∈ prob.goal'.val } =>
@@ -146,9 +144,11 @@ lemma h_1_new_goal_aware {n : ℕ} (prob : STRIPS n) (g : VarSet' n) (s : State'
   have h_contra : (h_1_iter_fix n { varNames := prob.varNames, actions' := prob.actions', init' := prob.init', goal' := g } (h_1_base n s))[i].isSome = true := by
                                       grind;
   have h_contra : (vec_to_state n (h_1_iter_fix n { varNames := prob.varNames, actions' := prob.actions', init' := prob.init', goal' := g } (h_1_base n s)))[i.val] = true := by
-                                                      convert h_contra using 1;
-                                                      exact?;
-  unfold vec_to_state at h_contra; aesop;
+    convert h_contra using 1
+    apply vec_to_state_getElem n _ i
+  unfold vec_to_state at h_contra
+  aesop
+
 /-
 If satisfies' g state holds and i ∈ g, then state[i] = true.
 -/
@@ -247,7 +247,7 @@ lemma fixpoint_get_le_action_cost {n : ℕ} (prob : STRIPS n)
       a.cost + a.pre'.val.attach.foldl (fun acc (x : { x : Fin n // x ∈ a.pre'.val }) =>
         max acc ((result[x.1]).get (vec_to_state_isSome_of_applicable n result a happ x.1 x.2))) 0 := by
   convert fixpoint_value_le_action_cost prob result hfix a ha i hadd happ using 1;
-  split_ifs <;> simp_all +decide [ List.foldl_map ];
+  split_ifs <;> simp_all +decide
   · have h_eq : result[i] ≤ some a.cost := by
       grind +suggestions;
     simp_all +singlePass [ WithTop.le_def ];
@@ -279,10 +279,9 @@ The regressed goal for singleton [g_atom] with g_atom ∈ a.add' contains a.pre'
 -/
 lemma regress_singleton_add_contains_pre {n : ℕ}
     (a : Action n) (g_atom : Fin n)
-    (hadd : g_atom ∈ a.add'.val)
     (j : Fin n) (hj : j ∈ a.pre'.val) :
     j ∈ (varset'_of_state' (regress' a (state'_of_varset' ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩))).val := by
-  unfold regress';
+  unfold regress'
   grind +suggestions
 
 /-
@@ -290,7 +289,6 @@ For multi-atom goals, h_1_new(g, s) ≤ max of singletons.
 -/
 set_option maxHeartbeats 400000 in
 lemma h_1_new_multi_atom {n : ℕ} (prob : STRIPS n) (g : VarSet' n) (s : State' n)
-    (hng : ¬ satisfies' g s = true)
     (hlen : g.1.length > 1) :
     h_1_new (replace_goal prob g) s ≤
       (g.1.map (fun g' => h_1_new (replace_goal prob ⟨[g'], by simp [List.SortedLT, StrictMono]⟩) s)).max
@@ -298,9 +296,11 @@ lemma h_1_new_multi_atom {n : ℕ} (prob : STRIPS n) (g : VarSet' n) (s : State'
   unfold h_1_new;
   simp +decide [ h_1_iter_fix_replace_goal ];
   split_ifs <;> simp_all +decide [ replace_goal ];
-  · -- Since the goal is satisfied, each singleton goal must also be satisfied.
-    have h_singleton_satisfied : ∀ g' ∈ g.val, satisfies' ⟨[g'], by simp [List.SortedLT, StrictMono]⟩ (vec_to_state n (h_1_iter_fix n prob (h_1_base n s))) = true := by
-      exact?;
+  case neg h h_1 =>
+    -- Since the goal is satisfied, each singleton goal must also be satisfied.
+    have h_singleton_satisfied : ∀ g' ∈ g.val, satisfies' ⟨[g'], by simp [List.SortedLT, StrictMono]⟩ (vec_to_state n (h_1_iter_fix n prob (h_1_base n s))) = true :=
+      fun g' a => satisfies'_singleton_of_mem (replace_goal prob g).goal'
+                    (vec_to_state n (h_1_iter_fix n prob (h_1_base n s))) g' h a
     simp_all +decide [ List.max ];
     congr! 2;
     refine' List.ext_get _ _ <;> aesop;
@@ -330,11 +330,12 @@ set_option maxHeartbeats 800000 in
 lemma g_atom_in_regressed_goal_if_not_added {n : ℕ}
     (a : Action n) (g_atom : Fin n)
     (hadd : g_atom ∉ a.add'.val)
-    (hreg : regressable' a (state'_of_varset' ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩) = true) :
+    (_hreg : regressable' a (state'_of_varset' ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩) = true) :
     g_atom ∈ (varset'_of_state' (regress' a (state'_of_varset' ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩))).val := by
-  unfold regress' at *; simp_all +decide [ state'_of_varset'_getElem ] ;
-  unfold regressable' at hreg;
-  simp_all +decide [ BitVec.getElem_cast, List.ofFn_eq_map ];
+  unfold regress' at *; simp_all only [Fin.getElem_fin]
+  unfold regressable' at _hreg
+  simp_all only [Fin.getElem_fin, Bool.not_eq_eq_eq_not, Bool.not_true, Bool.decide_or,
+    Bool.decide_eq_false, Bool.decide_eq_true, List.all_eq_true, Bool.or_eq_true]
   grind +suggestions
 
 /-
@@ -348,7 +349,7 @@ lemma h_1_new_mono_of_mem {n : ℕ} (prob : STRIPS n) (g_atom : Fin n) (s : Stat
   generalize_proofs at *; (
   unfold h_1_new; simp +decide [ h_simp ] ;
   split_ifs <;> simp_all +decide [ replace_goal ];
-  · apply List.le_max_of_mem; simp [hmem];
+  · apply List.le_max_of_mem; simp
     exact ⟨ g_atom, hmem, rfl ⟩;
   · simp +decide [ List.max ];
     exact Nat.le_succ_of_le ( Vector.le_maxFinite ( h_1_iter_fix n prob ( h_1_base n s ) |> fun x => x[g_atom] |> fun y => by aesop ) );
@@ -369,9 +370,9 @@ lemma h_1_new_singleton_bellman_add_case1 {n : ℕ} (prob : STRIPS n) (g_atom : 
   -- Since `g_atom` is not discovered at the fixpoint, `h_1_new` returns `Vector.maxFinite result + 1`.
   have h_h1_new_g_atom : h_1_new (replace_goal prob ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩) s = Vector.maxFinite (h_1_iter_fix n prob (h_1_base n s)) + 1 := by
     -- Since `g_atom` is not discovered at the fixpoint, `h_1_new` returns `Vector.maxFinite result + 1` by definition.
-    simp [h_1_new, hnotSome];
-    split_ifs <;> simp_all +decide [ vec_to_state_getElem ];
-    · simp_all +decide [ replace_goal ];
+    simp [h_1_new]
+    split_ifs <;> simp_all
+    · simp_all +decide [ replace_goal ]
     · rename_i h₁ h₂;
       erw [ satisfies'_singleton ] at h₁ ; simp_all +decide [ vec_to_state_getElem ];
       exact absurd h₁ ( by erw [ h_1_iter_fix_replace_goal ] ; aesop );
@@ -382,11 +383,10 @@ lemma h_1_new_singleton_bellman_add_case1 {n : ℕ} (prob : STRIPS n) (g_atom : 
     · cases h : ( h_1_iter_fix n prob ( h_1_base n s ) )[g_atom] <;> aesop;
     · exact fun j hj => by specialize hnotSome j hj; cases h : ( h_1_iter_fix n prob ( h_1_base n s ) )[j] <;> aesop;
   obtain ⟨ j, hj₁, hj₂ ⟩ := h_not_discover_j;
-  have h_j_in_rg : j ∈ (varset'_of_state' (regress' a (state'_of_varset' ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩))).val := by
-    apply regress_singleton_add_contains_pre a g_atom hadd j hj₁;
+  have h_j_in_rg : j ∈ (varset'_of_state' (regress' a (state'_of_varset' ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩))).val := regress_singleton_add_contains_pre a g_atom j hj₁
   have h_h1_new_rg : h_1_new (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩)))) s = Vector.maxFinite (h_1_iter_fix n prob (h_1_base n s)) + 1 := by
     unfold h_1_new;
-    simp +decide [ h_1_iter_fix_replace_goal, vec_to_state_getElem, hj₂ ];
+    simp +decide [ h_1_iter_fix_replace_goal ];
     intro h; have := satisfies'_mem _ _ _ h h_j_in_rg; simp_all +decide [ vec_to_state_getElem ] ;
   linarith
 
@@ -407,7 +407,7 @@ lemma h_1_new_singleton_bellman_add_case2a {n : ℕ} (prob : STRIPS n) (g_atom :
     have h_foldl_le_max : ∀ x ∈ a.pre'.val.attach, ((result[x.1]).get (vec_to_state_isSome_of_applicable n result a happ x.1 x.2)) ≤ h_1_new (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩)))) s := by
       intro x hx
       have h_mem : x.1 ∈ (varset'_of_state' (regress' a (state'_of_varset' ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩))).val := by
-        apply regress_singleton_add_contains_pre a g_atom hadd x.1 x.2;
+        apply regress_singleton_add_contains_pre a g_atom x.1 x.2;
       have := h_1_new_mono_of_mem prob x.1 s (varset'_of_state' (regress' a (state'_of_varset' ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩))) ?_;
       · refine le_trans ?_ this;
         unfold h_1_new;
@@ -428,7 +428,7 @@ lemma h_1_new_singleton_bellman_add_case2a {n : ℕ} (prob : STRIPS n) (g_atom :
       · unfold satisfies'; aesop;
       · exact hSome.symm;
     unfold h_1_new;
-    simp +decide [ h_satisfies, replace_goal ];
+    simp +decide [ replace_goal ];
     split_ifs ; simp_all +decide [ List.max ];
     · congr! 1;
       convert h_1_iter_fix_replace_goal prob ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩ (h_1_base n s) |> congr_arg (fun x => x[g_atom]) using 1;
@@ -443,8 +443,7 @@ lemma h_1_new_singleton_bellman_add_case2a {n : ℕ} (prob : STRIPS n) (g_atom :
 Case 2b: g_atom discovered, action a NOT applicable at fixpoint.
 -/
 lemma h_1_new_singleton_bellman_add_case2b {n : ℕ} (prob : STRIPS n) (g_atom : Fin n) (s : State' n)
-    (a : Action n) (ha : a ∈ prob.actions')
-    (hadd : g_atom ∈ a.add'.val)
+    (a : Action n)
     (hSome : ((h_1_iter_fix n prob (h_1_base n s))[g_atom]).isSome)
     (hnapp : ¬ applicable' a (vec_to_state n (h_1_iter_fix n prob (h_1_base n s))) = true) :
     h_1_new (replace_goal prob ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩) s ≤
@@ -454,7 +453,7 @@ lemma h_1_new_singleton_bellman_add_case2b {n : ℕ} (prob : STRIPS n) (g_atom :
     contrapose! hnapp; simp_all +decide [ satisfies', vec_to_state_getElem ] ;
   obtain ⟨ j, hj₁, hj₂ ⟩ := h_not_applicable
   have h_j_in_rg : j ∈ (varset'_of_state' (regress' a (state'_of_varset' ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩))).val := by
-    apply regress_singleton_add_contains_pre a g_atom hadd j hj₁;
+    apply regress_singleton_add_contains_pre a g_atom j hj₁;
   have h_h_1_new_rg : h_1_new (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩)))) s = Vector.maxFinite (h_1_iter_fix n prob (h_1_base n s)) + 1 := by
     unfold h_1_new;
     simp +decide [ h_1_iter_fix_replace_goal ];
@@ -473,7 +472,6 @@ lemma h_1_new_singleton_bellman_add_case2b {n : ℕ} (prob : STRIPS n) (g_atom :
 
 /-- For singleton goals with g_atom ∈ a.add', h_1_new satisfies the bellman bound. -/
 lemma h_1_new_singleton_bellman_add {n : ℕ} (prob : STRIPS n) (g_atom : Fin n) (s : State' n)
-    (hng : ¬ satisfies' ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩ s = true)
     (a : Action n) (ha : a ∈ prob.actions')
     (hadd : g_atom ∈ a.add'.val) :
     h_1_new (replace_goal prob ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩) s ≤
@@ -485,17 +483,16 @@ lemma h_1_new_singleton_bellman_add {n : ℕ} (prob : STRIPS n) (g_atom : Fin n)
     have hSome : (result[g_atom]).isSome = true := by rw [hcase]; rfl
     by_cases happ : applicable' a (vec_to_state n result) = true
     · exact h_1_new_singleton_bellman_add_case2a prob g_atom s a ha hadd hSome happ
-    · exact h_1_new_singleton_bellman_add_case2b prob g_atom s a ha hadd hSome happ
+    · exact h_1_new_singleton_bellman_add_case2b prob g_atom s a hSome happ
 
 /-- For singleton goals, h_1_new satisfies the pointwise bellman bound. -/
 lemma h_1_new_singleton_bellman {n : ℕ} (prob : STRIPS n) (g_atom : Fin n) (s : State' n)
-    (hng : ¬ satisfies' ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩ s = true)
     (a : Action n) (ha : a ∈ prob.actions')
     (hreg : regressable' a (state'_of_varset' ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩) = true) :
     h_1_new (replace_goal prob ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩) s ≤
       a.cost + h_1_new (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩)))) s := by
   by_cases hadd : g_atom ∈ a.add'.val
-  · exact h_1_new_singleton_bellman_add prob g_atom s hng a ha hadd
+  · exact h_1_new_singleton_bellman_add prob g_atom s a ha hadd
   · calc h_1_new (replace_goal prob ⟨[g_atom], _⟩) s
         ≤ h_1_new (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' ⟨[g_atom], _⟩)))) s :=
           h_1_new_mono_of_mem prob g_atom s _ (g_atom_in_regressed_goal_if_not_added a g_atom hadd hreg)
@@ -508,7 +505,7 @@ lemma h_1_has_invar {n : ℕ} (prob : STRIPS n):
   show _
   split_ifs with hsat hlen
   · exact h_1_new_goal_aware prob g s hsat
-  · exact h_1_new_multi_atom prob g s hsat hlen
+  · exact h_1_new_multi_atom prob g s hlen
   · push_neg at hlen
     intro a ha hreg
     rcases g with ⟨l, hl⟩
@@ -516,11 +513,10 @@ lemma h_1_has_invar {n : ℕ} (prob : STRIPS n):
     | nil => simp [satisfies'] at hsat
     | cons g' t =>
       cases t with
-      | nil => exact h_1_new_singleton_bellman prob g' s hsat a ha hreg
+      | nil => exact h_1_new_singleton_bellman prob g' s a ha hreg
       | cons => exfalso; simp [List.length] at hlen
 
 theorem h_1_new_admissible {n : ℕ} (prob : STRIPS n) :
-  heur_admissible prob (h_1_new prob) := by
-    apply admissible_of_h_1_regression_invariant
-    apply h_1_has_invar
+  heur_admissible prob (h_1_new prob) :=
+    admissible_of_h_1_regression_invariant prob h_1_new (h_1_has_invar prob) prob.goal'
 end Validator

@@ -1,29 +1,4 @@
-import Mathlib.Data.Bool.AllAny
-import Mathlib.Data.FinEnum
-import Mathlib.Data.Finset.Empty
-import Mathlib.Data.List.MinMax
-import Mathlib.Order.Basic
-import Mathlib.Data.Multiset.DershowitzManna
-import Mathlib.Data.Finsupp.WellFounded
-import Mathlib.Data.List.ToFinsupp
-import Mathlib.Data.List.Pairwise
-import Mathlib.Algebra.Group.WithOne.Defs
-
-import Graphlib.WF
-
-import Graphlib.Lists
-import Graphlib.FinEnum
-import Graphlib.Basic
-import Graphlib.NatGraph
-import Graphlib.SearchState
-import Graphlib.SearchAlgorithm
-import Graphlib.SearchStep
 import Graphlib.HeuristicSearch
-import Init.SimpLemmas
-import Init.Core
-
-set_option trace.split.failure true
---set_option diagnostics true
 
 -- def local global variable for a graph
 variable {V : Type} [FinEnum V]
@@ -223,12 +198,12 @@ lemma astar_expand_path_one_on_stack {head : V} {tail : List V} (goal v : V) (v_
       have w_visited : w ∈ state.visited := by
         specialize on_stack_or_nei_visited ⟨ v, v_visited ⟩
         grind
-      
+
       rw [compose] at head_not_mem_v_goal
       rw [Walk.support_cons] at head_not_mem_v_goal
       simp only [List.mem_cons, not_or] at head_not_mem_v_goal
       obtain ⟨head_ne_v,head_not_mem_w_goal ⟩ := head_not_mem_v_goal
-      
+
       have w_ne_head : w ≠ head := by
         by_contra
         have head_mem_supp : head ∈ w_goal.support := by
@@ -791,7 +766,7 @@ lemma astar_open_node_with_lower_f (start goal : V) (s : WeightedDiGraph.base_se
     Walk.nodup_prefix_of_append_nodup start_v' v'_goal (compose ▸ p.prop)
   have start_v'_cheapest : Path.is_cheapest ⟨start_v', start_v'_nodup⟩ :=
     Path.subpath_of_cheapest_is_cheapest p start_v' v'_goal compose start_v'_nodup p_cheapest
-  
+
   specialize has_astar_invar start_v' start_v'_nodup start_v'_cheapest
 
   obtain ⟨v'',v''_in_support,v''_open,v''_cost_is⟩ := has_astar_invar
@@ -819,7 +794,7 @@ lemma astar_open_node_with_lower_f (start goal : V) (s : WeightedDiGraph.base_se
     · unfold admissible at is_admissible
       specialize is_admissible v''
       unfold cost_ge at is_admissible
-  
+
       -- subwalk of p
       have v''_goal_nodup : v''_goal.support.Nodup :=
         Walk.nodup_suffix_of_append_nodup start_v'' v''_goal (compose ▸ p.prop)
@@ -843,7 +818,7 @@ theorem astar_is_optimal (start : V) (goal : V)
     ((astar (g:=g) heur start goal).get returned_path).is_cheapest := by
     let final : WeightedDiGraph.base_search_state g (ℕ×ℕ) × Bool := WeightedDiGraph.search_with_stack_step (goal:=goal) (start_state := WeightedDiGraph.base_search_state_initial start (0,0)) (hsearch_step_expand heur) (hsearch_expand_metric_reduction heur)
     let final_state := final.1
- 
+
     -- general properties
     have h_4 : WeightedDiGraph.search_prop_stack_head_is_goal goal final_state := by
       --intro terminated_with_goal_found
@@ -908,7 +883,7 @@ theorem astar_is_optimal (start : V) (goal : V)
       · rfl
       · apply WeightedDiGraph.base_invar_carries_over_stack_step
         apply hsearch_expand_keeps_base_invars
-    
+
     -- Lift the bundled A* invariant to the final state
     have astar_full_invar_at_end : astar_all_invar heur start goal final_state := by
       have right_class : (fun s => astar_all_invar heur start goal

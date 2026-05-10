@@ -1,16 +1,7 @@
 import Validator.PlanningTask.Core
 import Validator.PlanningTask.Basic
-import Graphlib.NatGraph
-import Graphlib.Planning
+import Graphlib.AStar
 import Graphlib.Heuristics
-
-import Graphlib.temp
-
-import Mathlib.Logic.Lemmas
-import Mathlib.Data.Fintype.Fin
-import Mathlib.Data.Finset.Card
-import Mathlib.Order.Interval.Finset.Fin
-import Mathlib.Data.Vector.Basic
 
 namespace Validator
 
