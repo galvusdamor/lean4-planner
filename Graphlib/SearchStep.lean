@@ -9,7 +9,7 @@ namespace WeightedDiGraph
 -- def local global variable for a graph
 variable {V : Type} {E : Type} [FinEnum V] [DecidableEq V]
 abbrev search_expand (G : WeightedDiGraph V E) (D : Type) [FValueComp D]
-  {state_type : Type} [has_base_search_state G D state_type]:=
+  {state_type : Type} [has_base_search_state G D state_type] : Type :=
     state_type → V → List V → state_type
 
 

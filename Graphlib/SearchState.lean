@@ -4,26 +4,20 @@ import Mathlib.Data.Prod.Lex
 import Mathlib.Order.Basic
 import Mathlib.Algebra.Order.Kleene
 
---set_option trace.Meta.synthInstance true
-
-
--- custom less than predicate on the type of the F-Values
+/-- custom less than predicate on the type of the F-Values -/
 class FValueComp (D : Type) where
-  lt : D → D → Prop -- WellFounded requires prop here. But we know it is actually bool
-  lt_B : D → D → Bool
-  wf : WellFounded lt
+  lt : D → D → Bool
+  wf : WellFounded (fun x y => lt x y = true)
   lt_irr (x : D) : ¬ lt x x
   lt_trans (x y z : D) : lt x y → lt y z → lt x z
   lt_antisymm (x y : D) : lt x y → lt y x → x = y
   lt_sem_tot (x y : D) : x ≠ y → lt x y ∨ lt y x
-  lt_B_eq (x y : D) : lt x y = lt_B x y
 
 infix:90 " ≺ " => FValueComp.lt
 
 namespace Nat
 instance : FValueComp ℕ where
   lt (x y : ℕ) : Bool := x < y
-  lt_B (x y : ℕ) : Bool := x < y
   wf := by
     simp
     apply lt_wfRel.wf
@@ -31,8 +25,7 @@ instance : FValueComp ℕ where
   lt_trans := by grind
   lt_antisymm := by grind
   lt_sem_tot := by grind
-  lt_B_eq := by grind
-end Nat 
+end Nat
 
 
 class SizeOfFromPreOrder (D : Type) [Preorder D] [SizeOf D] where
@@ -44,7 +37,7 @@ instance : SizeOfFromPreOrder ℕ where
   comp := by intro x y leq ; simp_all
 
 @[simp] instance instSizeOfNatFin (n : ℕ) : SizeOf (ℕ × Fin n) where
-  sizeOf x := x.fst * (n+1) + x.snd 
+  sizeOf x := x.fst * (n+1) + x.snd
 
 instance (n : ℕ) : SizeOfFromPreOrder (ℕ × Fin n) where
   comp := by
@@ -59,7 +52,7 @@ instance (n : ℕ) : SizeOfFromPreOrder (ℕ × Fin n) where
       obtain ⟨a,b⟩  := ord
       simp_all
       apply add_lt_add_of_lt_of_le
-      · repeat rw [Nat.mul_succ] 
+      · repeat rw [Nat.mul_succ]
         apply add_lt_add_of_le_of_lt
         · apply mul_le_mul_right
           apply le_iff_eq_or_lt.mpr
@@ -92,19 +85,19 @@ namespace WeightedDiGraph
 
 structure base_search_state {V E : Type} [FinEnum V] (G : WeightedDiGraph V E) (D : Type) [FValueComp D]  where
     visited : Finset V
-    pathOrder : V → D 
+    pathOrder : V → D
     mother : visited → V
     stack : List V
 
 
 -- type class for possible expansions later on
-class has_base_search_state {V E : Type} [FinEnum V] (G : WeightedDiGraph V E) (D : Type) [FValueComp D] 
+class has_base_search_state {V E : Type} [FinEnum V] (G : WeightedDiGraph V E) (D : Type) [FValueComp D]
     (B : Type) where
   to_base_state : B → base_search_state G D
 
 instance {V E : Type} [FinEnum V] (G : WeightedDiGraph V E) (D : Type) [FValueComp D]:
     has_base_search_state G D (base_search_state G D) where
-  to_base_state := fun x => x 
+  to_base_state := fun x => x
 
 
 
@@ -147,7 +140,7 @@ abbrev search_invar_mother_is_adjacent (start : V) (s : base_search_state G D):=
 
 @[simp]
 abbrev search_invar_mother_decreasing_path_order (start : V) (s : base_search_state G D) :=
-      ∀ x : s.visited, ↑x ≠ start → s.pathOrder (s.mother x) ≺ s.pathOrder x 
+      ∀ x : s.visited, ↑x ≠ start → s.pathOrder (s.mother x) ≺ s.pathOrder x
 
 @[simp]
 abbrev search_invar_on_stack_or_all_neighbours_visited (s : base_search_state G D):=
@@ -176,8 +169,8 @@ abbrev search_invar_all_basic (start : V) (s : base_search_state G D) :=
 -- initial configuration of DFS and BFS
 @[reducible]
 def base_search_state_initial (start : V) (d : D): base_search_state G D :=
-  let initialVisited : Finset V := ⟨ {start},  by simp ⟩ 
-  let initialMother : initialVisited → V := fun x => start 
+  let initialVisited : Finset V := ⟨ {start},  by simp ⟩
+  let initialMother : initialVisited → V := fun x => start
   let initialPathOrder : V → D := fun x => d
   let initialStack : List V := [start]
   base_search_state.mk initialVisited initialPathOrder initialMother initialStack
@@ -188,7 +181,7 @@ variable (start : V) (d : D)
 ----- Proofs that the initial state of the DFS satisfies the invariants
 @[simp]
 lemma search_invar_stack_is_visited_initial:
-      search_invar_stack_is_visited (G:=G) (base_search_state_initial start d) := by simp 
+      search_invar_stack_is_visited (G:=G) (base_search_state_initial start d) := by simp
 
 @[simp]
 lemma search_invar_mother_is_visited_initial:
@@ -196,29 +189,29 @@ lemma search_invar_mother_is_visited_initial:
 
 @[simp]
 lemma search_invar_mother_is_adjacent_initial:
-      search_invar_mother_is_adjacent (G:=G) start (base_search_state_initial start d) := by 
+      search_invar_mother_is_adjacent (G:=G) start (base_search_state_initial start d) := by
       unfold search_invar_mother_is_adjacent
       unfold base_search_state_initial
       simp
 
 @[simp]
 lemma search_invar_mother_decreasing_path_order_initial:
-      search_invar_mother_decreasing_path_order (G:=G) start (base_search_state_initial start d) := by 
-      unfold search_invar_mother_decreasing_path_order  
+      search_invar_mother_decreasing_path_order (G:=G) start (base_search_state_initial start d) := by
+      unfold search_invar_mother_decreasing_path_order
       unfold base_search_state_initial
       simp
 
 @[simp]
 lemma search_invar_on_stack_or_all_neighbours_visited_initial:
-      search_invar_on_stack_or_all_neighbours_visited (G:=G) (base_search_state_initial start d) := by 
-      unfold search_invar_on_stack_or_all_neighbours_visited  
+      search_invar_on_stack_or_all_neighbours_visited (G:=G) (base_search_state_initial start d) := by
+      unfold search_invar_on_stack_or_all_neighbours_visited
       unfold base_search_state_initial
       simp
 
 @[simp]
 lemma search_invar_start_visited_initial:
-      search_invar_start_visited (G:=G) start (base_search_state_initial start d) := by 
-      unfold search_invar_start_visited  
+      search_invar_start_visited (G:=G) start (base_search_state_initial start d) := by
+      unfold search_invar_start_visited
       unfold base_search_state_initial
       simp
 
@@ -229,5 +222,5 @@ lemma base_search_state_initial_all_basic_invars:
 
 lemma visited_is_smaller_than_V (state : base_search_state G D): state.visited.card ≤ Fintype.card V := by
     apply Finset.card_le_univ
- 
+
 end WeightedDiGraph

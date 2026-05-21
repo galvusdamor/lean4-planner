@@ -6,11 +6,6 @@ import Mathlib.Data.List.MinMax
 import Graphlib.FinEnum
 import Graphlib.SearchState
 
-set_option trace.split.failure true
---set_option diagnostics true
-
-
-
 namespace WeightedDiGraph
 
 variable {V : Type} {E : Type} [FinEnum V]
@@ -18,7 +13,6 @@ variable {V : Type} {E : Type} [FinEnum V]
 -- the graph should be an explicit parameter here
 abbrev search_step_function (G : WeightedDiGraph V E) (D : Type) [FValueComp D] (state_type : Type) [has_base_search_state G D state_type] :=
       V → state_type → state_type × (Option Bool)
-
 
 -- def local global variable for a graph
 variable {G : WeightedDiGraph V E}
@@ -128,7 +122,6 @@ theorem extract_path_visited_proof_irrelevant (start : V) (s : base_search_state
       try subst v_eq_start -- does not work in one case
       simp_all only
 
-
 theorem search_termination_with_empty_stack_implies_goal_visited (start : V) (goal : V) (f : V)
   (theWalk : G.Walk f goal)
   (final_state : base_search_state G D)
@@ -145,8 +138,6 @@ theorem search_termination_with_empty_stack_implies_goal_visited (start : V) (go
         apply on_stack_or_all_nei_visited f f_visited nextNode adj
       · exact final_stack_empty
       · exact on_stack_or_all_nei_visited
-
-
 
 lemma support_of_path_visited (u v : V) (w : G.Walk u v)
     (state : base_search_state G D)
@@ -260,52 +251,43 @@ lemma run_walk_through_state_not_on_stack_yields_all_visited
             apply all_start_nei_visited
             exact start_adj_w
 
+lemma path_has_earliest_node_on_stack (start v : V) [DecidableEq V] (p : G.Path start v)
+    (state : base_search_state G D) :
+    (∃ u ∈ p.support, u ∈ state.stack ∧ u ≠ v) →
+    (∃ u ∈ p.support, u ∈ state.stack ∧ u ≠ v ∧ (p.support.takeWhile (· ≠ u)).all (· ∉ state.stack)) := by
+  intro ⟨ u, u_in_support, u_on_stack, u_neq_v⟩
+  let opt_first : Option V := p.support.find? (· ∈ state.stack)
+  have opt_first_is_some : opt_first.isSome := by
+    apply List.find?_isSome.mpr ; use u ; simp_all
+  have support_compose : p.support = p.support.dropLast ++ [v] := by apply Walk.support_last
+  use opt_first.get opt_first_is_some
+  and_intros
+  · apply List.get_find?_mem
+  · unfold opt_first
+    grind [List.get_find?_prop]
+  · unfold opt_first
+    apply List.find?_nodup
+    · apply support_compose
+    · by_contra v_in_drop_last
+      have support_is_nodup : p.val.support.Nodup := p.prop
+      unfold Path.support at support_compose
+      rw [support_compose] at support_is_nodup
+      apply List.nodup_append.mp at support_is_nodup
+      have diff := support_is_nodup.right.right
+      specialize diff v v_in_drop_last v
+      grind
+    · apply u_in_support
+    · simp_all
+    · simp_all
+  · unfold opt_first
+    grind [List.takeWhile_until_find?]
 
-lemma path_has_earliest_node_on_stack (start v : V) --(v_ne_start : v ≠ start)
-  [DecidableEq V]
-  (p : G.Path start v)
-  (state : base_search_state G D)
-  :
-  (∃ u ∈ p.support, u ∈ state.stack ∧ u ≠ v) →
-  (∃ u ∈ p.support, u ∈ state.stack ∧ u ≠ v ∧ (p.support.takeWhile (· ≠ u)).all (· ∉ state.stack)) := by
-    intro ⟨ u, u_in_support, u_on_stack, u_neq_v⟩
-    let opt_first : Option V := p.support.find? (· ∈ state.stack)
-    have opt_first_is_some : opt_first.isSome := by
-      apply List.find?_isSome.mpr ; use u ; simp_all
-
-    have support_compose : p.support = p.support.dropLast ++ [v] := by apply Walk.support_last
-
-    use opt_first.get opt_first_is_some
-    and_intros
-    · apply List.get_find?_mem
-    · unfold opt_first
-      grind [List.get_find?_prop]
-    · unfold opt_first
-      apply List.find?_nodup
-      · apply support_compose
-      · by_contra v_in_drop_last
-        have support_is_nodup : p.val.support.Nodup := p.prop
-        unfold Path.support at support_compose
-        rw [support_compose] at support_is_nodup
-        apply List.nodup_append.mp at support_is_nodup
-        have diff := support_is_nodup.right.right
-        specialize diff v v_in_drop_last v
-        grind
-      · apply u_in_support
-      · simp_all
-      · simp_all
-    · unfold opt_first
-      grind [List.takeWhile_until_find?]
-
-lemma run_path_through_state_yields_node_on_stack_or_all_visited_temp
-  (start v : V) (v_ne_start : v ≠ start)
-  (p : G.Path start v)
-  (state : base_search_state G D)
-  (start_visited : search_invar_start_visited start state)
-  (on_stack_or_nei_visited : search_invar_on_stack_or_all_neighbours_visited state)
-  :
-  (∃ u ∈ p.support, u ∈ state.stack ∧ u ≠ v) ∨
-    (v ∈ state.visited ∧ ∀ u ∈ p.support, u ≠ v → u ∉ state.stack ∧ u ∈ state.visited) := by
+lemma run_path_through_state_yields_node_on_stack_or_all_visited_temp (start v : V)
+    (v_ne_start : v ≠ start) (p : G.Path start v) (state : base_search_state G D)
+    (start_visited : search_invar_start_visited start state)
+    (on_stack_or_nei_visited : search_invar_on_stack_or_all_neighbours_visited state)
+    : (∃ u ∈ p.support, u ∈ state.stack ∧ u ≠ v)
+    ∨ (v ∈ state.visited ∧ ∀ u ∈ p.support, u ≠ v → u ∉ state.stack ∧ u ∈ state.visited) := by
   by_cases no_onstack : (∃ u ∈ p.support, u ∈ state.stack ∧ u ≠ v)
   · left; exact no_onstack
   · right
@@ -315,19 +297,15 @@ lemma run_path_through_state_yields_node_on_stack_or_all_visited_temp
       have h := no_onstack u u_in_support u_on_stack
       contradiction
     constructor
-    · apply run_walk_through_state_not_on_stack_yields_all_visited start v v_ne_start p p.prop state start_visited on_stack_or_nei_visited
-      · grind
-      · apply Walk.goal_in_support
+    · apply run_walk_through_state_not_on_stack_yields_all_visited start v v_ne_start p p.prop
+        state start_visited on_stack_or_nei_visited (by grind) _ (Walk.goal_in_support _)
     · intro u u_insupport u_neq_v
       constructor
       · apply none_on_stack
         · exact u_insupport
         · exact u_neq_v
-      · apply run_walk_through_state_not_on_stack_yields_all_visited start v v_ne_start p p.prop state start_visited on_stack_or_nei_visited
-        · grind
-          --exact no_onstack
-        · exact u_insupport
-
+      · apply run_walk_through_state_not_on_stack_yields_all_visited start v v_ne_start p p.prop
+          state start_visited on_stack_or_nei_visited (by grind) _ u_insupport
 
 lemma run_path_through_state_yields_node_on_stack_or_all_visited
   [DecidableEq V]
@@ -735,9 +713,7 @@ lemma search_returns_with_node_on_stack_or_all_neighbours_visited:
     exact all_invars.2.2.2.2.1
 
 
-------------------------------------------------------------------------------
--- Execution of search
-
+/-! ## Execution of search --/
 
 def search_exe
     (goal_on_stack_if_terminated : search_step_goal_on_stack_if_terminated (search_step:=search_step)):
