@@ -9,27 +9,18 @@ variable {g : NatGraph V}
 namespace Nat
 
 @[simp]
-def FValueLT (x y : ℕ × ℕ) : Prop := Prod.Lex (· < ·) (· < ·) x y
-
-@[simp]
-def FValueLT_B (x y : ℕ × ℕ) : Bool := Prod.Lex (· < ·) (· < ·) x y
+def FValueLT (x y : ℕ × ℕ) : Bool := Prod.Lex (· < ·) (· < ·) x y
 
 instance : FValueComp (ℕ × ℕ) where
   lt := FValueLT
-  lt_B := FValueLT_B
   wf := by
     unfold FValueLT
+    simp only [decide_eq_true_eq]
     apply Prod.Lex.instWellFoundedLTLex.wf
   lt_irr := by unfold FValueLT ; grind
   lt_trans := by unfold FValueLT ; grind
   lt_antisymm := by unfold FValueLT ; grind
   lt_sem_tot := by unfold FValueLT ; grind
-  lt_B_eq := by simp
-
-
-instance : DecidableRel FValueLT := by
-  unfold FValueLT
-  use inferInstance
 
 end Nat
 
@@ -40,27 +31,25 @@ open WeightedDiGraph
 
 
 lemma hsearch_merge_trans [FValueComp (ℕ×ℕ)] (a b c : ℕ × ℕ)
-  (a_b : a = b || FValueComp.lt_B a b)
-  (b_c : b = c || FValueComp.lt_B b c) :
-  a = c || FValueComp.lt_B a c := by
+  (a_b : a = b || FValueComp.lt a b)
+  (b_c : b = c || FValueComp.lt b c) :
+  a = c || FValueComp.lt a c := by
   by_cases a_eq_b : a = b <;> by_cases b_eq_c : b = c
   · simp_all
   · simp_all
   · simp_all
   · simp_all
-    repeat rw [← FValueComp.lt_B_eq] at a_b b_c ⊢
     right
     apply FValueComp.lt_trans
     · exact a_b
     · exact b_c
 
 lemma hsearch_merge_total [FValueComp (ℕ×ℕ)] (a b: ℕ × ℕ):
-  (a = b || FValueComp.lt_B a b) || (b = a || FValueComp.lt_B b a) := by
+  (a = b || FValueComp.lt a b) || (b = a || FValueComp.lt b a) := by
   by_cases a_eq_b : a = b
   · grind
   · simp_all
     have h := FValueComp.lt_sem_tot a b a_eq_b
-    repeat rw [← FValueComp.lt_B_eq]
     cases h
     case neg.inl f => left ; exact f
     case neg.inr f => right ; right ; exact f
@@ -128,7 +117,7 @@ def hsearch_step_expand
             stackHead
 
      let new_stack : List V := (stackTail ++ newly_visited_list).mergeSort (fun a b =>
-        add_heur a (new_order a) heur = add_heur b (new_order b) heur || FValueComp.lt_B (add_heur a (new_order a) heur) (add_heur b (new_order b) heur))
+        add_heur a (new_order a) heur = add_heur b (new_order b) heur || FValueComp.lt (add_heur a (new_order a) heur) (add_heur b (new_order b) heur))
 
      WeightedDiGraph.base_search_state.mk new_visited new_order new_mother new_stack
 
@@ -397,8 +386,6 @@ lemma hsearch_expand_keeps_mother_is_adjacent
         simp at x_in_new_visited
         simp_all
 
-
-
 lemma hsearch_mother_options
     (priorState : hsearch_search_state  g)
     (stackHead : V)
@@ -411,12 +398,8 @@ lemma hsearch_mother_options
         unfold hsearch_step_expand
         grind
 
-
-set_option maxHeartbeats 1000000
-
-
-/-- TODO: externalise haves into helpter theorems
---/
+set_option maxHeartbeats 1000000 in
+/-- TODO: externalise haves into helper theorems -/
 lemma hsearch_expand_keeps_mother_ordered
     (start : V)
     (priorState : hsearch_search_state  g)
@@ -435,8 +418,8 @@ lemma hsearch_expand_keeps_mother_ordered
     obtain ⟨a,a_now_visited⟩ := a
     unfold FValueComp.lt
     unfold Nat.instFValueCompProd
-    whnf
     --apply toBoolUsing_eq_true
+    simp only [Nat.FValueLT, decide_eq_true_eq]
     apply Prod.lex_def.mpr
     apply Classical.or_iff_not_imp_left.mpr
     intro first_dim
@@ -527,16 +510,14 @@ lemma hsearch_expand_keeps_mother_ordered
       · rfl
 
     by_cases adj_head_a : g.Adj stackHead a
-    ·
-      clear h_order h_mother
+    · clear h_order h_mother
       apply a_a_imp_b_to_a_and_b
       and_intros
       · symm
         apply first_dim.antisymm
         clear first_dim
         by_cases a_visited : a ∈ priorState.visited
-        ·
-          have mother_options := hsearch_mother_options heur priorState stackHead stackTail ⟨ a, a_visited⟩ (x_still_visited ⟨ a, a_visited⟩)
+        · have mother_options := hsearch_mother_options heur priorState stackHead stackTail ⟨ a, a_visited⟩ (x_still_visited ⟨ a, a_visited⟩)
           cases mother_options
           · next mother_head =>
             rw [mother_head]
@@ -555,8 +536,7 @@ lemma hsearch_expand_keeps_mother_ordered
         · unfold hsearch_step_expand
           simp
           grind
-      ·
-        by_cases a_visited : a ∈ priorState.visited
+      · by_cases a_visited : a ∈ priorState.visited
         · intro eq
           have mother_options := hsearch_mother_options heur priorState stackHead stackTail ⟨ a, a_visited⟩ (x_still_visited ⟨ a, a_visited⟩)
           cases mother_options
@@ -582,7 +562,6 @@ lemma hsearch_expand_keeps_mother_ordered
       rw [← h_order] at first_dim ⊢
       specialize h_mother ⟨a,a_now_visited⟩ adj_head_a
       rw [← h_mother] at first_dim ⊢
-
       and_intros
       · symm
         apply first_dim.antisymm
@@ -605,8 +584,6 @@ lemma hsearch_expand_keeps_mother_ordered
           unfold FValueComp.lt at mother_decreasing_prior
           unfold Nat.instFValueCompProd at mother_decreasing_prior
           grind
-
-
 
 lemma hsearch_expand_keeps_on_stack_or_all_neighbours_visited
     (priorState : hsearch_search_state  g)

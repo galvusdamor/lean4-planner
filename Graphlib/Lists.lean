@@ -4,8 +4,6 @@ import Mathlib.Data.Bool.AllAny
 import Mathlib.Data.FinEnum
 import Graphlib.WF
 
-set_option trace.split.failure true
-
 -- theorems for `List.Pairwise`. Needed for extension of Paths with new edges, due to need to modify Nodup proofs.
 theorem pairwise_add_anywhere {α: Type} {pr: α → α → Prop} {l1 l2 : List α} {symm: Symmetric pr} {a : α}:
     (∀ (a' : α), a' ∈ l1 ∨ a' ∈ l2 → pr a a') ∧ (List.Pairwise pr (l1 ++ l2))
@@ -149,7 +147,7 @@ def maximum_of_non_empty_list {α : Type u_1} [Max α]
       rw [Option.isSome_iff_ne_none]
       simp_all)
 
-theorem maximum_of_non_empty_le (l : List Nat) (non_empty : l ≠ []):
+theorem maximum_of_non_empty_le (l : List Nat) (non_empty : l ≠ []) :
     ∀ x ∈ l, x ≤ maximum_of_non_empty_list l non_empty := by
     intro x x_in_l
     unfold maximum_of_non_empty_list
@@ -157,19 +155,13 @@ theorem maximum_of_non_empty_le (l : List Nat) (non_empty : l ≠ []):
     apply List.le_max?_get_of_mem
     use x_in_l
 
-
 theorem Option.eq_some_if_get_eq {α : Type u_1} {o : Option α} {a : α} :
-      ∀ (h : o.isSome = true), o.get h = a → o = some a := by 
+      ∀ (h : o.isSome = true), o.get h = a → o = some a := by
         intro h get_is_a
         apply Option.eq_some_iff_get_eq.mpr
         use h
 
-theorem head_iff {α : Type u_1} {l tail : List α} {head : α} (compose : l = head :: tail) (ne_nil : l ≠ []):
-    l.head ne_nil = head := by
-    simp_all
-
-
-theorem option_mem{α : Type u_1} (o : Option α) (o_is_some : o.isSome = true) (s : Set α):
+theorem option_mem {α : Type u_1} (o : Option α) (o_is_some : o.isSome = true) (s : Set α):
   o.get o_is_some ∈ s → ∃ x : α, o.get o_is_some = x ∧ x ∈ s := by
     intro get_in_s
     use o.get o_is_some
@@ -184,9 +176,8 @@ theorem List.get_find?_prop {α : Type u_1} {xs : List α} {p : α → Bool} (h 
     · simp_all
       apply List.get_find?_prop
 
-
-lemma List.takeWhile_until_find?_helper {α : Type u_1} [DecidableEq α] {xs : List α} {p : α → Bool} 
-  (h : (find? p xs).isSome = true): 
+lemma List.takeWhile_until_find?_helper {α : Type u_1} [DecidableEq α] {xs : List α} {p : α → Bool}
+  (h : (find? p xs).isSome = true):
     ∀ a ∈ takeWhile (fun x => !decide (x = (find? p xs).get h)) xs, p a = false := by
     cases xs
     case nil => grind
@@ -202,14 +193,11 @@ lemma List.takeWhile_until_find?_helper {α : Type u_1} [DecidableEq α] {xs : L
           apply List.takeWhile_until_find?_helper
         · simp_all
 
-
-theorem List.takeWhile_until_find? {α : Type u_1} [DecidableEq α] {xs : List α} {p : α → Bool}  : 
+theorem List.takeWhile_until_find? {α : Type u_1} [DecidableEq α] {xs : List α} {p : α → Bool}  :
   ∀ h : (find? p xs).isSome = true,
   (List.takeWhile (fun x => decide (x ≠ (List.find? p xs).get h)) xs).all (fun x => ¬ (p x)) := by
     intro h
     grind [List.takeWhile_until_find?_helper]
-
-
 
 theorem List.find?_nodup {α : Type u_1} {l xs : List α} {last : α} {compose : l = xs ++ [last]} {last_not_mem_xs : last ∉ xs} {p : α → Bool} { u : α } { u_mem_list : u ∈ l} {u_ne_l : u ≠ last} {u_is_p : p u} {h : (List.find? p l).isSome} :
   (List.find? p l).get h ≠ last := by
@@ -244,22 +232,20 @@ theorem List.find?_nodup {α : Type u_1} {l xs : List α} {last : α} {compose :
         · apply u_ne_l
         · exact u_is_p
 
-
-
 theorem a_a_imp_b_to_a_and_b {a b : Prop} : (a ∧ (a → b)) → (a ∧ b) := by
-  intro ⟨ a, a_to_b⟩ 
+  intro ⟨ a, a_to_b⟩
   and_intros
   · exact a
-  · exact a_to_b a 
+  · exact a_to_b a
 
-theorem List.exists_ne_from_ne {α : Type} (n : ℕ) (l1 l2 : List α)(len1 : l1.length = n) (len2 : l2.length = n): 
+theorem List.exists_ne_from_ne {α : Type} (n : ℕ) (l1 l2 : List α)(len1 : l1.length = n) (len2 : l2.length = n):
     l1 ≠ l2 → ∃ i : Fin n, l1[i] ≠ l2[i] ∧ ∀ j : Fin i, l1[j] = l2[j] := by
   intro not_eq
   cases l1 <;> cases l2 <;> try grind
   rename_i h1 t1 h2 t2
   by_cases h_eq : h1 = h2
   · subst h_eq
-    simp [List.length_cons] at len1 len2 
+    simp [List.length_cons] at len1 len2
     have h := List.exists_ne_from_ne (n-1) t1 t2 (by omega) (by omega) (by grind)
     obtain ⟨ i, ⟨ l_prop, r_prop ⟩ ⟩ := h
     use ⟨i+1, by grind⟩
@@ -267,12 +253,12 @@ theorem List.exists_ne_from_ne {α : Type} (n : ℕ) (l1 l2 : List α)(len1 : l1
     intro j
     by_cases j_zero : j.val = 0
     · simp_all
-    · specialize r_prop ⟨j - 1, by grind⟩ 
+    · specialize r_prop ⟨j - 1, by grind⟩
       grind
   · use ⟨ 0, by grind ⟩
     simp_all
 
-theorem Vector.exists_ne_from_ne {α : Type} (n : ℕ) (l1 l2 : Vector α n): 
+theorem Vector.exists_ne_from_ne {α : Type} (n : ℕ) (l1 l2 : Vector α n):
     l1 ≠ l2 → ∃ i : Fin n, l1[i] ≠ l2[i] ∧ ∀ j : Fin i, l1[j] = l2[j] := by
   intro ineq
   apply List.exists_ne_from_ne
@@ -317,7 +303,7 @@ Lex p l1 l2 := by
       specialize prop ⟨ 0, by grind ⟩
       grind
 
-theorem List.not_Lex {α : Type} (n : ℕ) (p : α → α → Prop) (l1 l2 : _root_.Vector α n): 
+theorem List.not_Lex {α : Type} (n : ℕ) (p : α → α → Prop) (l1 l2 : _root_.Vector α n):
   ¬(Vector.Lex n p l1 l2) →
     (∀ i : Fin n, l1[i] = l2[i]) ∨ (∃ i : Fin n, l1[i] ≠ l2[i] ∧ (¬ (p l1[i] l2[i])) ∧ ∀ j : Fin i, l1[j] = l2[j]) := by
     contrapose
@@ -329,11 +315,11 @@ theorem List.not_Lex {α : Type} (n : ℕ) (p : α → α → Prop) (l1 l2 : _ro
     · apply neq
     · intro x' p1 p2
       specialize prop ⟨ x', by omega⟩
-      simp_all 
+      simp_all
     · grind
     · grind
 
-lemma mergeSort_head {α : Type} (le : α → α → Bool) 
+lemma mergeSort_head {α : Type} (le : α → α → Bool)
   (trans : ∀ (a b c : α), le a b = true → le b c = true → le a c = true)
   (total : ∀ (a b : α), (le a b || le b a) = true)
   (l : List α)
@@ -359,13 +345,13 @@ lemma mergeSort_head {α : Type} (le : α → α → Bool)
       grind
 
 
-lemma mergeSort_head_from_head {α : Type} {le : α → α → Bool} 
+lemma mergeSort_head_from_head {α : Type} {le : α → α → Bool}
   {trans : ∀ (a b c : α), le a b = true → le b c = true → le a c = true}
   {total : ∀ (a b : α), (le a b || le b a) = true}
   {l : List α}
   {l_ne_nil : (l.mergeSort le) ≠ []}
   {y : α}:
-  (l.mergeSort le).head l_ne_nil = y → 
+  (l.mergeSort le).head l_ne_nil = y →
   ∀ x ∈ (l.mergeSort le).tail, le y x := by
     intro y_eq x x_in_tail
     rw [← y_eq]
@@ -374,14 +360,13 @@ lemma mergeSort_head_from_head {α : Type} {le : α → α → Bool}
     · exact total
     · exact x_in_tail
 
-
-lemma mergeSort_head_from_head_unsorted {α : Type} {le : α → α → Bool} 
+lemma mergeSort_head_from_head_unsorted {α : Type} {le : α → α → Bool}
   {trans : ∀ (a b c : α), le a b = true → le b c = true → le a c = true}
   {total : ∀ (a b : α), (le a b || le b a) = true}
   {l : List α}
   {l_ne_nil : (l.mergeSort le) ≠ []}
   {y : α}:
-  (l.mergeSort le).head l_ne_nil = y → 
+  (l.mergeSort le).head l_ne_nil = y →
   ∀ x ∈ l, x = y ∨ le y x := by
     intro y_eq x x_in_tail
     rw [← y_eq]
@@ -407,11 +392,9 @@ lemma merge_two_prop {α : Type} (le1 : α → α → Prop) (le2 : α → α →
     all_goals
       grind
 
-
-lemma mergeSort_count {α : Type} [BEq α] [LawfulBEq α] {le : α → α → Bool} 
+lemma mergeSort_count {α : Type} [BEq α] [LawfulBEq α] {le : α → α → Bool}
   {l : List α}
   {y : α}:
   (l.mergeSort le).count y = l.count y := by
     apply List.Perm.count
     apply List.mergeSort_perm
-

@@ -283,7 +283,7 @@ lemma subpath_of_cheapest_is_cheapest {u v w : V}
       -- By `Walk.cheaper_path_exists`, there exists a path `p'` with `p'.cost ≤ (q.val.append wv).cost`.
       obtain ⟨p', hp'⟩ : ∃ p' : G.Path u v, p'.cost ≤ (q.val.append wv).cost := by
         exact Walk.cheaper_path_exists (q.val.append wv)
-      
+
       exact not_lt_of_ge ( p_cheapest p' ) ( lt_of_le_of_lt hp' h_walk_cost )
 
 
@@ -483,10 +483,10 @@ lemma path_in_augmented_exists {goals : List V} {start goal : V}
       -- By definition of `lift_walk_to_augmented`, we can construct a walk from `some start` to `none` by appending the edge from `some goal` to `none`.
       obtain ⟨w, hw⟩ : ∃ w : (G.add_artificial_goal goals).Walk (some start) (some goal), w.support.Nodup := by
         exact ⟨ NatGraph.lift_walk_to_augmented p.val, NatGraph.lift_walk_nodup p.val p.prop ⟩;
-      
+
       have h_append : ∃ w' : (G.add_artificial_goal goals).Walk (some start) none, w'.support = w.support ++ [none] := by
         exact ⟨ w.concat ( show ( G.add_artificial_goal goals ).Adj ( some goal ) none from by unfold NatGraph.add_artificial_goal; simp_all only ), by simp ⟩
-      
+
       obtain ⟨ w', hw' ⟩ := h_append
       specialize h_contra w'
       simp_all +decide [ List.nodup_append ]

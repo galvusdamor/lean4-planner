@@ -17,4 +17,3 @@ open Fin
 
 theorem Fin.card_filter_val_lt {m : ℕ} : #{i : Fin n | i < m} = min n m := by
   simp [← card_map valEmbedding, ← filter_filter, exists_iff, map_filter']
-  

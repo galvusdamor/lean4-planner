@@ -4,7 +4,6 @@ import Graphlib.HeuristicSearch
 variable {V : Type} [FinEnum V]
 variable {g : NatGraph V}
 
-
 namespace NatGraph
 
 open WeightedDiGraph
@@ -15,7 +14,6 @@ abbrev admissible (heur : V → ℕ) (goal : V) :=
 
 abbrev admissible' (heur : V → ℕ) (goals : List V) :=
   ∀ v : V, ∀ goal ∈ goals, g.cost_ge v goal (heur v)
-
 
 abbrev goal_aware (heur : V → ℕ) (goal : V) := heur goal = 0
 
@@ -44,19 +42,17 @@ lemma admissible'_of_goal_aware_consistent (heur : V → ℕ) (goals : List V) :
   intro ⟨ga, cons⟩ v goal goal_in_goals p
   exact walk_cost_ge_heur heur goal (ga goal goal_in_goals) cons p.val
 
-
 variable (heur : V → ℕ)
 
+/-- The A* algorithm, defined via `WeightedDiGraph.search_exe_with_stack_step`. -/
 def astar (start : V) (goal : V): Option (g.Path start goal) :=
   let start_state := WeightedDiGraph.base_search_state_initial start ⟨0,0⟩
   have h : WeightedDiGraph.has_base_search_state.to_base_state (G:=g) start_state = WeightedDiGraph.base_search_state_initial start (0,0):= by simp_all only [start_state]; rfl
 
   WeightedDiGraph.search_exe_with_stack_step (G:=g) (start := start) (goal:=goal) (start_state:=start_state) (termination_metric := hsearch_termination_metric) (hsearch_step_expand heur) (hsearch_expand_metric_reduction heur) (hsearch_expand_keeps_base_invars heur) h
 
-
 def astar_last_state (start : V) (goal : V): WeightedDiGraph.base_search_state g (ℕ×ℕ) × Bool :=
   WeightedDiGraph.search_with_stack_step (goal:=goal) (start_state := WeightedDiGraph.base_search_state_initial start (0,0)) (hsearch_step_expand heur) (hsearch_expand_metric_reduction heur)
-
 
 theorem astar_is_sound (start : V) (goal : V) :
     (Option.isSome (astar (g:=g) heur start goal) → (∃ x : (g.Path start goal), x = x)) := by
@@ -64,8 +60,6 @@ theorem astar_is_sound (start : V) (goal : V) :
   · apply hsearch_expand_metric_reduction
   · apply hsearch_expand_keeps_base_invars
   · rfl
-
-
 
 theorem astar_is_complete (start : V) (goal : V):
     ((∃ x : (g.Path start goal), x = x) → Option.isSome (astar (g:=g) heur start goal)) := by
@@ -76,17 +70,12 @@ theorem astar_is_complete (start : V) (goal : V):
   · apply hsearch_expand_keeps_goal_on_stack
   · apply hsearch_expand_goal_becomes_visited_puts_it_on_stack
 
+/-! ## Optimality proof --/
 
-
-
-/-- Optimality proof --/
-/- stack is sorted by the path_order (i.e. distance) value -/
-
+/- The stack is sorted by the path_order (i.e. distance) value. -/
 abbrev astar_stack_sorted (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
   List.Pairwise (fun u v =>
     (add_heur u (s.pathOrder u) heur = add_heur v (s.pathOrder v) heur) ∨ (add_heur u (s.pathOrder u) heur ≺ add_heur v (s.pathOrder v) heur)) s.stack
-
-
 
 abbrev node_open (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) (v : V) :=
   v ∈ s.stack
@@ -94,11 +83,10 @@ abbrev node_open (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) (v : V) :=
 abbrev node_closed (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) (v : V) :=
   v ∈ s.visited ∧ v ∉ s.stack
 
-
-/-- Invar propose by Hart et al, 1968 (lemma 1):
+/-- Invariant propose by Hart et al, 1968 (lemma 1):
     any non-closed node v (i.e. any node that is either on the stack or not visited)
     for all optimal paths p from start to it
-    there is an open node v' on p for which its current known distance from start is the optimum -/
+    there is an open node v' on p for which its current known distance from start is the optimum. -/
 abbrev astar_invar (start : V) (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
   ∀ v : V, ¬ (node_closed s v) → ∀ p : g.Path start v, p.is_cheapest →
     ∃ v' ∈ p.support, (node_open s v') ∧ g.cost_is start v' (s.pathOrder v').1
@@ -138,7 +126,6 @@ lemma walk_more_costly_than_chapest (start v : V) (d : ℕ)
     · exact p_cheapest w'
     · exact w'_cheaper
 
-
 section
 variable (state : WeightedDiGraph.base_search_state g (ℕ×ℕ))
 
@@ -160,7 +147,6 @@ lemma astar_expand_keeps_stack_sorted (goal : V)
       · intro a b
         apply hsearch_merge_total
       · ext x y
-        rw [FValueComp.lt_B_eq]
         simp
 
 lemma astar_expand_keeps_goal_invar (goal : V)

@@ -7,9 +7,6 @@ import Init.Data.List.Basic
 
 import Graphlib.Lists
 
-set_option trace.split.failure true
-
-
 /-!
 # Weighted Digraphs
 
@@ -39,23 +36,18 @@ structure WeightedDiGraph (V : Type) (E : Type) [FinEnum V] extends Digraph V wh
   Payload : (u : V) -> (v : V) -> (Adj u v) -> E
   instDecAdj : DecidableRel Adj
 
-
-
-
 -- def local global variable for a graph
 variable {V : Type} {E : Type} [FinEnum V] --[DecidableEq V] [DecidableEq E]
 variable {G : WeightedDiGraph V E}
-
 
 namespace WeightedDiGraph
 
 def nodeNum (_ : WeightedDiGraph V E) : ℕ := Fintype.card V
 
-
 theorem payloadProofIrrelevant (u v : V) (h h' : G.Adj u v) :
     G.Payload u v h = G.Payload u v h' := by dsimp
 
-/--  A `walk` is a sequence of adjacent vertices.  For vertices `u v : V`,
+/-- A `walk` is a sequence of adjacent vertices.  For vertices `u v : V`,
 the type `walk u v` consists of all walks starting at `u` and ending at `v`. -/
 inductive Walk : V → V → Type
   | nil {u : V} : Walk u u
@@ -64,7 +56,6 @@ inductive Walk : V → V → Type
 -- h is hypothese for valid edge, f from node, w next node of starting walk, t to node, p rest node from w to t
 
 attribute [refl] Walk.nil
-
 
 namespace Walk
 
@@ -107,13 +98,10 @@ theorem nil_walk_eq {u v: V} (h : u = v): (Walk.nil : G.Walk u u) = h ▸ (Walk.
   subst h
   simp_all only
 
-
 /-- `Support` of a walk is the list of edges it visits in order. -/
 def support {u v : V} : (G.Walk u v) → List V
   | @Walk.cons _ _ _ _ u _ _ _ rest => u :: support rest
   | Walk.nil => [v]
-
-
 
 /-- `Length` of a walk is the number of edges in it-/
 def length {u v : V} : (G.Walk u v) → ℕ
@@ -135,8 +123,7 @@ theorem walk_support_length
     {u v : V} (w : G.Walk u v) : w.support.length = w.length + 1 := by
   induction w with
   | nil => simp [WeightedDiGraph.Walk.support, WeightedDiGraph.Walk.length]
-  | cons _ _ ih => simp [WeightedDiGraph.Walk.support, WeightedDiGraph.Walk.length, ih, Nat.add_comm]
-
+  | cons _ _ ih => simp [support, ih, Nat.add_comm, length]
 
 @[simp]
 theorem goal_in_support {u v : V} (p: G.Walk u v): v ∈ p.support := by
@@ -158,13 +145,15 @@ theorem support_ne_nil {u v : V} (p : G.Walk u v): p.support ≠ [] := by
   cases p <;> simp_all
 
 @[simp]
-theorem cons_support {x u v w: V} (p: G.Walk v w) (h : G.Adj u v ): x ∈ (Walk.cons h p).support → x = u ∨ x ∈ p.support:= by
+theorem cons_support {x u v w: V} (p: G.Walk v w) (h : G.Adj u v ) :
+    x ∈ (Walk.cons h p).support → x = u ∨ x ∈ p.support:= by
   intro x_in_cons_supp
   unfold support at x_in_cons_supp
   grind
 
 @[simp]
-theorem support_cons {u v w: V} (p: G.Walk v w) (h : G.Adj u v): (Walk.cons h p).support = u :: p.support:= by
+theorem support_cons {u v w: V} (p: G.Walk v w) (h : G.Adj u v) :
+    (Walk.cons h p).support = u :: p.support:= by
   conv =>
    left
    unfold support
@@ -184,7 +173,8 @@ theorem support_last {u v : V} (p : G.Walk u v):
       apply ih
 
 @[simp]
-theorem nodup_and_start_eq_end_support {u v: V} (w : G.Walk u v) (u_eq_v : u = v) (nodup : w.support.Nodup) : w.support = [u] := by
+theorem nodup_and_start_eq_end_support {u v: V} (w : G.Walk u v) (u_eq_v : u = v)
+    (nodup : w.support.Nodup) : w.support = [u] := by
   cases w
   · unfold support
     rfl
@@ -206,12 +196,10 @@ theorem nil_support_nodup {u : V} : (nil : G.Walk u u).support.Nodup := by
   unfold support
   simp
 
+/-! ## Operations that modify paths and walks -/
 
------------------------------------------
--- Operations that modify paths and walks
-/-- `append` takes two walks `w1 : Walk G u v` and `w2 : Walk G v w` and returns the
+/-- Take two walks `w1 : Walk G u v` and `w2 : Walk G v w` and return the
 appended walk `Walk G u w` -/
-
 @[trans]
 def append {u v w : V} : G.Walk u v → G.Walk v w → G.Walk u w
   | nil, q => q
@@ -220,12 +208,6 @@ def append {u v w : V} : G.Walk u v → G.Walk v w → G.Walk u w
 /-- The reversed version of `SimpleGraph.Walk.cons`, concatenating an edge to
 the end of a walk. -/
 def concat {u v w : V} (p : G.Walk u v) (h : G.Adj v w) : G.Walk u w := p.append (cons h nil)
-
---/-- `extend_walk` takes a walk `ww : Walk G u v` and a proof `h : G.Adj v w` for adjacency of
---vertices `v` and the vertex that should be added at the end of the walk `w` and returns an
---extended walk `Walk G u w`-/
---def extend (ww : Walk G u v) (h : G.Adj v w) : Walk G u w :=
---  append G ww (Walk.cons h Walk.nil)
 
 def is_sub_walk_head {u v w : V} (p : G.Walk u v) (p' : G.Walk w v) : Bool :=
   if u = w then true
@@ -246,67 +228,62 @@ def is_prefix {u v w : V} (p : G.Walk u v) (p' : G.Walk u w) : Bool :=
 @[simp]
 theorem support_concat_is_append_at_end {h : G.Adj v v'} { w : G.Walk u v } :
     (w.concat h).support = w.support ++ [v']  := by
-    induction w <;> simp_all [concat, append, support]
-
+  induction w <;> simp_all [concat, append, support]
 
 @[simp]
 theorem append_cons_inc_length_by_one (w : G.Walk u v) (h : G.Adj v v') :
-  (w.append (Walk.cons h Walk.nil)).length = 1 + w.length := by
+    (w.append (Walk.cons h Walk.nil)).length = 1 + w.length := by
   unfold append
   split
   · simp [length]
   · apply Nat.add_left_cancel_iff.mpr
     apply append_cons_inc_length_by_one
 
-
 @[simp]
 theorem concat_inc_length_by_one (p : G.Walk u v) (h : G.Adj v w) :
-      (p.concat h).length = 1 + p.length := by
-  unfold concat
-  apply append_cons_inc_length_by_one
-
+    (p.concat h).length = 1 + p.length :=
+  append_cons_inc_length_by_one _ _
 
 theorem split_at_end_length_one (p : G.Walk u v) (len_ne_zero : p.length > 0):
     ∃ w : V, ∃ p' : G.Walk u w, ∃ w_adj_v : G.Adj w v,
       p = p'.concat w_adj_v := by
-    cases p
-    · simp_all [length]
-    · next u' u_adj_u' p_u' =>
-      cases p_u'
-      · use u
-        use (Walk.nil : G.Walk u u)
-        use u_adj_u'
-        unfold concat
-        unfold append
-        rfl
-      · next u'' u'_adj_u'' p_u'' =>
-        let p_u' := Walk.cons u'_adj_u'' p_u''
-        have p_u'_length : p_u'.length > 0 := by simp [length, p_u']
-        obtain ⟨ w,p',w_adj_v, extend_prop⟩ := split_at_end_length_one p_u' p_u'_length
-        use w
-        use Walk.cons u_adj_u' p'
-        use w_adj_v
-        unfold concat append
-        unfold p_u' at extend_prop
-        rw [extend_prop]
-        congr
+  cases p
+  · simp_all [length]
+  · next u' u_adj_u' p_u' =>
+    cases p_u'
+    · use u
+      use (Walk.nil : G.Walk u u)
+      use u_adj_u'
+      unfold concat
+      unfold append
+      rfl
+    · next u'' u'_adj_u'' p_u'' =>
+      let p_u' := Walk.cons u'_adj_u'' p_u''
+      have p_u'_length : p_u'.length > 0 := by simp [length, p_u']
+      obtain ⟨ w,p',w_adj_v, extend_prop⟩ := split_at_end_length_one p_u' p_u'_length
+      use w
+      use Walk.cons u_adj_u' p'
+      use w_adj_v
+      unfold concat append
+      unfold p_u' at extend_prop
+      rw [extend_prop]
+      congr
 
 def snoc' (p : G.Walk u v)  (len_ne_zero : p.length > 0):
     Σ w : V, { _p : G.Walk u w // G.Adj w v }:= by
-    cases p
-    · simp_all [length]
-    · next u' u_adj_u' p_u' =>
-      cases eq : p_u'
-      case nil =>
-        use u
-        use (Walk.nil : G.Walk u u)
-      case cons u'' u'_adj_u'' p_u'' =>
-        let p_u' := Walk.cons u'_adj_u'' p_u''
-        have p_u'_length : p_u'.length > 0 := by simp [length, p_u']
-        obtain ⟨w,pp⟩ := p_u'.snoc' p_u'_length
-        have p' : G.Walk u w := Walk.cons u_adj_u' pp
-        exact ⟨w,⟨ p',pp.prop⟩⟩
-
+  cases p
+  · simp_all [length]
+  · next u' u_adj_u' p_u' =>
+    cases eq : p_u'
+    case nil =>
+      use u
+      use (Walk.nil : G.Walk u u)
+    case cons u'' u'_adj_u'' p_u'' =>
+      let p_u' := Walk.cons u'_adj_u'' p_u''
+      have p_u'_length : p_u'.length > 0 := by simp [length, p_u']
+      obtain ⟨w,pp⟩ := p_u'.snoc' p_u'_length
+      have p' : G.Walk u w := Walk.cons u_adj_u' pp
+      exact ⟨w,⟨ p',pp.prop⟩⟩
 
 def snoc (p : G.Walk u v) (not_nil : u ≠ v):
     Σ w : V, { _p : G.Walk u w // G.Adj w v }:= by
@@ -457,12 +434,6 @@ theorem split_at {u v w : V} (p : G.Walk u v) (w_in_walk : w ∈ p.support):
 
 end Walk
 
---structure Path (u : V) (v : V) where
---  walk : G.Walk u v
---  support_nodup : t
---  deriving DecidableEq
-
-
 /-- A `path` is a walk with no repeating vertices. -/
 abbrev Path (u v : V) := { p : G.Walk u v // List.Nodup p.support }
 
@@ -472,7 +443,6 @@ def nil_path (u : V) : G.Path u u :=
     unfold w
     unfold Walk.support
     simp
-
   ⟨ w, p ⟩
 
 namespace Path
@@ -483,7 +453,6 @@ theorem nil_path_eq {u v: V} (h : u = v): G.nil_path u = h ▸ G.nil_path v := b
 
 @[simp]
 def length {u v : V} (p : G.Path u v) : ℕ := p.1.length
-
 
 @[simp]
 theorem length_same {u v : V} (p : G.Path u v):
@@ -510,7 +479,6 @@ theorem length_diff_ends_ne_zero {u v : V} (h : u ≠ v) (p : G.Path u v):
   apply Walk.length_diff_ends_ne_zero
   exact h
 
-
 @[simp]
 def support {u v : V} (p : G.Path u v) : List V := p.1.support
 
@@ -531,31 +499,26 @@ theorem path_length_lt_card
   rw [h_len] at h_le
   exact Nat.lt_of_succ_le h_le
 
-
-
-/-- `extend_path` takes a uv path `p :Path G u v`, a proof `h : G.Adj v w` that an vw edge exists
-  and a proof `proof_w_not_in_support : w ∉ support G p.walk` that w is not part of the path yet and
-  returns a path extended by w -/
-def concat (p : G.Path u v) (h : G.Adj v w) (proof_w_not_in_support : w ∉ p.val.support) : G.Path u w :=
+/-- Take a uv path `p :Path G u v`, a proof `h : G.Adj v w` that a vw edge exists
+and a proof `proof_w_not_in_support : w ∉ support G p.walk` that w is not part of
+the path yet and return a path extended by w. -/
+def concat (p : G.Path u v) (h : G.Adj v w) (proof_w_not_in_support : w ∉ p.val.support) :
+    G.Path u w :=
   let path_walk := p.val.concat h
   let set_eq : path_walk.support = p.val.support ++ [w] := by simp [path_walk]
-
   let path_nodup : List.Nodup path_walk.support := by
     simp [List.Nodup]
     rw [set_eq]
     rw [List.pairwise_append_comm]
-    simp only [List.cons_append]
-    simp only [List.nil_append]
-    simp only [List.pairwise_cons]
-    apply And.intro
-    · intro a ha wa
-      subst wa
-      simp_all only [not_true_eq_false]
-    exact p.prop
-    -- we need to prove that the ≠ function that occurs in nodup is symmetric (otherwise one of our helper theorems does not hold any more)
-    intro x y notEq h
-    apply notEq
-    rw  [h]
+    · simp only [List.cons_append, List.nil_append, List.pairwise_cons]
+      apply And.intro
+      · intro a ha wa; simp_all only [not_true_eq_false]
+      · exact p.prop
+      -- we need to prove that the ≠ function that occurs in nodup is symmetric
+      -- (otherwise one of our helper theorems does not hold any more)
+    · intro x y notEq h
+      apply notEq
+      rw [h]
   ⟨ path_walk, path_nodup ⟩
 
 def append {u v w : V} (uv : G.Path u v) (vw : G.Path v w) (h : ∀ a ∈ uv.val.support, ∀ b ∈ vw.val.support.tail, a ≠ b): G.Path u w :=
@@ -577,7 +540,6 @@ def is_shortest {u v : V} (p : G.Path u v) : Prop :=
 def is_prefix {u v w : V} (p : G.Path u v) (p' : G.Path u w) : Bool :=
   p.val.is_prefix p'.val
 
-
 @[simp]
 theorem support_concat_is_append_at_end (p: G.Path u v) (h: G.Adj v w)(proof_w_not_in_support : w ∉ p.val.support):
    (p.concat h proof_w_not_in_support).support = p.support ++ [w] := by simp [concat]
@@ -586,7 +548,6 @@ theorem support_concat_is_append_at_end (p: G.Path u v) (h: G.Adj v w)(proof_w_n
 theorem concat_inc_length_by_one (p : G.Path u v) (h : G.Adj v w) (proof_w_not_in_support : w ∉ p.support) :
       (p.concat h proof_w_not_in_support).length = 1 + p.length := by
   apply Walk.concat_inc_length_by_one
-
 
 theorem split_at_end (p : G.Path u v) (not_nil : u ≠ v):
     ∃ w : V, ∃ p' : G.Path u w, ∃ w_adj_v : G.Adj w v,
@@ -813,10 +774,7 @@ theorem shorter_path_exists (w : G.Walk u v):
   unfold Path.length
   apply length_bypass_le
 
-end Walk
-
-
-lemma Walk.append_support_prefix {a b c: V} (w : G.Walk a b) (w' : G.Walk b c):
+lemma append_support_prefix {a b c: V} (w : G.Walk a b) (w' : G.Walk b c):
     w.support <+: (w.append w').support := by
     cases compose : w
     · unfold Walk.support Walk.append
@@ -826,12 +784,12 @@ lemma Walk.append_support_prefix {a b c: V} (w : G.Walk a b) (w' : G.Walk b c):
       simp
       apply Walk.append_support_prefix
 
-lemma Walk.concat_support_prefix {a b c: V} (w : G.Walk a b) (adj : G.Adj b c):
+lemma concat_support_prefix {a b c: V} (w : G.Walk a b) (adj : G.Adj b c):
     w.support <+: (w.concat adj).support := by
     unfold Walk.concat
     apply Walk.append_support_prefix
 
-lemma Walk.append_support_suffix {a b c: V} (w : G.Walk a b) (w' : G.Walk b c):
+lemma append_support_suffix {a b c: V} (w : G.Walk a b) (w' : G.Walk b c):
     w'.support <:+ (w.append w').support := by
     cases compose : w
     · unfold Walk.support Walk.append
@@ -844,9 +802,7 @@ lemma Walk.append_support_suffix {a b c: V} (w : G.Walk a b) (w' : G.Walk b c):
       right
       apply Walk.append_support_suffix
 
-
-
-lemma Walk.recompose {s v u: V} (p : G.Walk s v) (u_on_p : u ∈ p.support) (u_ne_v : u ≠ v):
+lemma recompose {s v u: V} (p : G.Walk s v) (u_on_p : u ∈ p.support) (u_ne_v : u ≠ v):
   ∃ u' : V, ∃ s_u : G.Walk s u, ∃ adj_u_u' : G.Adj u u', ∃ u'_v : G.Walk u' v,
     p = (s_u.concat adj_u_u').append u'_v := by
     cases compose : p
@@ -885,9 +841,10 @@ lemma Walk.recompose {s v u: V} (p : G.Walk s v) (u_on_p : u ∈ p.support) (u_n
           unfold Walk.append
         rfl
 
+end Walk
 
-/-- given an s v path and a node u on that path and the fact that u is not v, we can split the path into three parts:
-    1) the path from s to u, the edge u u', and a path from u' to v-/
+/-- Given an s v path and a node u on that path and the fact that u is not v, split the path
+into three parts: the path from s to u, the edge u u', and a path from u' to v. -/
 lemma Path.recompose {s v u: V} (p : G.Path s v) (u_on_p : u ∈ p.support) (u_ne_v : u ≠ v):
     ∃ u' : V, ∃ s_u : G.Path s u, ∃ adj_u_u' : G.Adj u u', ∃ u'_v : G.Path u' v,
       ∃ u'_supp : u' ∉ s_u.val.support,
@@ -962,9 +919,7 @@ lemma Walk.internal_contact_to_cons_walk {s v u : V}
       unfold Walk.concat
       rfl
 
-
 end WeightedDiGraph
-
 
 -- tests
 example : WeightedDiGraph (Fin 3) (Nat) where
@@ -1021,15 +976,3 @@ example : WeightedDiGraph (Fin 3) (Nat) where
             cases nb
             case zero => simp; exact instDecidableTrue
             case succ x => simp; exact instDecidableFalse
-
---#eval List.dropLast [1, 2, 3, 4]  -- Output: [1, 2, 3]
-
---#eval graph1.Adj 1 0 -- none
---#eval dfs graph1 1 0  -- false
---#eval dfs graph1 0 2  -- true
---#eval Finset.toList (neighbors graph1 1)
---#eval neighbors graph1 1
---#eval is_valid_path graph1 [1,2]   --true
---#eval is_valid_path graph1 [0,1,2] --true
---#eval is_valid_path graph1 [1,2,3] --false
---#eval is_valid_path graph1 [1,2,1] --false

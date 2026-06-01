@@ -10,15 +10,10 @@ namespace NatGraph
 
 open WeightedDiGraph
 
-
------------------------------------------------------------------------
------- Dijkstra implementation and proof ------
+/-! ## Dijkstra implementation and proof -/
 
 @[simp]
 def h_zero (_ : V) : ℕ := 0
-
-
-
 
 def dijkstra (start : V) (goal : V): Option (g.Path start goal) :=
   let start_state := WeightedDiGraph.base_search_state_initial start ⟨0,0⟩
@@ -26,10 +21,8 @@ def dijkstra (start : V) (goal : V): Option (g.Path start goal) :=
 
   WeightedDiGraph.search_exe_with_stack_step (G:=g) (start := start) (goal:=goal) (start_state:=start_state) (termination_metric := hsearch_termination_metric) (hsearch_step_expand h_zero) (hsearch_expand_metric_reduction h_zero) (hsearch_expand_keeps_base_invars h_zero) h
 
-
 def dijkstra_last_state (start : V) (goal : V): WeightedDiGraph.base_search_state g (ℕ×ℕ) × Bool :=
   WeightedDiGraph.search_with_stack_step (goal:=goal) (start_state := WeightedDiGraph.base_search_state_initial start (0,0)) (hsearch_step_expand h_zero) (hsearch_expand_metric_reduction h_zero)
-
 
 theorem dijkstra_is_sound (start : V) (goal : V) :
     (Option.isSome (dijkstra (g:=g) start goal) → (∃ x : (g.Path start goal), x = x)) := by
@@ -37,8 +30,6 @@ theorem dijkstra_is_sound (start : V) (goal : V) :
   · apply hsearch_expand_metric_reduction
   · apply hsearch_expand_keeps_base_invars
   · rfl
-
-
 
 theorem dijkstra_is_complete (start : V) (goal : V):
     ((∃ x : (g.Path start goal), x = x) → Option.isSome (dijkstra (g:=g) start goal)) := by
@@ -49,26 +40,22 @@ theorem dijkstra_is_complete (start : V) (goal : V):
   · apply hsearch_expand_keeps_goal_on_stack
   · apply hsearch_expand_goal_becomes_visited_puts_it_on_stack
 
-/--Invars for Dijkstra-/
+/-! ## Invariants for Dijkstra -/
 
-
-/- The differene in path order between a node an its mother corresponds to the difference in path length between them. The mother however might have an even *lower* path order if it has been updated, but that update has not been propagated to the child yet -/
+/- The differene in path order between a node an its mother corresponds to the difference in path
+length between them. The mother however might have an even *lower* path order if it has been
+updated, but that update has not been propagated to the child yet. -/
 abbrev dijkstra_path_order_diff_by_one (start : V) (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
     ∀ u : V, (h : u ∈ s.visited) → (ne_start : u ≠ start) →
       (s.pathOrder u).2 ≥ (s.pathOrder (s.mother ⟨u,h⟩)).2 + 1
 
-
--- stack is sorted by the path_order (i.e. distance) value
+/-- The stack is sorted by the path_order (i.e. distance) value. -/
 abbrev dijkstra_stack_sorted (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
   List.Pairwise (fun u v => (s.pathOrder u = s.pathOrder v) ∨ (s.pathOrder u ≺ s.pathOrder v)) s.stack
 
-
-
---
 abbrev dijkstra_stack_shortest_path (start : V) (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
   ∀ u ∈ s.visited, u ∉ s.stack ∨ (if ne : s.stack ≠ [] then s.stack.head ne = u else false) →
     g.cost_is start u (s.pathOrder u).1
-
 
 @[simp]
 abbrev search_invar_start_not_mem_tail (start : V) (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
@@ -77,7 +64,6 @@ abbrev search_invar_start_not_mem_tail (start : V) (s : WeightedDiGraph.base_sea
 @[simp]
 abbrev search_invar_stack_nodup (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
       ∀ v : V, s.stack.count v ≤ 1
-
 
 abbrev dijkstra_all_invar (start : V) (s : WeightedDiGraph.base_search_state g (ℕ×ℕ)) :=
       WeightedDiGraph.search_invar_all_basic start s
@@ -89,51 +75,48 @@ abbrev dijkstra_all_invar (start : V) (s : WeightedDiGraph.base_search_state g (
     ∧ search_invar_start_not_mem_tail start s
     ∧ search_invar_stack_nodup s
 
-
-
 lemma dijkstra_invar_holds_at_init (start : V):
       dijkstra_all_invar start (WeightedDiGraph.base_search_state_initial (G:=g) start (0,0)) := by
-      constructor
-      · apply WeightedDiGraph.base_search_state_initial_all_basic_invars
-      · and_intros
-        · unfold dijkstra_stack_shortest_path
-          unfold WeightedDiGraph.base_search_state_initial
-          unfold cost_is
-          simp
-          use g.nil_path start
-          unfold WeightedDiGraph.Path.is_cheapest
-          and_intros
-          · apply WeightedDiGraph.Path.cost_nil_zero
-          · simp
-            intro a nodup
-            rw [← WeightedDiGraph.Path.cost]
-            rw [WeightedDiGraph.Path.cost_nil_zero]
-            simp_all
-        · unfold hsearch_path_order_diff_by_edge_cost
-          unfold WeightedDiGraph.base_search_state_initial
-          simp
-          intro u u_is_start u_ne_start
-          grind
-        · unfold hsearch_invar_on_stack_or_all_neighbours_max_order
-          unfold WeightedDiGraph.base_search_state_initial
-          simp
-        · unfold dijkstra_stack_sorted
-          unfold WeightedDiGraph.base_search_state_initial
-          simp
-        · unfold hsearch_invar_start_path_order_zero_zero
-          unfold WeightedDiGraph.base_search_state_initial
-          simp
-        · unfold search_invar_start_not_mem_tail
-          unfold WeightedDiGraph.base_search_state_initial
-          simp
-        · unfold search_invar_stack_nodup
-          unfold WeightedDiGraph.base_search_state_initial
-          simp
-          grind
+  constructor
+  · apply WeightedDiGraph.base_search_state_initial_all_basic_invars
+  · and_intros
+    · unfold dijkstra_stack_shortest_path
+      unfold WeightedDiGraph.base_search_state_initial
+      unfold cost_is
+      simp
+      use g.nil_path start
+      unfold WeightedDiGraph.Path.is_cheapest
+      and_intros
+      · apply WeightedDiGraph.Path.cost_nil_zero
+      · simp
+        intro a nodup
+        rw [← WeightedDiGraph.Path.cost]
+        rw [WeightedDiGraph.Path.cost_nil_zero]
+        simp_all
+    · unfold hsearch_path_order_diff_by_edge_cost
+      unfold WeightedDiGraph.base_search_state_initial
+      simp
+      intro u u_is_start u_ne_start
+      grind
+    · unfold hsearch_invar_on_stack_or_all_neighbours_max_order
+      unfold WeightedDiGraph.base_search_state_initial
+      simp
+    · unfold dijkstra_stack_sorted
+      unfold WeightedDiGraph.base_search_state_initial
+      simp
+    · unfold hsearch_invar_start_path_order_zero_zero
+      unfold WeightedDiGraph.base_search_state_initial
+      simp
+    · unfold search_invar_start_not_mem_tail
+      unfold WeightedDiGraph.base_search_state_initial
+      simp
+    · unfold search_invar_stack_nodup
+      unfold WeightedDiGraph.base_search_state_initial
+      simp
+      grind
+
 section
 variable (state : WeightedDiGraph.base_search_state g (ℕ×ℕ))
-
-
 
 lemma dijkstra_expand_start_not_mem_tail_carries (start : V) (goal : V)
     (start_visited : WeightedDiGraph.search_invar_start_visited start state)
@@ -154,55 +137,52 @@ lemma dijkstra_expand_start_not_mem_tail_carries (start : V) (goal : V)
       simp at start_in
       grind
 
-
 lemma dijkstra_expand_stack_nodup_carries (goal : V)
     (stack_visited : WeightedDiGraph.search_invar_stack_is_visited state)
-    :
-     ∀ head : V, ∀ tail : List V,
+    : ∀ head : V, ∀ tail : List V,
         search_invar_stack_nodup state
           ∧ ¬ head = goal
           ∧ state.stack = head :: tail
         → search_invar_stack_nodup (hsearch_step_expand h_zero state head tail) := by
-      intro head tail ⟨ prior_invar,head_ne_goal,compose⟩
-      unfold search_invar_stack_nodup
-      intro v
-      unfold hsearch_step_expand
-      simp_all
-      rw [mergeSort_count]
-      by_cases v_not_mem_tail : v ∉ tail --v_eq_head : v = head
-      · have tail_count : List.count v tail = 0 := by
-          apply List.count_eq_zero.mpr
-          assumption
-        simp [tail_count]
-        apply List.nodup_iff_count_le_one.mp
-
-        apply List.Nodup.filterMap
-        · grind
-        · unfold List.unattach
-          apply List.Nodup.map
-          · simp
-          · simp
-      · simp at v_not_mem_tail ; rename v ∈ tail => v_mem_tail
-        simp
-        have count_tail_eq_one : List.count v tail = 1 := by
-          apply eq_of_le_of_ge
-          · specialize prior_invar v
-            rw [List.count_cons] at prior_invar
-            simp at prior_invar
-            apply le_trans ; rotate_left
-            · apply prior_invar
-            · simp
-          · simp
-            assumption
-        simp_all
-        apply List.count_eq_zero.mpr
-        simp
-        intro adj_head_v
-        constructor
-        · apply stack_visited.right
-          assumption
-        · intro v_visited v_not_in_tail
-          contradiction
+  intro head tail ⟨ prior_invar,head_ne_goal,compose⟩
+  unfold search_invar_stack_nodup
+  intro v
+  unfold hsearch_step_expand
+  simp_all
+  rw [mergeSort_count]
+  by_cases v_not_mem_tail : v ∉ tail --v_eq_head : v = head
+  · have tail_count : List.count v tail = 0 := by
+      apply List.count_eq_zero.mpr
+      assumption
+    simp [tail_count]
+    apply List.nodup_iff_count_le_one.mp
+    apply List.Nodup.filterMap
+    · grind
+    · unfold List.unattach
+      apply List.Nodup.map
+      · simp
+      · simp
+  · simp at v_not_mem_tail ; rename v ∈ tail => v_mem_tail
+    simp
+    have count_tail_eq_one : List.count v tail = 1 := by
+      apply eq_of_le_of_ge
+      · specialize prior_invar v
+        rw [List.count_cons] at prior_invar
+        simp at prior_invar
+        apply le_trans ; rotate_left
+        · apply prior_invar
+        · simp
+      · simp
+        assumption
+    simp_all
+    apply List.count_eq_zero.mpr
+    simp
+    intro adj_head_v
+    constructor
+    · apply stack_visited.right
+      assumption
+    · intro v_visited v_not_in_tail
+      contradiction
 
 lemma dijkstra_expand_keeps_shortest_path_invar_start
     (start : V) (goal : V)
@@ -213,84 +193,79 @@ lemma dijkstra_expand_keeps_shortest_path_invar_start
     (compose : state.stack = head :: tail):
      g.cost_is start start ((hsearch_step_expand h_zero state head tail).pathOrder start).1
      := by
-      unfold cost_is
-      unfold hsearch_invar_start_path_order_zero_zero at start_path_order
-      have gg := start_path_order
-      have still_zero : (hsearch_step_expand h_zero state head tail).pathOrder start = 0 := by
-        apply hsearch_expand_start_path_order_zero_carries
-        · apply start_visited
-        · constructor
-          · apply start_path_order
-          · constructor
-            · apply head_is_not_goal
-            · apply compose
-
-      rw [still_zero]
-      use (g.nil_path start)
-      unfold Path.is_cheapest
-      constructor
-      all_goals
-        rw [Path.cost_nil_zero]
-        simp
-
-
+  unfold cost_is
+  unfold hsearch_invar_start_path_order_zero_zero at start_path_order
+  have gg := start_path_order
+  have still_zero : (hsearch_step_expand h_zero state head tail).pathOrder start = 0 := by
+    apply hsearch_expand_start_path_order_zero_carries
+    · apply start_visited
+    · constructor
+      · apply start_path_order
+      · constructor
+        · apply head_is_not_goal
+        · apply compose
+  rw [still_zero]
+  use (g.nil_path start)
+  unfold Path.is_cheapest
+  constructor
+  all_goals
+    rw [Path.cost_nil_zero]
+    simp
 
 lemma dijkstra_new_head_cost_lt_other_on_stack_before
-  (head : V) (tail : List V) (compose : state.stack = head :: tail)
-  (u : V) (u_on_stack : u ∈ state.stack) (u_ne_head : u ≠ head)
-  (u_visited : u ∈ state.visited)
-  (v : V) (after_not_nil : (hsearch_step_expand h_zero state head tail).stack ≠ [])
-  (adj_head_v : g.Adj head v)
-  (v_head_after : (hsearch_step_expand h_zero state head tail).stack.head after_not_nil = v):
-  ((hsearch_step_expand h_zero state head tail).pathOrder v).1 ≤ (state.pathOrder u).1 := by
-    unfold hsearch_step_expand at v_head_after
+    (head : V) (tail : List V) (compose : state.stack = head :: tail)
+    (u : V) (u_on_stack : u ∈ state.stack) (u_ne_head : u ≠ head)
+    (u_visited : u ∈ state.visited)
+    (v : V) (after_not_nil : (hsearch_step_expand h_zero state head tail).stack ≠ [])
+    (adj_head_v : g.Adj head v)
+    (v_head_after : (hsearch_step_expand h_zero state head tail).stack.head after_not_nil = v):
+    ((hsearch_step_expand h_zero state head tail).pathOrder v).1 ≤ (state.pathOrder u).1 := by
+  unfold hsearch_step_expand at v_head_after
+  simp_all
+  by_cases u_neq_v : u ≠ v
+  · apply mergeSort_head_from_head_unsorted at v_head_after
+    · specialize v_head_after u
+      apply imp_iff_or_not.mp at v_head_after
+      cases v_head_after
+      case pos.inl p =>
+        simp_all
+        cases p
+        case inl p =>
+          split_ifs at p <;> (unfold hsearch_step_expand ; simp_all ; try grind)
+        case inr p =>
+          split_ifs at p
+          all_goals
+            unfold Nat.instFValueCompProd at p
+            simp at p
+            unfold hsearch_step_expand
+            simp_all
+            grind
+      case pos.inr p =>
+        apply absurd p
+        clear p
+        simp
+        intro u_not_in_tail
+        contradiction
+    · intro a b c ab bc
+      apply hsearch_merge_trans
+      · apply ab
+      · apply bc
+    · intro a b
+      apply hsearch_merge_total
+  · simp at u_neq_v
+    subst u_neq_v
+    clear v_head_after
+    unfold hsearch_step_expand
     simp_all
-    by_cases u_neq_v : u ≠ v
-    · apply mergeSort_head_from_head_unsorted at v_head_after
-      · specialize v_head_after u
-        apply imp_iff_or_not.mp at v_head_after
-        cases v_head_after
-        case pos.inl p =>
-          simp_all
-          cases p
-          case inl p =>
-            split_ifs at p <;> (unfold hsearch_step_expand ; simp_all ; try grind)
-          case inr p =>
-            split_ifs at p
-            all_goals
-              unfold FValueComp.lt_B at p
-              unfold Nat.instFValueCompProd at p
-              simp at p
-              unfold hsearch_step_expand
-              simp_all
-              grind
-        case pos.inr p =>
-          apply absurd p
-          clear p
-          simp
-          intro u_not_in_tail
-          contradiction
-      · intro a b c ab bc
-        apply hsearch_merge_trans
-        · apply ab
-        · apply bc
-      · intro a b
-        apply hsearch_merge_total
-    · simp at u_neq_v
-      subst u_neq_v
-      clear v_head_after
-      unfold hsearch_step_expand
-      simp_all
-      split_ifs
-      · rfl
-      · rfl
-      · grind
+    split_ifs
+    · rfl
+    · rfl
+    · grind
 
 lemma dijkstra_new_head_cost_lt_other_on_stack_now
   (head : V) (tail : List V)
   (u : V) (u_on_stack_after : u ∈ (hsearch_step_expand h_zero state head tail).stack)
   (v : V) (after_not_nil : (hsearch_step_expand h_zero state head tail).stack ≠ [])
-  --(adj_head_v : g.Adj head v)
   (v_head_after : (hsearch_step_expand h_zero state head tail).stack.head after_not_nil = v):
   ((hsearch_step_expand h_zero state head tail).pathOrder v).1 ≤ ((hsearch_step_expand h_zero state head tail).pathOrder u).1 := by
     unfold hsearch_step_expand at v_head_after
@@ -309,7 +284,6 @@ lemma dijkstra_new_head_cost_lt_other_on_stack_now
           split_ifs at p
           all_goals
             unfold hsearch_step_expand
-            unfold FValueComp.lt_B at p
             unfold Nat.instFValueCompProd at p
             simp_all
             grind
@@ -322,8 +296,6 @@ lemma dijkstra_new_head_cost_lt_other_on_stack_now
       · apply bc
     · intro a b
       apply hsearch_merge_total
-
-
 
 omit [DecidableEq V] in
 private lemma track_walk_not_on_stack
@@ -384,7 +356,6 @@ private lemma track_path_not_on_stack
         apply no_pw_mem_on_stack
         apply y_in_pw_supp
       · apply x_in_supp
-
 
 /--
   The node v is the head of the stack after this expansion.
@@ -509,7 +480,6 @@ private lemma dijkstra_shorter_path_first_on_stack_not_head {start : V}
       specialize update_invar ⟨ w, w_visited ⟩ w_not_on_stack u adj_w_u
       omega
 
-
   have p'_lt_mp_plus_e : p'.cost < path_mother.cost + e := by
     unfold Path.cost
     convert p'_cheaper
@@ -522,9 +492,6 @@ private lemma dijkstra_shorter_path_first_on_stack_not_head {start : V}
   have p'_lt_sw_f : p'.cost < p_w.cost + f := by omega
 
   omega
-
-
-
 
 private lemma dijkstra_shorter_path_with_optimal_node_and_adj_on_stack
   {s v : V}
@@ -594,10 +561,6 @@ private lemma dijkstra_shorter_path_with_optimal_node_and_adj_on_stack
 
   ---- path order of w was updated when expanding its predecessors, who is
   omega
-
-
-
-
 
 private lemma dijkstra_shorter_path_via_head
       (start : V)
@@ -1408,7 +1371,7 @@ lemma dijkstra_expand_keeps_shortest_path_invar
                           cases h
                           · grind
                           · rename_i r
-                            unfold FValueComp.lt_B Nat.instFValueCompProd at r
+                            unfold Nat.instFValueCompProd at r
                             simp at r
                             grind
                   · intros; apply hsearch_merge_trans <;> assumption
@@ -1446,7 +1409,7 @@ lemma dijkstra_expand_keeps_shortest_path_invar
                         · try simp_all
                           grind
                         · rename_i r
-                          unfold FValueComp.lt_B Nat.instFValueCompProd at r
+                          unfold Nat.instFValueCompProd at r
                           simp at r
                           apply Prod.lex_iff.mp at r
                           have p : (state.pathOrder v).2 < (state.pathOrder the_mother).2 := by
@@ -1490,7 +1453,7 @@ lemma dijkstra_expand_keeps_shortest_path_invar
                         · simp_all
                           try grind
                         · rename_i r
-                          unfold FValueComp.lt_B Nat.instFValueCompProd at r
+                          unfold Nat.instFValueCompProd at r
                           simp at r
                           apply Prod.lex_iff.mp at r
                           have p : (state.pathOrder v).2 < (state.pathOrder the_mother).2 := by grind
@@ -1669,34 +1632,24 @@ lemma dijkstra_expand_keeps_shortest_path_invar
       · apply head_is_not_goal
       · exact compose
 
-
-
-
-
-
-
-lemma dijkstra_expand_keeps_stack_sorted(goal : V)
-    :
-     ∀ head : V, ∀ tail : List V,
-        dijkstra_stack_sorted  state
-          ∧ head ≠ goal
-          ∧ state.stack = head :: tail
-        → dijkstra_stack_sorted  (hsearch_step_expand h_zero state head tail) := by
-      intro head tail ⟨ prior_invar,head_ne_goal,compose⟩
-      unfold dijkstra_stack_sorted
-      unfold hsearch_step_expand
-      apply merge_two_prop
-      · intro a b c a_b b_c
-        apply hsearch_merge_trans
-        · apply a_b
-        · apply b_c
-      · intro a b
-        apply hsearch_merge_total
-      · ext x y
-        rw [FValueComp.lt_B_eq]
-        simp
-
-
+lemma dijkstra_expand_keeps_stack_sorted(goal : V) :
+    ∀ head : V, ∀ tail : List V,
+      dijkstra_stack_sorted state
+        ∧ head ≠ goal
+        ∧ state.stack = head :: tail
+      → dijkstra_stack_sorted  (hsearch_step_expand h_zero state head tail) := by
+  intro head tail ⟨ prior_invar,head_ne_goal,compose⟩
+  unfold dijkstra_stack_sorted
+  unfold hsearch_step_expand
+  apply merge_two_prop
+  · intro a b c a_b b_c
+    apply hsearch_merge_trans
+    · apply a_b
+    · apply b_c
+  · intro a b
+    apply hsearch_merge_total
+  · ext x y
+    simp
 
 end
 
@@ -1744,18 +1697,13 @@ lemma dijkstra_expand_carries_all_dijkstra_invars (start : V) (goal : V):
           · exact invar_before.left.left
           · exact ⟨ invar_before.right.right.right.right.right.right.right, head_ne_goal, compose⟩
 
-
-/- -/
 theorem dijkstra_is_optimal (start : V) (goal : V)
     (returned_path : Option.isSome (dijkstra (g:=g) start goal)):
     ((dijkstra (g:=g) start goal).get returned_path).is_cheapest := by
     let final : WeightedDiGraph.base_search_state g (ℕ×ℕ) × Bool := WeightedDiGraph.search_with_stack_step (goal:=goal) (start_state := WeightedDiGraph.base_search_state_initial start (0,0)) (hsearch_step_expand h_zero) (hsearch_expand_metric_reduction h_zero)
     let final_state := final.1
-
     -- general properties
     have h_4 : WeightedDiGraph.search_prop_stack_head_is_goal goal final_state := by
-      --intro terminated_with_goal_found
-      --unfold search_prop_stack_head_is_goal
       unfold final_state
       unfold final
       unfold WeightedDiGraph.search_with_stack_step
@@ -1817,7 +1765,6 @@ theorem dijkstra_is_optimal (start : V) (goal : V)
       · apply WeightedDiGraph.base_invar_carries_over_stack_step
         apply hsearch_expand_keeps_base_invars
 
-
     -- Dijkstra specific ones
     have dijkstra_full_invar_at_end : dijkstra_all_invar start final_state := by
      have right_class : (fun s => dijkstra_all_invar start (WeightedDiGraph.has_base_search_state.to_base_state (G:=g) s)) final_state := by
@@ -1836,9 +1783,6 @@ theorem dijkstra_is_optimal (start : V) (goal : V)
 
     have i_1 : dijkstra_stack_shortest_path start final_state := dijkstra_full_invar_at_end.2.1
 
-    --have h_2 : dijkstra_path_as_extracted_as_long_as_sort_index start final_state := dijkstra_full_invar_at_end.2.2.1
-
-
     have h : g.cost_is start goal (final_state.pathOrder goal).1 := by
      have i_1' := i_1 goal h_3
      unfold WeightedDiGraph.search_prop_stack_head_is_goal at h_4
@@ -1847,16 +1791,12 @@ theorem dijkstra_is_optimal (start : V) (goal : V)
      obtain ⟨ tail, compose ⟩ := List.head?_eq_some_iff.mp h_4
      simp_all
 
-
-    unfold dijkstra
-    unfold WeightedDiGraph.search_exe_with_stack_step
-    unfold WeightedDiGraph.search_exe
-    unfold WeightedDiGraph.Path.is_cheapest
+    unfold dijkstra WeightedDiGraph.search_exe_with_stack_step
+    unfold WeightedDiGraph.search_exe WeightedDiGraph.Path.is_cheapest
     intro p'
     unfold WeightedDiGraph.distance_is at h
     obtain ⟨p, ⟨ p_path_length, p_is_cheapest ⟩ ⟩  := h
 
-    --unfold dijkstra_path_as_extracted_as_long_as_sort_index at h_2
     have prop := hsearch_path_extracted_not_longer_than_path_order start final_state t_1 t_2 t_3 dijkstra_full_invar_at_end.2.2.1
     unfold final_state at prop
     unfold final at prop
