@@ -13,12 +13,12 @@ rev = "v4.27.0"
 [[require]]
 name = "unplanvalidator"
 git = "https://github.com/AmosNico/validator"
-rev = "main"
+rev = "v4.27.0"
 
 [[require]]
 name = "SearchAlgorithms"
 git = "https://github.com/galvusdamor/lean4-search-algorithms"
-rev = "main"
+rev = "v4.27.0"
 
 [[lean_exe]]
 name = "planner"
