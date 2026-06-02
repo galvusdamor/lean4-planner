@@ -1,6 +1,6 @@
 import Mathlib.Logic.Lemmas
 
-import Graphlib.NatGraph
+import SearchAlgorithms.NatGraph
 import Validator.PlanningTask.Basic
 
 namespace Validator

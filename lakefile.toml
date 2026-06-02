@@ -1,9 +1,9 @@
-name = "graphlib"
+name = "planlib"
 version = "0.1.0"
-defaultTargets = ["Graphlib", "planner"]
+defaultTargets = ["planlib", "planner"]
 
 [[lean_lib]]
-name = "Graphlib"
+name = "planlib"
 
 [[require]]
 name = "mathlib"
@@ -13,6 +13,11 @@ rev = "v4.27.0"
 [[require]]
 name = "unplanvalidator"
 git = "https://github.com/AmosNico/validator"
+rev = "main"
+
+[[require]]
+name = "SearchAlgorithms"
+git = "https://github.com/galvusdamor/lean4-search-algorithms"
 rev = "main"
 
 [[lean_exe]]

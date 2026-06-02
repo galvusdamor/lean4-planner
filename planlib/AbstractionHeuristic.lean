@@ -1,7 +1,7 @@
 import Validator.PlanningTask.Core
 import Validator.PlanningTask.Basic
-import Graphlib.AStar
-import Graphlib.Heuristics
+import SearchAlgorithms.AStar
+import planlib.Heuristics
 
 namespace Validator
 
