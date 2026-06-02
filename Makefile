@@ -5,11 +5,11 @@ build:
 	lake build
 
 doc:
-	cd docbuild && lake -Kenv=dev build Graphlib:docs
+	cd docbuild && lake -Kenv=dev build planlib:docs
 	cat docbuild/docs/additional.css >> docbuild/.lake/build/doc/style.css
 
 show-doc: doc
-	(sleep 2 && firefox http://127.0.0.1:8000/Graphlib.html) &
+	(sleep 2 && firefox http://127.0.0.1:8000/planlib.html) &
 	cd docbuild/.lake/build/doc && python -m http.server --bind 127.0.0.1
 
 clean:
@@ -17,7 +17,7 @@ clean:
 
 # Dependency Graph
 
-LEAN_FILES := $(wildcard Graphlib/*.lean)
+LEAN_FILES := $(wildcard planlib/*.lean)
 
 dependencies.svg: dependencies.dot
 	dot -Tsvg dependencies.dot > $@
@@ -30,5 +30,5 @@ dependencies.dot: $(LEAN_FILES)
 		else \
 			echo "$(basename $(notdir $(file))) [ label = \"$(basename $(notdir $(file)))✓\", color="green", href = \"$(BASE)$(basename $(notdir $(file))).html\" ]" >> $@; \
 		fi;)
-	@(grep -nr "import Graphlib" Graphlib/*.lean | awk -F '[./]' '{print $$4 " -> " $$2}') >> $@
+	@(grep -nr "import planlib" planlib/*.lean | awk -F '[./]' '{print $$4 " -> " $$2}') >> $@
 	@echo "}" >> $@
