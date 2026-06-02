@@ -27,6 +27,7 @@ Then run
 
 This will create a file ``task.txt`` which is the grounded STRIPS version of the selected problem. You need this as input for the
 planner. All other files can be discarded.
+The ``task.tex`` file used in [1] are located in the ``test`` directory.
 
 To run the planner, you first need to build it. For this run ``lake build``.
 
@@ -45,3 +46,12 @@ Note that the planner is currently extremely inefficient when it comes to runtim
 ![Dependency graph](dependencies.svg)
 
 (Update this graph with `make dependencies.svg`.)
+
+## References
+If you want to cite this work, please cite [1]
+
+```
+[1] Behnke, G., Kilian, S., Gattinger M. (2026).
+A^* with h^max Definitely Finds Optimal Plans -- Formally Verifying a Planner Based on Heuristic Search.
+Heuristics and Search for Domain-independent Planning (HSDIP 2026)
+```
