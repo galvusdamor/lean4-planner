@@ -83,8 +83,19 @@ private lemma partition_edge_cost_le_action {n P : ℕ} (prob : STRIPS n)
     (prob.actions'[i] |> fun a =>
       Action.mk a.name a.pre' a.add' a.del' (partitioning p i))
     _ _ _ _ using 1
-  · unfold partition_STRIPS; aesop
-  · unfold partition_STRIPS; aesop
+  · unfold partition_STRIPS; 
+    simp_all only [List.any_eq_true, List.mem_mapFinIdx, Bool.decide_and, Bool.decide_eq_true, Bool.and_eq_true,
+      ↓existsAndEq, true_and]
+    apply Exists.intro
+    · apply Exists.intro
+      · apply And.intro
+        on_goal 2 => { exact a_succ }
+        · simp_all only [Fin.eta]
+          exact a_app
+      · simp_all only [Fin.is_lt]
+  · unfold partition_STRIPS
+    simp_all only [Fin.getElem_fin, List.mem_mapFinIdx, Action.mk.injEq]
+    grind
   · exact a_app
   · exact a_succ
 

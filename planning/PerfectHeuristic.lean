@@ -231,13 +231,24 @@ lemma Successor_of_applicable' {n : ℕ} (a : Action n) (s : State' n)
       · intro x hx;
         unfold convertState; simp_all +decide [ Action.pre ] ;
         unfold convertVarSet at hx; simp_all +decide [ applicable' ] ;
-        unfold satisfies' at happ; aesop;
+        unfold satisfies' at happ
+        simp_all only [Fin.getElem_fin, List.all_eq_true]
       · -- By definition of successor', we know that for every variable x, x is in the successor state exactly when it's in the original state and not in del, or in add.
         have h_succ_vars : ∀ x : Fin n, x ∈ convertState (successor' a s) ↔ x ∈ convertState s \ a.del ∪ a.add := by
           intro x
           simp [convertState, successor', Action.add, Action.del];
           rw [ BitVec.getElem_ofBoolListLE ];
-          unfold convertVarSet; aesop;
+          unfold convertVarSet
+          simp_all only [List.contains_eq_mem, decide_eq_true_eq, decide_true, decide_false, Bool.if_false_left, Bool.if_true_left, List.getElem_map, List.getElem_finRange, Fin.cast_mk, Fin.eta, Bool.or_eq_true, Bool.and_eq_true, Bool.not_eq_eq_eq_not, Bool.not_true, decide_eq_false_iff_not, List.coe_toFinset, Set.mem_setOf_eq]
+          apply Iff.intro
+          · intro a_1
+            cases a_1 with
+            | inl h => simp_all only [or_true]
+            | inr h_1 => simp_all only [not_false_eq_true, and_self, true_or]
+          · intro a_1
+            cases a_1 with
+            | inl h => simp_all only [not_false_eq_true, and_self, or_true]
+            | inr h_1 => simp_all only [true_or]
         exact Set.ext h_succ_vars
 
 /-
@@ -255,8 +266,12 @@ lemma solvable_non_goal_has_applicable {n : ℕ} (prob : STRIPS n) (s : State' n
           rename_i a s2 ha π succ;
           unfold satisfies';
           simp_all +decide [ Applicable ];
-          intro x hx; have := succ.1 ( show x ∈ a.pre from by
-                                        exact Finset.mem_coe.mpr ( List.mem_toFinset.mpr hx ) ) ; aesop;
+          intro x hx
+          have := succ.1 ( show x ∈ a.pre from by
+                                        exact Finset.mem_coe.mpr ( List.mem_toFinset.mpr hx ) )
+          obtain ⟨left, right⟩ := succ
+          subst right
+          exact this
       exact List.ne_nil_of_mem ( List.mem_filter.mpr ⟨ mem_actions'_of_mem_actions ha.1, ha.2 ⟩ )
 
 /-
@@ -329,7 +344,7 @@ lemma perfect_achieves_min {n : ℕ} (prob : STRIPS n) (h : State' n → ℕ)
         obtain ⟨plan, hplan⟩ := hp.2.1 s hs
         rcases plan with ⟨last, path, goal_sat⟩
         rcases path with ( _ | ⟨a₀, s2, ha₀, succ₀, rest⟩ ) <;> simp_all +decide;
-        · exact absurd ( GoalState_implies_satisfies' prob s goal_sat ) ( by aesop );
+        · exact absurd ( GoalState_implies_satisfies' prob s goal_sat ) ( by simp_all only [Bool.false_eq_true, not_false_eq_true] );
         · -- By the definition of successor, we know that s2 is the successor state of a₀ and s.
           have hs2 : s2 = convertState (successor' a₀ s) := by
             obtain ⟨ _, foo ⟩ := succ₀
@@ -540,7 +555,7 @@ lemma apply_regressable_achieves_goal {n : ℕ} (a : Action n)
       exact ⟨ by simpa [ convertVarSet ] using hconvert.1 x |>.2 ( hreg.1 ( hprev ( by
         unfold regress' at *; simp_all +decide [ convertVarSet ] ;
         unfold varset'_of_state' at *; simp_all +decide [ BitVec.getElem_ofBoolListLE ] ;
-        exact Or.inr ( by rw [ state'_of_varset'_getElem ] ; aesop ) ) ) ), by simpa [ convertVarSet ] using hconvert.2 x |>.not.mpr hreg.2 ⟩
+        exact Or.inr ( by rw [ state'_of_varset'_getElem ] ; simp_all only [decide_true]) ) ) ), by simpa [ convertVarSet ] using hconvert.2 x |>.not.mpr hreg.2 ⟩
 
 /-- Cast a path from one `replace_goal` problem to another (same actions). -/
 noncomputable def cast_path_replace_goal {n : ℕ} (prob : STRIPS n) (g1 g2 : VarSet' n)
@@ -636,7 +651,8 @@ lemma heur_eq_last_action_cost {n : ℕ} (prob : STRIPS n)
             Successor a s_prev plan_g.last ∧
             prefix_path.cost + a.cost = plan_g.path.cost ∧
             (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g)))).GoalState s_prev := by
-              have := plan_last_step_decomposition prob g plan_g hng; aesop;
+              have := plan_last_step_decomposition prob g plan_g hng
+              simp_all only [Subtype.forall, Bool.not_eq_true, exists_and_left, exists_and_right]
           have h_admissible : h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g)))) s ≤ ha.cost := by
             have h_admissible : ∀ (path : Path (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g))) ) (convertState s) prefix_path), path.cost ≥ h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g))) ) s := by
               intros path
@@ -875,7 +891,8 @@ lemma weaker_regression_invariant_le {n : ℕ} (prob : STRIPS n)
   contrapose! hinv;
   intro H;
   obtain ⟨regressi, hregressi⟩ : ∃ regressi : List (Action n), regressi = prob.actions'.filter (fun a => regressable' a (state'_of_varset' g)) ∧ Option.some (h (replace_goal prob g) s) ≤ (regressi.map (fun a => a.cost + h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g)))) s)).min? := by
-    have := H s g; aesop;
+    have := H s g
+    simp_all only [Bool.not_eq_true, Bool.false_eq_true, ↓reduceIte, ne_eq, List.filter_eq_nil_iff, not_forall, Bool.not_eq_false, forall_const, not_isEmpty_of_nonempty, IsEmpty.forall_iff, ge_iff_le, and_true, ↓existsAndEq, and_self]
   have h_min_le : ∀ {l : List ℕ}, l ≠ [] → ∀ x ∈ l, (List.min? l).getD 0 ≤ x := by
     exact fun {l} a x a_1 => List.min?_getD_le_of_mem a_1
   specialize h_min_le ( show List.map ( fun a => a.cost + h ( replace_goal prob ( varset'_of_state' ( regress' a ( state'_of_varset' g ) ) ) ) s ) regressi ≠ [ ] from ?_ ) ( a.cost + h ( replace_goal prob ( varset'_of_state' ( regress' a ( state'_of_varset' g ) ) ) ) s ) ?_ <;> simp_all +decide;
@@ -1015,7 +1032,8 @@ lemma goal_aware_of_bellman_regression_invariant {n : ℕ} (prob : STRIPS n)
     (g : VarSet' n) (s : State' n)
     (hsat : satisfies' g s = true) :
     h (replace_goal prob g) s = 0 := by
-  have := hinv s g; aesop;
+  have := hinv s g
+  simp_all only [↓reduceIte]
 
 /-- Auxiliary: plan cost ≥ h for the bellman regression invariant, by induction on plan length. -/
 private lemma plan_cost_ge_heur_of_bellman_regression_aux {n : ℕ} (prob : STRIPS n)
@@ -1181,14 +1199,22 @@ lemma h_1_any_goal_le_of_singleton_bound {n : ℕ} (prob : STRIPS n)
       (∀ g' ∈ g.1, h (replace_goal prob ⟨[g'], by simp [List.SortedLT, StrictMono]⟩) start ≤ C)) :
     h (replace_goal prob g) start ≤ C := by
   by_cases hsat : satisfies' g start <;> simp_all only
-  · have := goal_aware_of_h_1_regression_invariant prob h hinv g start hsat; aesop;
+  · have := goal_aware_of_h_1_regression_invariant prob h hinv g start hsat
+    simp_all only [true_or, zero_le]
   · by_cases hlen : g.1.length > 1;
     · have := h_1_multi_atom_le_singletons prob h hinv g start hsat hlen;
       refine le_trans this ?_;
       rw [ List.max_le_iff ];
-      aesop;
+      intro b a
+      simp_all only [Bool.false_eq_true, false_or, Bool.not_eq_true, List.mem_map]
+      obtain ⟨val, property⟩ := g
+      obtain ⟨w, h_1⟩ := a
+      obtain ⟨left, right⟩ := h_1
+      subst right
+      simp_all only
     · rcases g with ⟨ l, hl ⟩ ; rcases l with ( _ | ⟨ g', _ | ⟨ g'', l ⟩ ⟩ ) <;> simp_all [ List.SortedLT ]
-      unfold satisfies' at hsat; aesop;
+      unfold satisfies' at hsat
+      simp_all only [Fin.getElem_fin, List.all_nil, Bool.true_eq_false]
 
 /-
 The h_1 invariant for a singleton goal (length = 1) gives the bellman regression structure.
@@ -1215,7 +1241,13 @@ private lemma goalState_atom_of_goalState_conjunction {n : ℕ} (prob : STRIPS n
     (hgoal : (replace_goal prob rg).GoalState s_prev) :
     (replace_goal prob ⟨[g'], by simp [List.SortedLT, StrictMono]⟩).GoalState s_prev := by
   unfold replace_goal; simp_all +decide [ STRIPS.GoalState ] ;
-  exact fun x hx => hgoal <| by unfold convertVarSet at *; aesop;
+  exact fun x hx => hgoal <| by unfold convertVarSet at *
+                                simp_all only [List.coe_toFinset, List.toFinset_cons, List.toFinset_nil, insert_empty_eq, Finset.coe_singleton,
+      Set.mem_singleton_iff, Set.mem_setOf_eq]
+                                subst hx
+                                obtain ⟨val, property⟩ := rg
+                                simp_all only
+                                exact hg'
 
 /-- Auxiliary: for singleton goals, plan cost ≥ h by induction on path length.
     When the regressed goal is multi-atom, we use h_1_any_goal_le_of_singleton_bound to

@@ -13,7 +13,7 @@ def runPlanner (dom : String) (heur : String) : IO Unit := do
     let ⟨n, prob⟩ ← Validator.STRIPS.parse dom -- What is `_n` here?
     -- _n is the number of variables in the problem
     let h : (Validator.State' n → ℕ) := match heur with
-    | "h1" => (fun s : Validator.State' n => Validator.h_1_new prob s)
+    | "h1" => (fun s : Validator.State' n => Validator.h_1 prob s)
     | "h0" => (fun _ => 0)
     | _ => (fun _ => 0)
 

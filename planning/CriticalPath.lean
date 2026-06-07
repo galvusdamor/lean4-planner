@@ -263,7 +263,8 @@ lemma h_1_step_changes_if_not_fixpoint {n : ℕ} (prob : STRIPS n) (bef : Vector
     vec_to_state n (h_1_step n prob bef) ≠ vec_to_state n bef := by
       have h_step_some : ((h_1_step n prob bef)[i]).isSome = true := by
         exact h_1_step_applicable_effects prob bef a ha happ i hi;
-      intro H; have := vec_to_state_getElem n ( h_1_step n prob bef ) i; have := vec_to_state_getElem n bef i; aesop;
+      intro H; have := vec_to_state_getElem n ( h_1_step n prob bef ) i; have := vec_to_state_getElem n bef i
+      simp_all only [Fin.getElem_fin, Option.isSome_eq_false_iff, Option.isNone_iff_eq_none, Option.isSome_none, Bool.false_eq_true]
 
 /-
 If vec_to_state changes, then the applicable filter grows.
@@ -292,8 +293,11 @@ lemma applicable_filter_grows {n : ℕ} (prob : STRIPS n)
           by_cases h_add : ∃ a ∈ prob.actions', applicable' a (vec_to_state n bef) ∧ i ∈ a.add'.val;
           · obtain ⟨ a, ha₁, ha₂, ha₃ ⟩ := h_add;
             have h_filter_eq : (bef)[i].isSome = true := by
-              have := h_1_step_applicable_effects prob bef_prev a ha₁ ( hchanged a ha₁ ha₂ ) i ha₃; aesop;
-            rw [ h_1_step_preserves_isSome ] ; aesop ( simp_config := { singlePass := true } ) ;
+              have := h_1_step_applicable_effects prob bef_prev a ha₁ ( hchanged a ha₁ ha₂ ) i ha₃
+              simp_all only [Fin.getElem_fin]
+            rw [ h_1_step_preserves_isSome ]
+            subst hstep
+            simp_all only [Fin.getElem_fin]
             exact h_filter_eq
           · unfold h_1_step
             simp

@@ -790,7 +790,7 @@ lemma predecessor_satisfies_regressed_goal {n : ℕ} (a : Action n)
       · convert hsucc.1 x _;
         exact ( show x ∈ convertVarSet a.pre' from by simp [ convertVarSet, * ] );
       · cases hgoal x ( by
-          rw [ state'_of_varset'_getElem ] at * ; aesop ) <;> simp_all [ state'_of_varset'_getElem ];
+          rw [ state'_of_varset'_getElem ] at * ; simp_all only [decide_eq_true_eq] ) <;> simp_all [ state'_of_varset'_getElem ];
         rename_i h₁ h₂;
         cases h₁.1 (by
           exact List.mem_dedup.mp h₂
