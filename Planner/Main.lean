@@ -1,5 +1,5 @@
-import planlib.Planner
-import planlib.H1
+import planning.Planner
+import planning.H1
 
 import Validator.PlanningTask.Parser
 

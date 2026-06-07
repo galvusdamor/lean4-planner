@@ -1,6 +1,6 @@
 import Validator.PlanningTask.Core
 import Validator.PlanningTask.Basic
-import planlib.Planning
+import planning.Planning
 
 import Mathlib.Logic.Lemmas
 

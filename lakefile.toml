@@ -1,9 +1,9 @@
-name = "planlib"
+name = "planning"
 version = "0.1.0"
-defaultTargets = ["planlib", "planner"]
+defaultTargets = ["planning", "planner"]
 
 [[lean_lib]]
-name = "planlib"
+name = "planning"
 
 [[require]]
 name = "mathlib"

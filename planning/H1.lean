@@ -1,10 +1,10 @@
 
 import Mathlib.Tactic.Linarith
 
-import planlib.CriticalPath
-import planlib.PerfectHeuristic
+import planning.CriticalPath
+import planning.PerfectHeuristic
 
-import planlib.temp
+import planning.temp
 
 namespace Validator
 

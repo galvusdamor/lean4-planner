@@ -1,6 +1,6 @@
 import Mathlib.Tactic.Cases
 
-import planlib.Planning
+import planning.Planning
 
 namespace Validator
 
@@ -74,22 +74,22 @@ def h_1_step (n : ℕ) (prob : STRIPS n) (bef : Vector (WithTop ℕ) n) : Vector
   )
 
 
--- h_1 effectively considers delete relaxation
-def h_1 {n : ℕ} (prob : STRIPS n) (s : State' n) : ℕ :=
-  let f : Vector (WithTop ℕ) n → Fin (prob.actions'.length) → Vector (WithTop ℕ) n := fun a _ =>
-    h_1_step n prob a
-  let result := (List.finRange prob.actions'.length).foldl f (h_1_base n s)
-  let s_b := vec_to_state n result
-
-  -- check if the goal has been reached
-  if h_sat : satisfies' prob.goal' s_b then
-    let pre_cost : List ℕ := prob.goal'.val.attach.map (fun x : { x : Fin n // x ∈ prob.goal'.val } =>
-      result[x.1].get (by exact vec_to_state_isSome_of_satisfies n result prob.goal' h_sat x.1 x.2))
-
-    -- cost of the action plus most expensive precondition
-    if pre_cost_nil : pre_cost = [] then 0 else pre_cost.max pre_cost_nil
-  else
-    (2^n) * (max_action_cost prob) -- state is unsolvable
+---- h_1 effectively considers delete relaxation
+--def h_1 {n : ℕ} (prob : STRIPS n) (s : State' n) : ℕ :=
+--  let f : Vector (WithTop ℕ) n → Fin (prob.actions'.length) → Vector (WithTop ℕ) n := fun a _ =>
+--    h_1_step n prob a
+--  let result := (List.finRange prob.actions'.length).foldl f (h_1_base n s)
+--  let s_b := vec_to_state n result
+--
+--  -- check if the goal has been reached
+--  if h_sat : satisfies' prob.goal' s_b then
+--    let pre_cost : List ℕ := prob.goal'.val.attach.map (fun x : { x : Fin n // x ∈ prob.goal'.val } =>
+--      result[x.1].get (by exact vec_to_state_isSome_of_satisfies n result prob.goal' h_sat x.1 x.2))
+--
+--    -- cost of the action plus most expensive precondition
+--    if pre_cost_nil : pre_cost = [] then 0 else pre_cost.max pre_cost_nil
+--  else
+--    (2^n) * (max_action_cost prob) -- state is unsolvable
 
 /-- `updateIfCheaper` never increases the value. -/
 lemma updateIfCheaper_le (c : ℕ) (v : WithTop ℕ) : updateIfCheaper c v ≤ v := by
@@ -308,24 +308,24 @@ lemma applicable_filter_grows {n : ℕ} (prob : STRIPS n)
         grind +suggestions;
       have := h_filter_length.length_eq; simp_all +decide ;
 
-/-- Iteration function for h_1_step. -/
-def h_1_iter {n : ℕ} (prob : STRIPS n) (base : Vector (WithTop ℕ) n) : ℕ → Vector (WithTop ℕ) n
-  | 0 => base
-  | k + 1 => h_1_step n prob (h_1_iter prob base k)
-
-/-- Shifting the base of iteration by one step. -/
-lemma h_1_iter_shift {n : ℕ} (prob : STRIPS n) (base : Vector (WithTop ℕ) n) (k : ℕ) :
-    h_1_iter prob (h_1_step n prob base) k = h_1_iter prob base (k + 1) := by
-  induction k with
-  | zero => simp [h_1_iter]
-  | succ k ih => simp [h_1_iter, ih]
-
-/-- foldl over a list of length k equals k iterations. -/
-lemma h_1_foldl_eq_iter {n : ℕ} (prob : STRIPS n) (base : Vector (WithTop ℕ) n) (l : List α) :
-    l.foldl (fun a _ => h_1_step n prob a) base = h_1_iter prob base l.length := by
-  induction l generalizing base with
-  | nil => simp [h_1_iter]
-  | cons hd tl ih => simp [List.foldl]; rw [ih, h_1_iter_shift]
+--/-- Iteration function for h_1_step. -/
+--def h_1_iter {n : ℕ} (prob : STRIPS n) (base : Vector (WithTop ℕ) n) : ℕ → Vector (WithTop ℕ) n
+--  | 0 => base
+--  | k + 1 => h_1_step n prob (h_1_iter prob base k)
+--
+--/-- Shifting the base of iteration by one step. -/
+--lemma h_1_iter_shift {n : ℕ} (prob : STRIPS n) (base : Vector (WithTop ℕ) n) (k : ℕ) :
+--    h_1_iter prob (h_1_step n prob base) k = h_1_iter prob base (k + 1) := by
+--  induction k with
+--  | zero => simp [h_1_iter]
+--  | succ k ih => simp [h_1_iter, ih]
+--
+--/-- foldl over a list of length k equals k iterations. -/
+--lemma h_1_foldl_eq_iter {n : ℕ} (prob : STRIPS n) (base : Vector (WithTop ℕ) n) (l : List α) :
+--    l.foldl (fun a _ => h_1_step n prob a) base = h_1_iter prob base l.length := by
+--  induction l generalizing base with
+--  | nil => simp [h_1_iter]
+--  | cons hd tl ih => simp [List.foldl]; rw [ih, h_1_iter_shift]
 
 /-- If the isSome pattern is stable (vec_to_state unchanged by h_1_step),
     then the fixpoint property holds. -/
@@ -354,22 +354,22 @@ lemma fixpoint_implies_stable {n : ℕ} (prob : STRIPS n) (bef : Vector (WithTop
       ext i;
       exact h_vec_to_state_eq ⟨ i, by assumption ⟩
 
-/-
-The fixpoint property is persistent: once achieved, it holds at all subsequent iterations.
--/
-lemma fixpoint_persistent {n : ℕ} (prob : STRIPS n) (base : Vector (WithTop ℕ) n)
-    (k : ℕ) (hfix : ∀ a ∈ prob.actions', applicable' a (vec_to_state n (h_1_iter prob base k)) = true →
-      ∀ i ∈ a.add'.val, ((h_1_iter prob base k)[i]).isSome = true)
-    (m : ℕ) (hm : m ≥ k) :
-    ∀ a ∈ prob.actions', applicable' a (vec_to_state n (h_1_iter prob base m)) = true →
-      ∀ i ∈ a.add'.val, ((h_1_iter prob base m)[i]).isSome = true := by
-        induction' hm with m hm ih;
-        · assumption;
-        · intro a ha h;
-          have h_eq : vec_to_state n (h_1_iter prob base (m + 1)) = vec_to_state n (h_1_iter prob base m) := by
-            exact fixpoint_implies_stable prob _ ih;
-          have h_eq : applicable' a (vec_to_state n (h_1_iter prob base m)) = true := by
-            grind;
-          exact fun i hi => h_1_step_preserves_isSome prob ( h_1_iter prob base m ) i ( ih a ha h_eq i hi )
-
+--/-
+--The fixpoint property is persistent: once achieved, it holds at all subsequent iterations.
+---/
+--lemma fixpoint_persistent {n : ℕ} (prob : STRIPS n) (base : Vector (WithTop ℕ) n)
+--    (k : ℕ) (hfix : ∀ a ∈ prob.actions', applicable' a (vec_to_state n (h_1_iter prob base k)) = true →
+--      ∀ i ∈ a.add'.val, ((h_1_iter prob base k)[i]).isSome = true)
+--    (m : ℕ) (hm : m ≥ k) :
+--    ∀ a ∈ prob.actions', applicable' a (vec_to_state n (h_1_iter prob base m)) = true →
+--      ∀ i ∈ a.add'.val, ((h_1_iter prob base m)[i]).isSome = true := by
+--        induction' hm with m hm ih;
+--        · assumption;
+--        · intro a ha h;
+--          have h_eq : vec_to_state n (h_1_iter prob base (m + 1)) = vec_to_state n (h_1_iter prob base m) := by
+--            exact fixpoint_implies_stable prob _ ih;
+--          have h_eq : applicable' a (vec_to_state n (h_1_iter prob base m)) = true := by
+--            grind;
+--          exact fun i hi => h_1_step_preserves_isSome prob ( h_1_iter prob base m ) i ( ih a ha h_eq i hi )
+--
 end Validator
