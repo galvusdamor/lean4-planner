@@ -1,12 +1,12 @@
 -- This module serves as the root of the `Graphlib` library.
 -- Import modules here that should be built as part of the library.
-import planlib.AbstractionHeuristic
-import planlib.CostPartitioning
-import planlib.CriticalPath
-import planlib.DeleteRelaxation
-import planlib.H1
-import planlib.Heuristics
-import planlib.PerfectHeuristic
-import planlib.Planner
-import planlib.Planning
-import planlib.temp
+import planning.AbstractionHeuristic
+import planning.CostPartitioning
+import planning.CriticalPath
+import planning.DeleteRelaxation
+import planning.H1
+import planning.Heuristics
+import planning.PerfectHeuristic
+import planning.Planner
+import planning.Planning
+import planning.temp
