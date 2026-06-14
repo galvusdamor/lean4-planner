@@ -202,8 +202,14 @@ Every action appearing in a `Path` is a member of the problem's action set.
 private lemma action_in_path_mem_actions {n : ℕ} {pt : STRIPS n} {s s' : State n}
     (p : Path pt s s') (a : Action n) (ha : a ∈ p.actionsUsed) : a ∈ pt.actions := by
   induction' p with a' s2 ha' succ p' ih generalizing a;
-  · cases ha;
-  · cases ha <;> aesop
+  · cases ha
+  · cases ha 
+    · simp_all only
+    · rename_i succ_1 π π_ih a_1
+      obtain ⟨left, right⟩ := succ_1
+      subst right
+      apply π_ih
+      exact a_1
 
 /-
 The cost of a `Path` is at least the cost of any single action used in it.
@@ -220,11 +226,15 @@ lemma elementary_landmark_heuristic_is_admissible {n : ℕ} (prob : STRIPS n)
     heur_admissible prob (elementary_landmark_heuristic prob lm) := by
   intro s plan; by_cases h : is_disjunctive_action_landmark_for_state prob lm s <;> by_cases h' : lm = [] <;> simp_all +decide ;
   · have := h.2 plan; aesop;
-  · have h_cost_le : ∃ a ∈ lm, a ∈ plan := by
-      exact h.2 plan;
-    obtain ⟨ a, ha₁, ha₂ ⟩ := h_cost_le; have := path_cost_ge_action_cost plan.path a ha₂; simp_all +decide [ elementary_landmark_heuristic ] ;
-    exact le_trans ( List.min_le_of_mem ( List.mem_map.mpr ⟨ a, ha₁, rfl ⟩ ) ) this;
-  · unfold elementary_landmark_heuristic; aesop;
-  · unfold elementary_landmark_heuristic; aesop;
+  · have h_cost_le : ∃ a ∈ lm, a ∈ plan := by exact h.2 plan
+    obtain ⟨ a, ha₁, ha₂ ⟩ := h_cost_le
+    have := path_cost_ge_action_cost plan.path a ha₂
+    simp_all [ elementary_landmark_heuristic ]
+    exact le_trans ( List.min_le_of_mem ( List.mem_map.mpr ⟨ a, ha₁, rfl ⟩ ) ) this
+  · unfold elementary_landmark_heuristic
+    subst h'
+    simp_all only [↓reduceIte, zero_le]
+  · unfold elementary_landmark_heuristic
+    simp_all only [↓reduceIte, zero_le]
 
 end Validator
