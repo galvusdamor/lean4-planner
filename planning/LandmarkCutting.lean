@@ -431,11 +431,87 @@ lemma i_g_normal_form_keeps_h_plus {n : ℕ} {prob : STRIPS n}
      simp_all +decide [ delete_relaxation ];
      grind
 
+lemma i_g_normal_form_keeps_solvability {n : ℕ} {prob : STRIPS n} : 
+    Unsolvable (delete_relaxation prob) ↔
+      Unsolvable (delete_relaxation ((i_g_normal_form prob))) := by sorry
+
 
 /- Theory of PCFs and justification graphs -/
 
 /-- should be a type of functions that take an action from prob and return one of their preconditions -/
 abbrev precondition_choice_function {n : ℕ} (prob : STRIPS n):=
     Π (a : {b : Action n // b ∈ prob.actions'}), { p : Fin n // p ∈ a.val.pre}
+
+
+
+/-- the IG normalform has only one init fact and one goal fact and we are able to obtain them -/
+
+def unitary_init {n : ℕ} (prob : STRIPS n) : Prop := prob.init.ncard == 1
+def unitary_goal {n : ℕ} (prob : STRIPS n) : Prop := prob.goal'.val.length == 1
+
+lemma i_g_normalform_is_unitary_init {n : ℕ} (prob : STRIPS n):
+    unitary_init (i_g_normal_form prob) := by sorry
+lemma i_g_normalform_is_unitary_goal {n : ℕ} (prob : STRIPS n):
+    unitary_goal (i_g_normal_form prob) := by sorry
+
+
+def get_unitary_init {n : ℕ} (prob : STRIPS n) (u : unitary_init prob) : Fin n := by sorry
+
+def get_unitary_goal{n : ℕ} (prob : STRIPS n) (u : unitary_goal prob) : Fin n :=
+  prob.goal'.val.head (by unfold unitary_goal at u ; grind)
+
+lemma get_unitary_init_is_init {n : ℕ} (prob : STRIPS n) (u : unitary_init prob):
+    prob.init = {get_unitary_init prob u} := by sorry
+
+lemma get_unitary_goal_is_goal {n : ℕ} (prob : STRIPS n) (u : unitary_goal prob):
+    prob.goal'.val = [get_unitary_goal prob u] := by sorry
+
+
+
+/-- the justification graph selects one precodnition per action and connects facts using them - and ignoring their deleting effects. We use NatGraph here for now, as we have search algorithms for them -/
+def justification_graph {n : ℕ} (prob : STRIPS n) (pcf : precondition_choice_function prob) : NatGraph (Fin n) := 
+  let edges : Fin n → Fin n → Prop := fun f t => 
+    ∃ a ∈ prob.actions, f = (pcf ⟨ a, by sorry ⟩ ) ∧ t ∈ a.add
+
+  let dg : Digraph (Fin n) := Digraph.mk edges
+  let dg_dec : DecidableRel dg.Adj := by infer_instance
+  let cost : (u v : Fin n) → dg.Adj u v → ℕ := fun f t adj => 0 -- cost does not matter
+
+  WeightedDiGraph.mk dg cost dg_dec
+
+
+def remove_edges {V : Type} {E : Type} [FinEnum V] (g : WeightedDiGraph V E) (cut : List (V × V)) : WeightedDiGraph V E :=
+  let edges : V → V → Prop := fun f t => (g.Adj f t) ∧ (f,t) ∉ cut    
+
+  let dg : Digraph V := Digraph.mk edges
+  let dg_dec : DecidableRel dg.Adj := by infer_instance
+  let cost : (u v : V) → dg.Adj u v → E := fun f t adj => g.Payload f t (by sorry)
+
+  WeightedDiGraph.mk dg cost dg_dec
+
+
+
+/-- a cut is a set of edges that if removed ensure that no path exists between s and t -/
+abbrev cut_in_graph {V : Type} {E : Type}  [FinEnum V] (g : WeightedDiGraph V E) (s t : V) (cut : List (V × V)) := 
+  IsEmpty ((remove_edges g cut).Path s t)
+
+
+def landmark_induced_by_cut {n : ℕ} (prob : STRIPS n) (cut : List (Fin n × Fin n)) (pcf : precondition_choice_function prob) : List (Action n) :=
+    cut.flatMap (fun (f,t) => prob.actions'.filter (fun a =>
+      decide (f = (pcf ⟨ a, by sorry ⟩ ) ∧ t ∈ a.add)
+    ) )
+
+
+
+/-- a cut in the justification graph implies a (del-rel) landmark. The idea here is that without the cut, we can never make one of the facts on the "right-hand" side of the cut true and thus also never the goal. This stems from the property that the cut separates the unitary init and goal facts. -/
+lemma cuts_in_justification_graph_are_delete_relaxed_landmarks {n : ℕ} (prob : STRIPS n)
+    (u_i : unitary_init prob)
+    (u_g : unitary_goal prob)
+    (pcf : precondition_choice_function prob) (cut : List ((Fin n) × (Fin n))):
+    cut_in_graph (justification_graph prob pcf) (get_unitary_init prob u_i) (get_unitary_goal prob u_g) cut → 
+      is_delete_relaxed_disjunctive_action_landmark_for_state prob (landmark_induced_by_cut prob cut pcf) prob.init' := by sorry
+
+
+
 
 
