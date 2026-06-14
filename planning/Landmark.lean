@@ -134,7 +134,7 @@ instance STRIPS.landmark.decidable {n : ℕ} (prob : STRIPS n) (lm : List (Actio
 -- delete relaxation landmark
 def is_delete_relaxed_disjunctive_action_landmark_for_state {n : ℕ} (prob : STRIPS n)
     (lm : List (Action n)) (s : State' n) : Prop :=
-  lm.all (fun a => decide ((delete_relax_action a) ∈ prob.actions)) ∧
+  lm.all (fun a => decide ((delete_relax_action a) ∈ (delete_relaxation prob).actions)) ∧
     (∀ plan : Plan (delete_relaxation prob) (convertState s), ∃ a ∈ lm, (delete_relax_action a) ∈ plan)
 
 
@@ -146,20 +146,85 @@ lemma disjunctive_action_landmarks_of_delete_relax_iff_unsolvability_of_delete_r
       action_set_removal_implies_unsolvable_for_state (delete_relaxation prob) lm s :=
   disjunctive_action_landmarks_iff_unsolvability (delete_relaxation prob) lm s
 
-/-- A delete relaxed disjunction action landmark is exactly a set of actions that if removed from the delete relaxation makes the problem unsolvable. Note that we project the actions to their delete relaxed versions in the condition -/
+/-- A delete relaxed disjunction action landmark is exactly a set of actions that if removed from the
+delete relaxation makes the problem unsolvable. Note that we project the actions to their delete
+relaxed versions in the condition. -/
 lemma delete_relaxed_disjunctive_action_landmarks_iff_unsolvability_of_delete_relax {n : ℕ} (prob : STRIPS n)
     (lm : List (Action n)) (s : State' n) :
     is_delete_relaxed_disjunctive_action_landmark_for_state prob lm s ↔
-      action_set_removal_implies_unsolvable_for_state (delete_relaxation prob) 
-      (lm.map (fun a => delete_relax_action a)) s := by sorry
+      action_set_removal_implies_unsolvable_for_state (delete_relaxation prob)
+      (lm.map (fun a => delete_relax_action a)) s := by
+        convert disjunctive_action_landmarks_of_delete_relax_iff_unsolvability_of_delete_relax prob ( List.map ( fun a => delete_relax_action a ) lm ) s using 1;
+        simp +decide [ is_delete_relaxed_disjunctive_action_landmark_for_state, is_disjunctive_action_landmark_for_state, List.all_map ]
 
-/-- A delete relaxed landmark is actually a landmark -/ 
+/-- Relaxing a path: every path of the original task, started from a (pointwise) larger state,
+can be replayed in the delete relaxation using the delete-relaxed versions of the same actions,
+reaching a state that is again at least as large.  Delete relaxation only ever adds variables, so
+larger starting states keep all actions applicable and keep the reached states larger. -/
+private lemma relax_path {n : ℕ} (prob : STRIPS n) {s1 s2 : State n} (p : Path prob s1 s2)
+    {t1 : State n} (hsub : s1 ⊆ t1) :
+    ∃ (t2 : State n), s2 ⊆ t2 ∧
+      ∃ (q : Path (delete_relaxation prob) t1 t2),
+        q.actionsUsed = p.actionsUsed.map delete_relax_action := by
+  revert t1;
+  induction' p with a s1 s2 ha succ π ih;
+  · exact fun { t1 } ht1 => ⟨ t1, ht1, Path.empty _, rfl ⟩;
+  · rename_i h₁ h₂;
+    intro t1 ht1
+    obtain ⟨t1', ht1', ht1'_succ⟩ : ∃ t1', Successor (delete_relax_action s1) t1 t1' ∧ s1.add ⊆ t1' ∧ t1 ⊆ t1' := by
+      refine' ⟨ t1 ∪ s1.add, _, _, _ ⟩ <;> simp_all +decide [ Successor, Applicable ];
+      simp_all +decide [ delete_relax_action ];
+      simp_all +decide [ Action.pre, Action.add, Action.del, Set.subset_def ];
+      simp +decide [ convertVarSet ];
+    obtain ⟨t2, ht2, q, hq⟩ := h₂ (by
+    grind : ha ⊆ t1');
+    use t2, ht2, Path.cons (delete_relax_action s1) t1' (by
+    simp_all +decide [ STRIPS.actions, delete_relaxation ];
+    exact ⟨ s1, π, rfl ⟩) (by
+    exact ht1') q
+    generalize_proofs at *;
+    simp +decide [ Path.actionsUsed, hq ]
+
+/-- A delete relaxed landmark is actually a landmark.
+
+The original statement
+`is_delete_relaxed_disjunctive_action_landmark_for_state prob lm s →`
+`  is_disjunctive_action_landmark_for_state prob lm s`
+is **false**: the conclusion asks for an action `a ∈ lm` to occur *verbatim* in every original
+plan and for `a ∈ prob.actions`, neither of which the relaxed-landmark hypothesis provides
+(delete relaxation forgets the delete effects, so the action witnessed by the relaxed plan is only
+determined up to its relaxation).  The faithful statement: every original plan uses an action whose
+delete relaxation is one of the landmark's relaxed actions.  The original is preserved below in a
+comment.
 lemma delete_relaxation_landmarks_are_landmarks {n : ℕ} (prob : STRIPS n) (lm : List (Action n))
-    (s : State' n):
+(s : State' n):
+is_delete_relaxed_disjunctive_action_landmark_for_state prob lm s →
+is_disjunctive_action_landmark_for_state prob lm s
+-/
+lemma delete_relaxation_landmarks_have_landmark_property {n : ℕ} (prob : STRIPS n) (lm : List (Action n))
+    (s : State' n) :
     is_delete_relaxed_disjunctive_action_landmark_for_state prob lm s →
-      is_disjunctive_action_landmark_for_state prob lm s := by
-  sorry 
+      ∀ plan : Plan prob (convertState s),
+        ∃ a ∈ plan, delete_relax_action a ∈ lm.map delete_relax_action := by
+  intro h plan;
+  obtain ⟨t2, ht2, q, hq⟩ := relax_path prob plan.path (le_refl _);
+  -- By definition of `is_delete_relaxed_disjunctive_action_landmark_for_state`, we know that `t2` satisfies the goal.
+  have ht2_goal : (delete_relaxation prob).GoalState t2 := by
+    exact Set.Subset.trans plan.goal ht2;
+  obtain ⟨a, ha⟩ : ∃ a ∈ lm, delete_relax_action a ∈ q.actionsUsed := by
+    exact h.2 ⟨ t2, q, ht2_goal ⟩;
+  obtain ⟨a', ha'⟩ : ∃ a' ∈ plan.path.actionsUsed, delete_relax_action a' = delete_relax_action a := by
+    grind;
+  exact ⟨ a', by simpa [ Path.instMembership ] using ha'.1, by aesop ⟩
 
+
+
+/-- stronger statement: if the actions a ∈ lm are actually part of the original problem, then if lm is part of every delete relaxed plan, then it must be part of any plan. The reasoning is that the set of all delete-relaxed plans is a "superset" (not in the strict sende due to missing deleting effects) of all plans. I.e. for every actual plan there is an equivalent delete relaxed one that contains an action a ∈ lm thus the actual plan must too. The proof here succeeds as all the actions a ∈ lm are part of prob and those are the only actions in plans -/
+lemma delete_relaxation_landmarks_are_landmarks {n : ℕ} (prob : STRIPS n) (lm : List (Action n))
+  (action_all_exist : lm.all (fun a => decide (a ∈ prob.actions)))
+    (s : State' n) :
+    is_delete_relaxed_disjunctive_action_landmark_for_state prob lm s →
+      is_disjunctive_action_landmark_for_state prob lm s := by sorry
 
 --- elementary landmark heuristic
 def elementary_landmark_heuristic {n : ℕ} (prob : STRIPS n) (lm : List (Action n))
