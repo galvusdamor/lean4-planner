@@ -134,56 +134,31 @@ instance STRIPS.landmark.decidable {n : ℕ} (prob : STRIPS n) (lm : List (Actio
 -- delete relaxation landmark
 def is_delete_relaxed_disjunctive_action_landmark_for_state {n : ℕ} (prob : STRIPS n)
     (lm : List (Action n)) (s : State' n) : Prop :=
-  lm.all (fun a => decide (a ∈ prob.actions)) ∧
-    (∀ plan : Plan (delete_relaxation prob) (convertState s), ∃ a ∈ lm, a ∈ plan)
+  lm.all (fun a => decide ((delete_relax_action a) ∈ prob.actions)) ∧
+    (∀ plan : Plan (delete_relaxation prob) (convertState s), ∃ a ∈ lm, (delete_relax_action a) ∈ plan)
 
-/-
-The lemma below is false as stated because `is_delete_relaxed_disjunctive_action_landmark_for_state`
-checks `a ∈ prob.actions` in its first conjunct, while `action_set_removal_implies_unsolvable_for_state
-(delete_relaxation prob)` checks `a ∈ (delete_relaxation prob).actions`. These differ: the former is
-`prob.actions'.toFinset` while the latter is `(prob.actions'.map delete_relax_action).toFinset`.
-
-Counterexample: n = 1, prob with one action `a` having non-empty `del'`, an unsolvable initial
-state, and `lm = [a]`. Then `a ∈ prob.actions` is true and the ∀-over-plans is vacuously true
-(no plans exist for the unsolvable delete-relaxed problem), so the LHS is true.
-But `a ∉ (delete_relaxation prob).actions` since `delete_relax_action a ≠ a`, so the RHS
-first conjunct fails, making it false.
--/
-/- lemma delete_relaxed_disjunctive_action_landmarks_iff_unsolvability_of_delete_relax
-    {n : ℕ} (prob : STRIPS n) (lm : List (Action n)) (s : State' n):
-    is_delete_relaxed_disjunctive_action_landmark_for_state prob lm s ↔
-      action_set_removal_implies_unsolvable_for_state (delete_relaxation prob) lm s := by
-  sorry -/
 
 /-- Corrected version: uses `is_disjunctive_action_landmark_for_state` applied to
 `delete_relaxation prob` (which has matching first conjuncts on both sides). -/
-lemma disjunctive_action_landmarks_iff_unsolvability_of_delete_relax {n : ℕ} (prob : STRIPS n)
+lemma disjunctive_action_landmarks_of_delete_relax_iff_unsolvability_of_delete_relax {n : ℕ} (prob : STRIPS n)
     (lm : List (Action n)) (s : State' n) :
     is_disjunctive_action_landmark_for_state (delete_relaxation prob) lm s ↔
       action_set_removal_implies_unsolvable_for_state (delete_relaxation prob) lm s :=
   disjunctive_action_landmarks_iff_unsolvability (delete_relaxation prob) lm s
 
-/-
-The lemma below is false as stated because `is_delete_relaxed_disjunctive_action_landmark_for_state`
-checks `a ∈ prob.actions` in the first conjunct, but the plans are for `delete_relaxation prob`,
-whose actions are `delete_relax_action` images. When `lm` contains an action `a` with non-empty
-`del'`, `a` cannot appear in any delete-relaxed plan (since those use `delete_relax_action`
-versions), and its delete-relaxed counterpart `delete_relax_action a` may have a "twin" in the
-original problem's action list with different `del'`.
+/-- A delete relaxed disjunction action landmark is exactly a set of actions that if removed from the delete relaxation makes the problem unsolvable. Note that we project the actions to their delete relaxed versions in the condition -/
+lemma delete_relaxed_disjunctive_action_landmarks_iff_unsolvability_of_delete_relax {n : ℕ} (prob : STRIPS n)
+    (lm : List (Action n)) (s : State' n) :
+    is_delete_relaxed_disjunctive_action_landmark_for_state prob lm s ↔
+      action_set_removal_implies_unsolvable_for_state (delete_relaxation prob) 
+      (lm.map (fun a => delete_relax_action a)) s := by sorry
 
-
-Counterexample: n = 2, init = {0=F, 1=T}, goal = {0}. Actions:
-  a (name="a", pre=∅, add={0}, del=∅, cost=1),
-  b (name="a", pre=∅, add={0}, del={1}, cost=1).
-With lm = [a]: delete_relax_action b = a since they share name/pre/add/cost and
-delete_relax_action sets del=∅. So every plan for delete_relaxation prob uses action `a`.
-But the original plan [b] (apply b: {0=T,1=F}, goal {0} satisfied) does not use `a`.
--/
-/- lemma delete_relaxation_landmarks_are_landmarks {n : ℕ} (prob : STRIPS n) (lm : List (Action n))
+/-- A delete relaxed landmark is actually a landmark -/ 
+lemma delete_relaxation_landmarks_are_landmarks {n : ℕ} (prob : STRIPS n) (lm : List (Action n))
     (s : State' n):
     is_delete_relaxed_disjunctive_action_landmark_for_state prob lm s →
       is_disjunctive_action_landmark_for_state prob lm s := by
-  sorry -/
+  sorry 
 
 
 --- elementary landmark heuristic
