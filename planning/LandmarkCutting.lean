@@ -433,7 +433,12 @@ lemma i_g_normal_form_keeps_h_plus {n : ℕ} {prob : STRIPS n}
 
 lemma i_g_normal_form_keeps_solvability {n : ℕ} {prob : STRIPS n} : 
     Unsolvable (delete_relaxation prob) ↔
-      Unsolvable (delete_relaxation ((i_g_normal_form prob))) := by sorry
+      Unsolvable (delete_relaxation ((i_g_normal_form prob))) := by
+  constructor <;> intro h
+  · -- A delete-relaxed plan of the normal form would project back to one of the original task.
+    exact ⟨fun eplan => h.false (dr_plan_of_ignf_dr_plan prob eplan).choose⟩
+  · -- A delete-relaxed plan of the original task lifts to one of the normal form.
+    exact ⟨fun plan => h.false (ignf_dr_plan_of_dr_plan prob plan).choose⟩
 
 
 /- Theory of PCFs and justification graphs -/
@@ -448,34 +453,54 @@ abbrev precondition_choice_function {n : ℕ} (prob : STRIPS n):=
 
 def unitary_init {n : ℕ} (prob : STRIPS n) : Prop := prob.init.ncard == 1
 def unitary_goal {n : ℕ} (prob : STRIPS n) : Prop := prob.goal'.val.length == 1
+/-- In the i/g normal form the only initial fact is the auxiliary variable `i` (at index `n`). -/
+lemma i_g_normalform_init_eq {n : ℕ} (prob : STRIPS n) :
+    (i_g_normal_form prob).init = {(⟨n, by omega⟩ : Fin (n + 2))} := by
+  unfold STRIPS.init i_g_normal_form
+  ext ⟨x, hx⟩
+  simp [convertState, BitVec.getElem_twoPow]
 
 lemma i_g_normalform_is_unitary_init {n : ℕ} (prob : STRIPS n):
-    unitary_init (i_g_normal_form prob) := by sorry
+    unitary_init (i_g_normal_form prob) := by
+  rw [unitary_init, beq_iff_eq, i_g_normalform_init_eq, Set.ncard_singleton]
 lemma i_g_normalform_is_unitary_goal {n : ℕ} (prob : STRIPS n):
-    unitary_goal (i_g_normal_form prob) := by sorry
+    unitary_goal (i_g_normal_form prob) := by
+  rfl
 
 
-def get_unitary_init {n : ℕ} (prob : STRIPS n) (u : unitary_init prob) : Fin n := by sorry
+noncomputable def get_unitary_init {n : ℕ} (prob : STRIPS n) (u : unitary_init prob) : Fin n :=
+  (Set.ncard_eq_one.mp (by
+    have := u; simp only [unitary_init, beq_iff_eq] at this; exact this)).choose
 
 def get_unitary_goal{n : ℕ} (prob : STRIPS n) (u : unitary_goal prob) : Fin n :=
   prob.goal'.val.head (by unfold unitary_goal at u ; grind)
 
 lemma get_unitary_init_is_init {n : ℕ} (prob : STRIPS n) (u : unitary_init prob):
-    prob.init = {get_unitary_init prob u} := by sorry
+    prob.init = {get_unitary_init prob u} :=
+  (Set.ncard_eq_one.mp (by
+    have := u; simp only [unitary_init, beq_iff_eq] at this; exact this)).choose_spec
 
 lemma get_unitary_goal_is_goal {n : ℕ} (prob : STRIPS n) (u : unitary_goal prob):
-    prob.goal'.val = [get_unitary_goal prob u] := by sorry
+    prob.goal'.val = [get_unitary_goal prob u] := by
+  have hlen : prob.goal'.val.length = 1 := by
+    have := u; simp only [unitary_goal, beq_iff_eq] at this; exact this
+  obtain ⟨a, ha⟩ := List.length_eq_one_iff.mp hlen
+  simp [get_unitary_goal, ha]
 
 
 
 /-- the justification graph selects one precodnition per action and connects facts using them - and ignoring their deleting effects. We use NatGraph here for now, as we have search algorithms for them -/
 def justification_graph {n : ℕ} (prob : STRIPS n) (pcf : precondition_choice_function prob) : NatGraph (Fin n) := 
+  -- We quantify over the subtype `{b // b ∈ prob.actions'}` so that the precondition choice
+  -- function `pcf` can be applied directly (it needs the membership witness), avoiding the
+  -- previous `by sorry`.  Membership is phrased through `a.val.add'.val.toFinset`, which is
+  -- definitionally `t ∈ a.val.add`, so that the relation is decidable.
   let edges : Fin n → Fin n → Prop := fun f t => 
-    ∃ a ∈ prob.actions, f = (pcf ⟨ a, by sorry ⟩ ) ∧ t ∈ a.add
+    ∃ a : {b : Action n // b ∈ prob.actions'}, f = (↑(pcf a) : Fin n) ∧ t ∈ a.val.add'.val.toFinset
 
   let dg : Digraph (Fin n) := Digraph.mk edges
-  let dg_dec : DecidableRel dg.Adj := by infer_instance
-  let cost : (u v : Fin n) → dg.Adj u v → ℕ := fun f t adj => 0 -- cost does not matter
+  let dg_dec : DecidableRel dg.Adj := fun f t => inferInstanceAs (Decidable (edges f t))
+  let cost : (u v : Fin n) → dg.Adj u v → ℕ := fun _ _ _ => 0 -- cost does not matter
 
   WeightedDiGraph.mk dg cost dg_dec
 
@@ -484,8 +509,12 @@ def remove_edges {V : Type} {E : Type} [FinEnum V] (g : WeightedDiGraph V E) (cu
   let edges : V → V → Prop := fun f t => (g.Adj f t) ∧ (f,t) ∉ cut    
 
   let dg : Digraph V := Digraph.mk edges
-  let dg_dec : DecidableRel dg.Adj := by infer_instance
-  let cost : (u v : V) → dg.Adj u v → E := fun f t adj => g.Payload f t (by sorry)
+  let dg_dec : DecidableRel dg.Adj := fun f t =>
+    haveI := g.instDecAdj f t
+    inferInstanceAs (Decidable (g.Adj f t ∧ (f,t) ∉ cut))
+  -- The surviving edges are exactly those of `g` that were not cut, so the payload of `g` still
+  -- applies; the adjacency proof `adj.1` provides the original edge.
+  let cost : (u v : V) → dg.Adj u v → E := fun f t adj => g.Payload f t adj.1
 
   WeightedDiGraph.mk dg cost dg_dec
 
@@ -497,11 +526,92 @@ abbrev cut_in_graph {V : Type} {E : Type}  [FinEnum V] (g : WeightedDiGraph V E)
 
 
 def landmark_induced_by_cut {n : ℕ} (prob : STRIPS n) (cut : List (Fin n × Fin n)) (pcf : precondition_choice_function prob) : List (Action n) :=
-    cut.flatMap (fun (f,t) => prob.actions'.filter (fun a =>
-      decide (f = (pcf ⟨ a, by sorry ⟩ ) ∧ t ∈ a.add)
-    ) )
+    cut.flatMap (fun (f,t) => (prob.actions'.attach.filter (fun a =>
+      decide (f = (↑(pcf a) : Fin n) ∧ t ∈ a.val.add'.val.toFinset)
+    )).map (·.val) )
 
 
+/-- Core reachability lemma for the cut argument.  Replaying a delete-relaxed path of `prob`,
+every fact that is true at the end of the path can be reached, in the *cut* justification graph
+`remove_edges (justification_graph prob pcf) cut`, from any source `src` that already reaches the
+start facts — **provided** none of the path's actions witnesses a cut edge (`Hwit`).
+
+The induction tracks `Hsrc`, the set of currently reachable facts: a delete-relaxed action `a`
+with chosen precondition `pcf a` (true, hence already reachable) adds facts `y ∈ a.add`; the
+justification edge `pcf a → y` survives the cut by `Hwit`, extending the reachability. -/
+private lemma jgraph_reach_of_dr_path {n : ℕ} (prob : STRIPS n)
+    (pcf : precondition_choice_function prob) (cut : List (Fin n × Fin n))
+    (src : Fin n) :
+    ∀ {S T : State n} (p : Path (delete_relaxation prob) S T),
+    (∀ (a0 : {b : Action n // b ∈ prob.actions'}),
+      delete_relax_action a0.val ∈ p.actionsUsed →
+      ∀ y ∈ a0.val.add'.val.toFinset, ((↑(pcf a0) : Fin n), y) ∉ cut) →
+    (∀ s ∈ S, Nonempty ((remove_edges (justification_graph prob pcf) cut).Walk src s)) →
+    ∀ t ∈ T, Nonempty ((remove_edges (justification_graph prob pcf) cut).Walk src t) := by
+  intro S T p
+  induction p with
+  | empty s => intro _ Hsrc t ht; exact Hsrc t ht
+  | cons a s2 ha succ rest ih =>
+    rename_i s1 s3
+    intro Hwit Hsrc t ht
+    obtain ⟨a0, ha0, ha0eq⟩ : ∃ a0, a0 ∈ prob.actions' ∧ delete_relax_action a0 = a := by
+      unfold delete_relaxation STRIPS.actions at ha
+      simp only [List.coe_toFinset, Set.mem_setOf_eq, List.mem_map] at ha
+      exact ha
+    have hdel : a.del = (∅ : Set (Fin n)) := dr_action_del_empty prob ha
+    have hs2 : s2 = s1 ∪ a.add := by
+      have h := succ.2; rw [hdel, Set.diff_empty] at h; exact h
+    have Hsrc2 : ∀ x ∈ s2, Nonempty ((remove_edges (justification_graph prob pcf) cut).Walk src x) := by
+      intro x hx
+      rw [hs2] at hx
+      rcases hx with hxS | hxAdd
+      · exact Hsrc x hxS
+      · set b : {c : Action n // c ∈ prob.actions'} := ⟨a0, ha0⟩ with hb
+        have hp0S : (↑(pcf b) : Fin n) ∈ s1 := by
+          apply succ.1; rw [← ha0eq]; exact (pcf b).2
+        obtain ⟨w⟩ := Hsrc _ hp0S
+        have hxAdd' : x ∈ a0.add'.val.toFinset := by rw [← ha0eq] at hxAdd; exact hxAdd
+        have hcut : ((↑(pcf b) : Fin n), x) ∉ cut := by
+          apply Hwit b _ x hxAdd'
+          show delete_relax_action a0 ∈ a :: rest.actionsUsed
+          rw [ha0eq]; exact List.mem_cons_self
+        have hadj : (remove_edges (justification_graph prob pcf) cut).Adj (↑(pcf b)) x :=
+          ⟨⟨b, rfl, hxAdd'⟩, hcut⟩
+        exact ⟨w.concat hadj⟩
+    have Hwit' : ∀ (a0' : {b : Action n // b ∈ prob.actions'}),
+        delete_relax_action a0'.val ∈ rest.actionsUsed →
+        ∀ y ∈ a0'.val.add'.val.toFinset, ((↑(pcf a0') : Fin n), y) ∉ cut := by
+      intro a0' h y hy
+      apply Hwit a0' _ y hy
+      show delete_relax_action a0'.val ∈ a :: rest.actionsUsed
+      exact List.mem_cons_of_mem _ h
+    exact ih Hwit' Hsrc2 t ht
+
+/-- An action witnessing a cut edge `(f, t)` (i.e. `f` is its chosen precondition and `t` one of
+its add effects) belongs to the induced landmark. -/
+private lemma mem_landmark_induced {n : ℕ} (prob : STRIPS n) (cut : List (Fin n × Fin n))
+    (pcf : precondition_choice_function prob)
+    (a0 : {b : Action n // b ∈ prob.actions'}) (f t : Fin n)
+    (hft : (f, t) ∈ cut) (hf : f = (↑(pcf a0) : Fin n)) (ht : t ∈ a0.val.add'.val.toFinset) :
+    a0.val ∈ landmark_induced_by_cut prob cut pcf := by
+  unfold landmark_induced_by_cut
+  rw [List.mem_flatMap]
+  refine ⟨(f, t), hft, ?_⟩
+  rw [List.mem_map]
+  refine ⟨a0, ?_, rfl⟩
+  rw [List.mem_filter]
+  exact ⟨List.mem_attach _ _, by simp [hf, ht]⟩
+
+/-- Every action of the induced landmark is an action of the problem. -/
+private lemma landmark_subset_actions {n : ℕ} (prob : STRIPS n) (cut : List (Fin n × Fin n))
+    (pcf : precondition_choice_function prob) (a : Action n)
+    (ha : a ∈ landmark_induced_by_cut prob cut pcf) : a ∈ prob.actions' := by
+  unfold landmark_induced_by_cut at ha
+  rw [List.mem_flatMap] at ha
+  obtain ⟨ft, _, ha⟩ := ha
+  rw [List.mem_map] at ha
+  obtain ⟨a0, _, rfl⟩ := ha
+  exact a0.2
 
 /-- a cut in the justification graph implies a (del-rel) landmark. The idea here is that without the cut, we can never make one of the facts on the "right-hand" side of the cut true and thus also never the goal. This stems from the property that the cut separates the unitary init and goal facts. -/
 lemma cuts_in_justification_graph_are_delete_relaxed_landmarks {n : ℕ} (prob : STRIPS n)
@@ -509,7 +619,51 @@ lemma cuts_in_justification_graph_are_delete_relaxed_landmarks {n : ℕ} (prob :
     (u_g : unitary_goal prob)
     (pcf : precondition_choice_function prob) (cut : List ((Fin n) × (Fin n))):
     cut_in_graph (justification_graph prob pcf) (get_unitary_init prob u_i) (get_unitary_goal prob u_g) cut → 
-      is_delete_relaxed_disjunctive_action_landmark_for_state prob (landmark_induced_by_cut prob cut pcf) prob.init' := by sorry
+      is_delete_relaxed_disjunctive_action_landmark_for_state prob (landmark_induced_by_cut prob cut pcf) prob.init' := by
+  intro hcut
+  refine ⟨?_, ?_⟩
+  · -- Every landmark action is a genuine action, hence its relaxation is in the delete relaxation.
+    rw [List.all_eq_true]
+    intro a ha
+    have ha' : a ∈ prob.actions' := landmark_subset_actions prob cut pcf a ha
+    simp only [decide_eq_true_eq]
+    show delete_relax_action a ∈ (delete_relaxation prob).actions
+    unfold delete_relaxation STRIPS.actions
+    simp only [List.coe_toFinset, Set.mem_setOf_eq, List.mem_map]
+    exact ⟨a, ha', rfl⟩
+  · -- Every delete-relaxed plan uses a landmark action.
+    intro plan
+    by_contra hcon
+    push_neg at hcon
+    set i0 := get_unitary_init prob u_i with hi0
+    set g0 := get_unitary_goal prob u_g with hg0def
+    -- No plan action witnesses a cut edge (else it would be a used landmark action).
+    have Hwit : ∀ (a0 : {b : Action n // b ∈ prob.actions'}),
+        delete_relax_action a0.val ∈ plan.path.actionsUsed →
+        ∀ y ∈ a0.val.add'.val.toFinset, ((↑(pcf a0) : Fin n), y) ∉ cut := by
+      intro a0 hused y hy hmemcut
+      have hlm : a0.val ∈ landmark_induced_by_cut prob cut pcf :=
+        mem_landmark_induced prob cut pcf a0 (↑(pcf a0)) y hmemcut rfl hy
+      exact hcon a0.val hlm hused
+    -- The unitary initial fact `i0` reaches itself.
+    have hinit : convertState prob.init' = ({i0} : Set (Fin n)) := get_unitary_init_is_init prob u_i
+    have Hsrc : ∀ s ∈ (convertState prob.init' : State n),
+        Nonempty ((remove_edges (justification_graph prob pcf) cut).Walk i0 s) := by
+      intro s hs
+      rw [hinit, Set.mem_singleton_iff] at hs
+      subst hs
+      exact ⟨WeightedDiGraph.Walk.nil⟩
+    have hreach := jgraph_reach_of_dr_path prob pcf cut i0 plan.path Hwit Hsrc
+    -- The unitary goal fact `g0` is true at the end of the plan.
+    have hg0 : g0 ∈ plan.last := by
+      apply plan.goal
+      show g0 ∈ convertVarSet (delete_relaxation prob).goal'
+      unfold convertVarSet
+      rw [show (delete_relaxation prob).goal' = prob.goal' from rfl, get_unitary_goal_is_goal prob u_g]
+      simp [hg0def]
+    -- Hence `g0` is reachable from `i0` in the cut graph, contradicting the cut.
+    obtain ⟨w⟩ := hreach g0 hg0
+    exact hcut.false ⟨w.bypass, WeightedDiGraph.Walk.bypass_isPath w⟩
 
 
 
