@@ -219,12 +219,16 @@ lemma delete_relaxation_landmarks_have_landmark_property {n : ℕ} (prob : STRIP
 
 
 
+def get_all_equiv_delete_relaxed_actions {n : ℕ} (prob : STRIPS n) (lm : List (Action n)) : List (Action n) :=
+  prob.actions'.filter (fun a => lm.any (fun l => delete_relax_action a = delete_relax_action l))
+
+
 /-- stronger statement: if the actions a ∈ lm are actually part of the original problem, then if lm is part of every delete relaxed plan, then it must be part of any plan. The reasoning is that the set of all delete-relaxed plans is a "superset" (not in the strict sende due to missing deleting effects) of all plans. I.e. for every actual plan there is an equivalent delete relaxed one that contains an action a ∈ lm thus the actual plan must too. The proof here succeeds as all the actions a ∈ lm are part of prob and those are the only actions in plans -/
 lemma delete_relaxation_landmarks_are_landmarks {n : ℕ} (prob : STRIPS n) (lm : List (Action n))
   (action_all_exist : lm.all (fun a => decide (a ∈ prob.actions)))
     (s : State' n) :
     is_delete_relaxed_disjunctive_action_landmark_for_state prob lm s →
-      is_disjunctive_action_landmark_for_state prob lm s := by sorry
+      is_disjunctive_action_landmark_for_state prob (get_all_equiv_delete_relaxed_actions prob lm) s := by sorry
 
 --- elementary landmark heuristic
 def elementary_landmark_heuristic {n : ℕ} (prob : STRIPS n) (lm : List (Action n))

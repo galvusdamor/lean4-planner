@@ -1,4 +1,5 @@
 import planning.Landmark
+import planning.CostPartitioning
 
 namespace Validator
 
@@ -500,7 +501,12 @@ def justification_graph {n : ℕ} (prob : STRIPS n) (pcf : precondition_choice_f
 
   let dg : Digraph (Fin n) := Digraph.mk edges
   let dg_dec : DecidableRel dg.Adj := fun f t => inferInstanceAs (Decidable (edges f t))
-  let cost : (u v : Fin n) → dg.Adj u v → ℕ := fun _ _ _ => 0 -- cost does not matter
+
+  -- cost of an edge is the cheapest cost of an action that created that edge
+  let cost : (u v : Fin n) → dg.Adj u v → ℕ := fun f t adj =>
+    let edgeActions : List (Action n) := prob.actions'.filter (fun a =>
+      f = (↑(pcf a) : Fin n) ∧ t ∈ a.val.add'.val.toFinset)
+    (edgeActions.map (·.cost)).min (by sorry)
 
   WeightedDiGraph.mk dg cost dg_dec
 
@@ -666,6 +672,158 @@ lemma cuts_in_justification_graph_are_delete_relaxed_landmarks {n : ℕ} (prob :
     exact hcut.false ⟨w.bypass, WeightedDiGraph.Walk.bypass_isPath w⟩
 
 
+def zero_cost_reachable [FinEnum V] (g : NatGraph V) (v goal : V) : Bool :=
+    let ret := NatGraph.astar (g:=g) (fun _ => 0) v goal
+    match ret with
+    | .none => false
+    | .some p => p.cost = 0
+
+
+def reachable [FinEnum V] (g : NatGraph V) (v goal : V) : Bool :=
+    let ret := NatGraph.astar (g:=g) (fun _ => 0) v goal
+    match ret with
+    | .none => false
+    | .some _ => true
+
+
+/-- returns all nodes from which the goal can be reached with cost 0 -/
+def goal_zone {V : Type} [FinEnum V] (g : NatGraph V) (goal : V) : List V :=
+  let vList : List V := (FinEnum.toList (Finset.univ : Finset V))
+  vList.filter (fun v => zero_cost_reachable g v goal)
+
+/-- returns all edges that enter the goal zone -/
+def edges_entering_goal_zone {V : Type} [FinEnum V] (g : NatGraph V) (goal : V) : List (V × V) :=
+  let gz := (goal_zone g goal)
+
+  gz.flatMap (fun v => 
+    let vList : List V := (FinEnum.toList (Finset.univ : Finset V))
+    vList.filterMap (fun u =>
+      if u ∉ gz ∧ decide (g.Adj u v) then .some (u,v)
+      else .none
+    )
+  )
+
+
+lemma edges_entering_goal_zone_are_edges {V : Type} [FinEnum V] (g : NatGraph V) (goal : V):
+    ∀ x ∈ edges_entering_goal_zone g goal, g.Adj x.1 x.2 := by sorry
+
+lemma edges_entering_goal_zone_dont_contain_zero_cost {V : Type} [FinEnum V] (g : NatGraph V) (goal : V):
+    ∀ x ∈ edges_entering_goal_zone g goal, g.Payload x.1 x.2 (by sorry) ≠ 0 := by sorry
+
+lemma edges_entering_goal_zone_are_cut_if_init_not_zero_reachable {V : Type} [FinEnum V] (g : NatGraph V) (init : V) (goal : V):
+  ¬ zero_cost_reachable g init goal → cut_in_graph g init goal (edges_entering_goal_zone g goal) := by sorry
+
+
+lemma goal_zone_landmark_of_justification_graph {n : ℕ} (prob : STRIPS n)
+    (u_i : unitary_init prob)
+    (u_g : unitary_goal prob)
+    (pcf : precondition_choice_function prob):
+      is_delete_relaxed_disjunctive_action_landmark_for_state prob (landmark_induced_by_cut prob (edges_entering_goal_zone (justification_graph prob pcf) (get_unitary_goal prob u_g)) pcf) prob.init' := by sorry
 
 
 
+lemma cost_goal_zone_landmark_of_justification_graph {n : ℕ} (prob : STRIPS n)
+    (u_i : unitary_init prob)
+    (u_g : unitary_goal prob)
+    (pcf : precondition_choice_function prob):
+    ¬ zero_cost_reachable (justification_graph prob pcf) (get_unitary_init prob u_i) (get_unitary_goal prob u_g) → 
+    ∀ a ∈ (landmark_induced_by_cut prob (edges_entering_goal_zone (justification_graph prob pcf) (get_unitary_goal prob u_g)) pcf), a.cost > 0 := by sorry
+
+
+
+
+
+
+
+
+
+
+/-- runs one step of landmark cutting: compute justification graph, extract cut, generate landmark and partition the cost -/
+def lmcut_step {n : ℕ} (prob : STRIPS n)
+    --(u_i : unitary_init prob)
+    (u_g : unitary_goal prob)
+    (pcf : precondition_choice_function prob):
+      (List (Action n)) × ℕ × (cost_partitioning prob 2) :=
+    let jg := justification_graph prob pcf
+    let cut := edges_entering_goal_zone jg (get_unitary_goal prob u_g)
+    let lm := landmark_induced_by_cut prob cut pcf
+    let minCost := if ne : lm = [] then 0 else
+      (lm.map (fun a => a.cost)).min (by simp_all only [ne_eq, map_eq_nil_iff, not_false_eq_true, lm, cut, jg])
+
+    let part : cost_partitioning prob 2 := fun p =>
+      match p with
+      | 0 => fun a_index => if prob.actions'[a_index] ∈ lm then minCost else 0
+      | 1 => fun a_index => if prob.actions'[a_index] ∈ lm then prob.actions'[a_index].cost - minCost else prob.actions'[a_index].cost
+
+    (lm,minCost,part)
+
+
+
+def lmcut_step_yields_landmark {n : ℕ} (prob : STRIPS n)
+    (u_i : unitary_init prob)
+    (u_g : unitary_goal prob)
+    (pcf : precondition_choice_function prob):
+    is_delete_relaxed_disjunctive_action_landmark_for_state prob (lmcut_step prob u_g pcf).1 prob.init' := by sorry
+
+
+def lmcut_step_yields_partitioning {n : ℕ} (prob : STRIPS n)
+    (u_i : unitary_init prob)
+    (u_g : unitary_goal prob)
+    (pcf : precondition_choice_function prob):
+    is_valid_cost_partitioning prob 2 (lmcut_step prob u_g pcf).2.2 := by sorry
+
+
+def lmcut_step_yields_landmark_with_heuristic_in_partition {n : ℕ} (prob : STRIPS n)
+    (u_i : unitary_init prob)
+    (u_g : unitary_goal prob)
+    (pcf : precondition_choice_function prob)
+    (i_g_reachable : reachable (justification_graph prob pcf) (get_unitary_init prob u_i) (get_unitary_goal prob u_g)) :
+    (lmcut_step prob u_g pcf).2.1 = 
+      elementary_landmark_heuristic (partition_STRIPS prob (lmcut_step prob u_g pcf).2.2 ⟨0, by sorry⟩) (lmcut_step prob u_g pcf).1 prob.init'
+    := by sorry
+
+def lmcut_step_yields_non_zero_heuristic {n : ℕ} (prob : STRIPS n)
+    (u_i : unitary_init prob)
+    (u_g : unitary_goal prob)
+    (pcf : precondition_choice_function prob)
+    (i_g_reachable : reachable (justification_graph prob pcf) (get_unitary_init prob u_i) (get_unitary_goal prob u_g)) 
+    (i_g_not_zero_reachable : ¬ zero_cost_reachable (justification_graph prob pcf) (get_unitary_init prob u_i) (get_unitary_goal prob u_g)) :
+    (lmcut_step prob u_g pcf).2.1 > 0 := by sorry
+
+
+def lmcut_inner {n : ℕ} (prob : STRIPS n)
+    (u_i : unitary_init prob)
+    (u_g : unitary_goal prob)
+    (pcf : Π p : STRIPS n, precondition_choice_function p):
+      List (List (Action n)) × ℕ × Σ p : ℕ, (cost_partitioning prob p) :=
+    
+    let jg := justification_graph prob (pcf prob)
+    let i := (get_unitary_init prob u_i)
+    let goal := (get_unitary_goal prob u_g)
+
+    -- return no partitioning
+    if ¬ reachable jg i goal then ([[]], (2 ^ n) * max_action_cost prob , by sorry)
+    -- return no partitioning
+    else if zero_cost_reachable jg i goal then ([], 0, by sorry)
+    else
+     let r := lmcut_step prob u_g (pcf prob)
+     let subprob := partition_STRIPS prob r.2.2 ⟨1, by sorry⟩
+
+     let subret := lmcut_inner subprob u_i u_g pcf
+
+     let lms : List (List (Action n)):= r.1 :: subret.1
+     let hval : ℕ := r.2.1 + subret.2.1
+     let parts : Σ p : ℕ, (cost_partitioning prob p) := by sorry -- take r.2.2 0 and replace r.2.2 1 with the subpartitioning found by subret.2.2
+     (lms, hval, parts)
+
+termination_by (prob.actions'.map (fun a => a.cost)).sum -- decreases due to non-zero partitioning
+decreasing_by
+  sorry
+
+
+/-- lmcut essentially returns a cost partioning over elementary landmark heuritics. Costpartitioning preserves admissibility and elementary landmark heuristics are admissible, so admissibility for init follows. Note that the lm_cut inner version does not yet take the actual state into account, it computes an estimate only for init -/
+lemma lmcut_inner_admissible_for_init {n : ℕ} (prob : STRIPS n)
+    (u_i : unitary_init prob)
+    (u_g : unitary_goal prob)
+    (pcf : Π p : STRIPS n, precondition_choice_function p):
+      ∀ plan : Plan prob prob.init, plan.path.cost ≥ (lmcut_inner prob u_i u_g pcf).2.1 := by sorry
