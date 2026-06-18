@@ -42,7 +42,7 @@ lemma vec_to_state_isSome_of_applicable (n : ℕ) (bef : Vector (WithTop ℕ) n)
   vec_to_state_isSome_of_satisfies n bef a.pre' h i hi
 
 /-- Compare a new cost with the current best: update if the new cost is strictly cheaper. -/
-private def updateIfCheaper (newCost : ℕ) (current : WithTop ℕ) : WithTop ℕ :=
+def updateIfCheaper (newCost : ℕ) (current : WithTop ℕ) : WithTop ℕ :=
   match current with
   | none => some newCost         -- current = ⊤, any finite cost is better
   | some v => if newCost < v then some newCost else current
@@ -118,6 +118,36 @@ lemma updateIfCheaper_le_newCost (c : ℕ) (v : WithTop ℕ) :
     split_ifs with h
     · rfl
     · push_neg at h; exact WithTop.coe_le_coe.mpr h
+
+/-- If `updateIfCheaper` changes the current value, the result is exactly `some` of the new cost. -/
+lemma updateIfCheaper_eq_some_of_ne (c : ℕ) (v : WithTop ℕ) (h : updateIfCheaper c v ≠ v) :
+    updateIfCheaper c v = some c := by
+  cases v with
+  | top => rfl
+  | coe val =>
+    simp only [updateIfCheaper] at h ⊢
+    split_ifs at h ⊢ with hlt
+    · rfl
+    · exact absurd rfl h
+
+/-- The value of `h_1_step` at a single index `i`, with the outer `Vector.map`/`finRange` resolved.
+This exposes the `filterMap`/`updateIfCheaper`/`min` structure as a plain term, so that lemmas about
+the step can reason by list manipulation instead of re-unfolding the definition. -/
+lemma h_1_step_getElem (n : ℕ) (prob : STRIPS n) (bef : Vector (WithTop ℕ) n) (i : Fin n) :
+    (h_1_step n prob bef)[i] =
+      (let applicable : List ℕ := prob.actions'.filterMap (fun a =>
+        if i ∈ a.add'.1 then
+          if is_appli : applicable' a (vec_to_state n bef) then
+            let pre_cost : List ℕ := a.pre'.1.attach.map (fun x : { x : Fin n // x ∈ a.pre'.1 } =>
+              bef[x.1].get (vec_to_state_isSome_of_applicable n bef a is_appli x.1 x.2))
+            if pre_cost_nil : pre_cost = [] then .some (a.cost)
+            else .some (a.cost + pre_cost.max pre_cost_nil)
+          else .none
+        else .none)
+      if appli_nil : applicable = [] then bef[i]
+      else updateIfCheaper (applicable.min appli_nil) bef[i]) := by
+  unfold h_1_step
+  simp only [Fin.getElem_fin, Vector.getElem_map, Vector.getElem_finRange]
 
 /-- Monotonicity: `h_1_step` only decreases values (in the `WithTop ℕ` order). -/
 lemma h_1_step_le (n : ℕ) (prob : STRIPS n) (bef : Vector (WithTop ℕ) n) (i : Fin n) :
