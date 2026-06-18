@@ -773,6 +773,7 @@ def lmcut_step_yields_partitioning {n : ℕ} (prob : STRIPS n)
     is_valid_cost_partitioning prob 2 (lmcut_step prob u_g pcf).2.2 := by sorry
 
 
+
 def lmcut_step_yields_landmark_with_heuristic_in_partition {n : ℕ} (prob : STRIPS n)
     (u_i : unitary_init prob)
     (u_g : unitary_goal prob)
