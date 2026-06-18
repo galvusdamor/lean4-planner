@@ -777,6 +777,13 @@ lemma h_1_iter_const_of_stationary {n : ℕ} (prob : STRIPS n) (base : Vector (W
       rw [h_1_iter_succ, this, ← h_1_iter_succ, hK]
     · simp_all [Nat.le_antisymm hk hKk]
 
+/-- Applying one `h_1_step` before computing the fixpoint does not change the result. -/
+lemma h_1_iter_fix_step {n : ℕ} (prob : STRIPS n) (bef : Vector (WithTop ℕ) n) :
+    h_1_iter_fix n prob (h_1_step n prob bef) = h_1_iter_fix n prob bef := by
+  conv_rhs => rw [h_1_iter_fix]
+  split
+  · rename_i h; rw [h, h_1_iter_fix]; simp [h]
+  · rfl
 /-
 The indexed iteration agrees with `h_1_iter_fix` once it has stabilised.
 -/
@@ -785,10 +792,12 @@ lemma h_1_iter_fix_eq_iter_of_stationary {n : ℕ} (prob : STRIPS n) (base : Vec
     h_1_iter_fix n prob base = h_1_iter prob base K := by
   -- By induction on K, we can show that h_1_iter_fix n prob base = h_1_iter_fix n prob (h_1_iter prob base K).
   have h_ind : ∀ K, h_1_iter_fix n prob base = h_1_iter_fix n prob (h_1_iter prob base K) := by
-    intro K; exact (by
-    induction K <;> simp +decide [ *, h_1_iter_succ ];
-    grind +suggestions);
-  rw [ h_ind K, h_1_iter_fix ] ; simp_all +decide [ h_1_iter_succ ] ;
+    intro K
+    induction K with
+    | zero => rfl
+    | succ K ih => rw [ih, h_1_iter_succ, h_1_iter_fix_step]
+  rw [h_ind K, h_1_iter_fix]
+  simp_all [h_1_iter_succ]
 
 /-
 There is an iteration index `K` at which `h_1_iter` has reached the fixpoint, and it equals

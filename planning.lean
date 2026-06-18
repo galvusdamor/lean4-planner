@@ -10,3 +10,8 @@ import planning.PerfectHeuristic
 import planning.Planner
 import planning.Planning
 import planning.temp
+import planning.Landmark
+import planning.LandmarkCutting
+import planning.LMCutHeuristic
+import planning.LMCutH1PCF
+import planning.LMCutH1Normal

@@ -165,7 +165,8 @@ noncomputable def ignf_extend {n : ℕ} (q : STRIPS n) : _root_.Vector (WithTop 
 -/
 lemma ignf_extend_emb {n : ℕ} (q : STRIPS n) (f : Fin n) :
     (ignf_extend q)[(Fin.castLE (show n ≤ n + 2 by omega) f)] = (ignf_R0 q)[f] := by
-  grind +locals
+  unfold ignf_extend
+  simp only [Vector.getElem_ofFn, Fin.coe_castLE, Fin.getElem_fin, dif_pos f.isLt]
 
 /-
 `ignf_extend` value at the auxiliary fact `i`.
@@ -185,7 +186,7 @@ lemma ignf_extend_step_emb {n : ℕ} (q : STRIPS n) (f : Fin n) :
   by_cases hf : q.init'[f] = false
   · convert ignf_step_embed q ( ignf_extend q ) ( ignf_R0 q ) ( ignf_extend_i q ) ( fun j => ( ignf_extend_emb q j ).symm ) f hf using 1
     rw [ show h_1_step n q ( ignf_R0 q ) = ignf_R0 q from ?_ ]
-    · grind +locals
+    · exact ignf_extend_emb q f
     · convert h_1_iter_fix_is_fixpoint n q ( h_1_base n q.init' ) using 1
   · have h_eq : (h_1_step (n + 2) (i_g_normal_form q) (ignf_extend q))[(Fin.castLE (show n ≤ n + 2 by omega) f)] ≤ (ignf_extend q)[(Fin.castLE (show n ≤ n + 2 by omega) f)] := by
                                                                                                                                                   apply h_1_step_le

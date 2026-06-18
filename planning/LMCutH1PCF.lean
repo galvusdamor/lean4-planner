@@ -162,17 +162,12 @@ lemma jgraph_zero_cost_edge_witness {n : ℕ} (p : STRIPS (n + 2)) (hp : has_pre
     (h0 : (justification_graph p (h1_pcf p hp)).Payload f t adj = 0) :
     ∃ a : {b : Action (n + 2) // b ∈ p.actions'},
       (↑(h1_pcf p hp a) : Fin (n + 2)) = f ∧ t ∈ a.val.add'.val.toFinset ∧ a.val.cost = 0 := by
-  convert h0 using 1
-  constructor <;> intro h
-  · exact h0
-  · convert h using 1
-    constructor <;> intro h
-    · grind +splitIndPred
-    · convert h using 1
-      constructor <;> intro h
-      · exact h0
-      · unfold justification_graph at h
-        grind +suggestions
+  obtain ⟨a, ha₁, ha₂, ha₃⟩ : ∃ a : {a : Action (n + 2) // a ∈ p.actions'},
+      (↑(h1_pcf p hp a) : Fin (n + 2)) = f ∧ t ∈ a.val.add'.val.toFinset ∧
+        a.val.cost = (justification_graph p (h1_pcf p hp)).Payload f t adj := by
+    unfold justification_graph at *
+    grind +suggestions
+  exact ⟨a, ha₁, ha₂, by rw [ha₃, h0]⟩
 
 /-
 Propagation of `h1_goal_value = 0` along a zero-cost walk of the justification graph.
@@ -882,10 +877,23 @@ lemma h1_partition_action_correspondence {n : ℕ} (p : STRIPS (n + 2)) (u_g : u
       a.cost =
         (if b ∈ get_all_equiv_delete_relaxed_actions p (lmcut_step p u_g (h1_pcf p hp)).1
           then b.cost - (lmcut_step p u_g (h1_pcf p hp)).2.1 else b.cost) := by
-  -- By `List.mem_iff_getElem`, there exists an index `i` such that `(partition_STRIPS p part ⟨1,_⟩).actions'[i] = a`.
-  obtain ⟨i, hi, hi'⟩ : ∃ i : Fin (partition_STRIPS p (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩).actions'.length, (partition_STRIPS p (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩).actions'[i] = a := by
-    exact?
-  grind +suggestions
+  obtain ⟨i, hi, hi'⟩ := List.mem_iff_getElem.mp ha
+  have hi2 : i < p.actions'.length := by
+    rwa [partition_STRIPS_actions_length] at hi
+  refine ⟨p.actions'[i], List.getElem_mem hi2, ?_, ?_, ?_⟩
+  · have h := (partition_STRIPS_getElem_fields p
+      (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩ i hi hi2).1
+    rw [hi'] at h
+    exact h.symm
+  · have h := (partition_STRIPS_getElem_fields p
+      (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩ i hi hi2).2.1
+    rw [hi'] at h
+    exact h.symm
+  · have hcost := partition_STRIPS_getElem_cost p
+      (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩ i hi hi2
+    rw [hi'] at hcost
+    rw [hcost, lmcut_step_partition_one_apply]
+    simp only [Fin.getElem_fin]
 
 /-
 **A cut-closure action adds a goal-zone fact.** Every action in the relax-equivalence closure
