@@ -1,4 +1,5 @@
 import planning.Heuristics
+import Mathlib
 
 namespace Validator
 
@@ -13,6 +14,106 @@ def partition_STRIPS {n P : ℕ} (prob : STRIPS n) (partitioning : cost_partitio
   let actions : Actions' n := prob.actions'.mapFinIdx (fun i a i_lt =>
     Action.mk a.name a.pre' a.add' a.del' (partitioning p ⟨i,i_lt⟩) )
   STRIPS.mk prob.varNames actions prob.init' prob.goal'
+
+/-- Partitioning only relabels action costs, so the action list keeps its length. -/
+lemma partition_STRIPS_actions_length {n P : ℕ} (prob : STRIPS n)
+    (partitioning : cost_partitioning prob P) (p : Fin P) :
+    (partition_STRIPS prob partitioning p).actions'.length = prob.actions'.length := by
+  unfold partition_STRIPS; simp [List.length_mapFinIdx]
+
+/-- The cost of the `i`-th action of `partition_STRIPS prob partitioning p` is exactly the cost the
+partitioning assigns to that index. -/
+lemma partition_STRIPS_getElem_cost {n P : ℕ} (prob : STRIPS n)
+    (partitioning : cost_partitioning prob P) (p : Fin P) (i : ℕ)
+    (hi : i < (partition_STRIPS prob partitioning p).actions'.length)
+    (hi' : i < prob.actions'.length) :
+    (partition_STRIPS prob partitioning p).actions'[i].cost = partitioning p ⟨i, hi'⟩ := by
+  unfold partition_STRIPS
+  simp [List.getElem_mapFinIdx]
+
+/-- Partitioning only relabels action costs, so the `i`-th action keeps its preconditions, add- and
+delete-effects and name. -/
+lemma partition_STRIPS_getElem_fields {n P : ℕ} (prob : STRIPS n)
+    (partitioning : cost_partitioning prob P) (p : Fin P) (i : ℕ)
+    (hi : i < (partition_STRIPS prob partitioning p).actions'.length)
+    (hi' : i < prob.actions'.length) :
+    (partition_STRIPS prob partitioning p).actions'[i].pre' = prob.actions'[i].pre'
+    ∧ (partition_STRIPS prob partitioning p).actions'[i].add' = prob.actions'[i].add'
+    ∧ (partition_STRIPS prob partitioning p).actions'[i].del' = prob.actions'[i].del'
+    ∧ (partition_STRIPS prob partitioning p).actions'[i].name = prob.actions'[i].name := by
+  unfold partition_STRIPS
+  simp [List.getElem_mapFinIdx]
+
+/-- Partitioning leaves the initial state and goal unchanged (only action costs are relabelled). -/
+lemma partition_STRIPS_init_goal {n P : ℕ} (prob : STRIPS n)
+    (partitioning : cost_partitioning prob P) (p : Fin P) :
+    (partition_STRIPS prob partitioning p).init' = prob.init'
+    ∧ (partition_STRIPS prob partitioning p).goal' = prob.goal' := by
+  unfold partition_STRIPS; exact ⟨rfl, rfl⟩
+
+/-- The total cost of the actions of partition `p` is the sum of the partition's assigned costs. -/
+lemma partition_STRIPS_cost_sum {n P : ℕ} (prob : STRIPS n)
+    (partitioning : cost_partitioning prob P) (p : Fin P) :
+    ((partition_STRIPS prob partitioning p).actions'.map (fun a => a.cost)).sum
+      = ∑ i : Fin prob.actions'.length, partitioning p i := by
+  unfold partition_STRIPS
+  simp only [List.mapFinIdx_eq_ofFn, List.map_ofFn, List.sum_ofFn, Function.comp, Fin.eta]
+
+/-- The total cost of a problem's actions as a sum over action indices. -/
+lemma actions_cost_sum_eq {n : ℕ} (prob : STRIPS n) :
+    (prob.actions'.map (fun a => a.cost)).sum
+      = ∑ i : Fin prob.actions'.length, prob.actions'[i].cost := by
+  conv_lhs => rw [← List.ofFn_getElem prob.actions']
+  rw [List.map_ofFn, List.sum_ofFn]
+  rfl
+
+/-- Change the cost of an action `a` to the cost the cost partitioning assigns to it in partition
+`p`.  The relevant cost is found by locating the index of `a` in `prob.actions'`; an action that
+does not occur in `prob.actions'` is returned unchanged.  This is exactly the cost that
+`partition_STRIPS prob partitioning p` gives to the action, so adapting a landmark's actions makes
+them genuine actions of the partitioned problem. -/
+def adapt_cost_of_action_to_partition {n P : ℕ} (prob : STRIPS n)
+    (partitioning : cost_partitioning prob P) (p : Fin P) (a : Action n) : Action n :=
+  if h : prob.actions'.idxOf a < prob.actions'.length then
+    Action.mk a.name a.pre' a.add' a.del' (partitioning p ⟨prob.actions'.idxOf a, h⟩)
+  else a
+
+/-- Adapting an action of `prob` to a partition keeps its name, preconditions, add- and
+delete-effects; only the cost changes. -/
+lemma adapt_cost_of_action_to_partition_fields {n P : ℕ} (prob : STRIPS n)
+    (partitioning : cost_partitioning prob P) (p : Fin P) (a : Action n) :
+    (adapt_cost_of_action_to_partition prob partitioning p a).name = a.name ∧
+    (adapt_cost_of_action_to_partition prob partitioning p a).pre' = a.pre' ∧
+    (adapt_cost_of_action_to_partition prob partitioning p a).add' = a.add' ∧
+    (adapt_cost_of_action_to_partition prob partitioning p a).del' = a.del' := by
+  unfold adapt_cost_of_action_to_partition; split <;> simp
+
+/-- The cost assigned to an adapted action of `prob` is the partition value at its index. -/
+lemma adapt_cost_of_action_to_partition_cost {n P : ℕ} (prob : STRIPS n)
+    (partitioning : cost_partitioning prob P) (p : Fin P) (a : Action n)
+    (ha : a ∈ prob.actions') :
+    (adapt_cost_of_action_to_partition prob partitioning p a).cost
+      = partitioning p ⟨prob.actions'.idxOf a, List.idxOf_lt_length_of_mem ha⟩ := by
+  unfold adapt_cost_of_action_to_partition
+  rw [dif_pos (List.idxOf_lt_length_of_mem ha)]
+
+/-- An adapted action of `prob` is the action that `partition_STRIPS prob partitioning p` puts at
+the (first) index of `a`, hence it is a genuine action of the partitioned problem. -/
+lemma adapt_cost_of_action_to_partition_mem {n P : ℕ} (prob : STRIPS n)
+    (partitioning : cost_partitioning prob P) (p : Fin P) (a : Action n)
+    (ha : a ∈ prob.actions') :
+    adapt_cost_of_action_to_partition prob partitioning p a
+      ∈ (partition_STRIPS prob partitioning p).actions' := by
+  have hlt : prob.actions'.idxOf a < prob.actions'.length := List.idxOf_lt_length_of_mem ha
+  have hget : prob.actions'[prob.actions'.idxOf a] = a := List.getElem_idxOf hlt
+  have hlt' : prob.actions'.idxOf a < (partition_STRIPS prob partitioning p).actions'.length := by
+    rw [partition_STRIPS_actions_length]; exact hlt
+  rw [List.mem_iff_getElem]
+  refine ⟨prob.actions'.idxOf a, hlt', ?_⟩
+  unfold partition_STRIPS adapt_cost_of_action_to_partition
+  rw [dif_pos hlt]
+  rw [List.getElem_mapFinIdx]
+  simp only [hget]
 
 
 def partition_heuristics {n P : ℕ} (prob : STRIPS n) (partitioning : cost_partitioning prob P)
