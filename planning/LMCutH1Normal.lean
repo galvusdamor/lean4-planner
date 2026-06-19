@@ -18,13 +18,13 @@ iteration index: it is true in the initial state, so it starts at `0` and never 
 lemma ignf_i_fact_iter {n : ℕ} (q : STRIPS n) (k : ℕ) :
     (h_1_iter (i_g_normal_form q) (h_1_base (n + 2) (i_g_normal_form q).init') k)[(⟨n, by omega⟩ : Fin (n + 2))]
       = some 0 := by
-  induction' k with k ih generalizing q <;> simp +decide [ *, h_1_iter ] at *
-  · unfold h_1_base i_g_normal_form; simp +decide [ STRIPS.init, convertState ] 
+  induction' k with k ih generalizing q <;> simp [ *, h_1_iter ] at *
+  · unfold h_1_base i_g_normal_form; simp
   · unfold h_1_step
     convert ih q using 1
     rw [ Vector.getElem_map ]
-    simp +decide [ Vector.finRange ]
-    intro x hx hx' hx'' hx'''; split_ifs at hx''' <;> simp_all +decide [ updateIfCheaper ] 
+    simp [ Vector.finRange ]
+    intro x hx hx' hx'' hx'''; split_ifs at hx''' <;> simp_all [ updateIfCheaper ]
 
 /-
 Every initial fact of `q` keeps `h_1` value `some 0` along the whole iteration: it starts at `0`
@@ -32,12 +32,12 @@ in `h_1_base` and `h_1_step` can only keep it `≤ 0`, i.e. `0`.
 -/
 lemma q_init_fact_iter {n : ℕ} (q : STRIPS n) (k : ℕ) (g : Fin n) (hg : q.init'[g] = true) :
     (h_1_iter q (h_1_base n q.init') k)[g] = some 0 := by
-  induction' k with k ih generalizing q <;> simp +decide [ *, h_1_iter ]
+  induction' k with k ih generalizing q <;> simp [ *, h_1_iter ]
   · unfold h_1_base
     simp_all only [Fin.getElem_fin, Vector.getElem_map, Vector.getElem_finRange, Fin.eta, ↓reduceIte]
   · unfold h_1_step
-    rw [ Vector.getElem_map ] ; simp +decide [ hg, ih q hg ]
-    unfold updateIfCheaper; simp +decide [ hg, ih q hg ] 
+    rw [ Vector.getElem_map ] ; simp [ ih q hg ]
+    unfold updateIfCheaper; simp
 
 /-- The auxiliary fact `i` (position `n`) has `h_1` *fixpoint* value `some 0`. -/
 lemma ignf_fix_i {n : ℕ} (q : STRIPS n) :
@@ -64,10 +64,10 @@ lemma ignf_action_adds_goal {n : ℕ} (q : STRIPS n) (a : Action (n + 2))
     (hg : (⟨n + 1, by omega⟩ : Fin (n + 2)) ∈ a.add'.val) :
     a.cost = 0 ∧
       a.pre'.val = q.goal'.val.map (Fin.castLE (show n ≤ n + 2 by omega)) := by
-  unfold i_g_normal_form at ha; simp_all +decide [ List.mem_append, List.mem_map ] 
-  rcases ha with ( ⟨ a, ha, rfl ⟩ | rfl | rfl ) <;> simp_all +decide [ Fin.ext_iff, List.mem_append, List.mem_map ]
+  unfold i_g_normal_form at ha; simp_all [ List.mem_append, List.mem_map ]
+  rcases ha with ( ⟨ a, ha, rfl ⟩ | rfl | rfl ) <;> simp_all [ Fin.ext_iff, List.mem_map ]
   · lia
-  · obtain ⟨ a, ha, ha' ⟩ := hg; have := Fin.is_lt a; simp_all +decide [ Fin.ext_iff ] 
+  · obtain ⟨ a, ha, ha' ⟩ := hg; have := Fin.is_lt a; simp_all
 
 /-
 q's `h_1` fixpoint value at an initial fact of `q` is `some 0`.
@@ -90,7 +90,7 @@ lemma ignf_fix_embed_init {n : ℕ} (q : STRIPS n) (f : Fin n) (hf : q.init'[f] 
     apply Validator.h_1_iter_fix_is_fixpoint
   -- By definition of `i_g_normal_form`, we know that `init` action is in `i_g_normal_form q`'s actions.
   have h_init_action : ∃ a : Action (n + 2), a ∈ (i_g_normal_form q).actions' ∧ a.pre'.val = [⟨n, by omega⟩] ∧ a.add'.val = (varset'_of_state' q.init').val.map (Fin.castLE (show n ≤ n + 2 by omega)) ∧ a.cost = 0 := by
-                                                                                                                                                                              unfold i_g_normal_form; simp +decide [ List.mem_append ] 
+                                                                                                                                                                              unfold i_g_normal_form; simp [ List.mem_append ]
                                                                                                                                                                               exact ⟨ _, Or.inr <| Or.inl rfl, rfl, rfl, rfl ⟩
   obtain ⟨a, ha₁, ha₂, ha₃, ha₄⟩ := h_init_action
   -- Since `a` is applicable at `R`, we can apply `fixpoint_add_applicable_isSome`.
@@ -104,15 +104,15 @@ lemma ignf_fix_embed_init {n : ℕ} (q : STRIPS n) (f : Fin n) (hf : q.init'[f] 
   have h_le : R[Fin.castLE (show n ≤ n + 2 by omega) f] ≤ some (actionContribUB R a) := by
                               convert fixpoint_value_le_action_cost ( i_g_normal_form q ) R hR a ha₁ ( Fin.castLE ( show n ≤ n + 2 by omega ) f ) _ h_applicable using 1
                               · convert actionContribUB_eq_of_applicable R a h_applicable using 1
-                                simp +decide [ ha₂, List.attach ]
-                                simp +decide [ List.max ]
+                                simp [ ha₂, List.attach ]
+                                simp [ List.max ]
                                 grind +qlia
-                              · simp_all +decide [ varset'_of_state' ]
+                              · simp_all [ varset'_of_state' ]
   have h_actionContribUB : actionContribUB R a = 0 := by
-    unfold actionContribUB; simp +decide [ ha₄, ha₂ ] 
-    have := ignf_fix_i q; simp_all +decide [ Option.getD ] 
+    unfold actionContribUB; simp [ ha₄, ha₂ ]
+    have := ignf_fix_i q; simp_all [ Option.getD ]
     exact this.symm ▸ rfl
-  cases h : R[Fin.castLE (show n ≤ n + 2 by omega) f] <;> simp_all +decide
+  cases h : R[Fin.castLE (show n ≤ n + 2 by omega) f] <;> simp_all
   cases ‹ℕ› <;> tauto
 
 /-
@@ -133,21 +133,21 @@ lemma ignf_step_embed {n : ℕ} (q : STRIPS n) (V : _root_.Vector (WithTop ℕ) 
   -- Since $V$ and $W$ agree on $f$, the lists of actions contributing to the h_1_step are the same.
   have h_lists_eq : (i_g_normal_form q).actions'.filterMap (fun a => if Fin.castLE (by omega) f ∈ a.add'.val then if applicable' a (vec_to_state (n + 2) V) then some (actionContribUB V a) else none else none) = q.actions'.filterMap (fun a => if f ∈ a.add'.val then if applicable' a (vec_to_state n W) then some (actionContribUB W a) else none else none) := by
     unfold i_g_normal_form
-    simp +decide [ List.filterMap_append, List.filterMap_map ]
-    rw [ List.filterMap_cons, List.filterMap_cons ] ; simp +decide [ Fin.ext_iff, Fin.val_add ]
+    simp [ List.filterMap_append, List.filterMap_map ]
+    rw [ List.filterMap_cons, List.filterMap_cons ] ; simp [ Fin.ext_iff ]
     rw [ if_neg, if_neg ] <;> norm_num [ Fin.ext_iff, Fin.val_add ]
     · refine' List.filterMap_congr _
-      intro a ha; simp +decide [ Fin.castLE_injective, List.mem_map, List.mem_append, List.mem_singleton ] 
+      intro a ha; simp [ Fin.castLE_injective ]
       congr! 2
       · unfold applicable'
-        unfold satisfies'; simp +decide [ Fin.castLE_injective, List.mem_map, List.mem_append, List.mem_singleton ] 
+        unfold satisfies'; simp
         grind +suggestions
-      · unfold actionContribUB; simp +decide [ hWV ] 
+      · unfold actionContribUB; simp [ hWV ]
         unfold Option.getD
         simp_all only [Fin.getElem_fin, Fin.val_castLE, zero_le, sup_of_le_left]
         rfl
     · linarith [ Fin.is_lt f ]
-    · intro x hx; intro H; have := varset'_of_state'_mem q.init' x; simp_all +decide [ Fin.ext_iff ] 
+    · intro x hx; intro H; have := varset'_of_state'_mem q.init' x; simp_all
   grind +suggestions
 
 /-- The extension of q's `h_1` fixpoint vector to the normal form: embedded facts get q's value,
@@ -193,7 +193,7 @@ lemma ignf_extend_step_emb {n : ℕ} (q : STRIPS n) (f : Fin n) :
     have h_eq : (ignf_extend q)[(Fin.castLE (show n ≤ n + 2 by omega) f)] = some 0 := by
                                               convert q_fix_init q f ( by simpa using hf ) using 1
                                               exact ignf_extend_emb q f
-    cases h : ( h_1_step ( n + 2 ) ( i_g_normal_form q ) ( ignf_extend q ) )[ Fin.castLE ( show n ≤ n + 2 by omega ) f ] <;> simp_all +decide
+    cases h : ( h_1_step ( n + 2 ) ( i_g_normal_form q ) ( ignf_extend q ) )[ Fin.castLE ( show n ≤ n + 2 by omega ) f ] <;> simp_all
     cases ‹ℕ› <;> tauto
 
 /-
@@ -203,7 +203,7 @@ lemma ignf_extend_step_i {n : ℕ} (q : STRIPS n) :
     (h_1_step (n + 2) (i_g_normal_form q) (ignf_extend q))[(⟨n, by omega⟩ : Fin (n + 2))]
       = (ignf_extend q)[(⟨n, by omega⟩ : Fin (n + 2))] := by
   convert h_1_step_getElem_contrib ( i_g_normal_form q ) ( ignf_extend q ) ( ⟨ n, by omega ⟩ : Fin ( n + 2 ) ) using 1
-  unfold i_g_normal_form; simp +decide [ List.mem_append, List.mem_map ] 
+  unfold i_g_normal_form; simp [ List.mem_map ]
   grind
 
 /-
@@ -212,46 +212,46 @@ lemma ignf_extend_step_i {n : ℕ} (q : STRIPS n) :
 lemma ignf_extend_step_g {n : ℕ} (q : STRIPS n) :
     (h_1_step (n + 2) (i_g_normal_form q) (ignf_extend q))[(⟨n + 1, by omega⟩ : Fin (n + 2))]
       = (ignf_extend q)[(⟨n + 1, by omega⟩ : Fin (n + 2))] := by
-  rw [ h_1_step_getElem_contrib ] ; simp +decide [ i_g_normal_form ] 
-  unfold updateIfCheaper; simp +decide [ Fin.ext_iff ] 
-  rw [ show ( ignf_extend q)[n + 1] = if q.goal'.val.all ( fun f => ( ignf_R0 q)[f].isSome ) then some ( ( q.goal'.val.map ( fun f => ( ignf_R0 q)[f].getD 0 ) ).foldl max 0 ) else none from ?_ ] ; split_ifs <;> simp +decide [ * ] at *
-  · simp +decide [ List.filterMap, List.map ] at *
-    split_ifs <;> simp +decide [ Fin.ext_iff ] at *
+  rw [ h_1_step_getElem_contrib ] ; simp [ i_g_normal_form ]
+  unfold updateIfCheaper; simp [ Fin.ext_iff ]
+  rw [ show ( ignf_extend q)[n + 1] = if q.goal'.val.all ( fun f => ( ignf_R0 q)[f].isSome ) then some ( ( q.goal'.val.map ( fun f => ( ignf_R0 q)[f].getD 0 ) ).foldl max 0 ) else none from ?_ ] ; split_ifs <;> simp [ * ] at *
+  · simp [ List.filterMap ] at *
+    split_ifs <;> simp at *
     rename_i h₁ h₂ h₃ h₄
-    obtain ⟨ a, ha₁, ha₂ ⟩ := h₂; simp_all +decide [ Fin.ext_iff ] 
-    exact absurd ha₂ ( by exact ne_of_lt ( Nat.lt_succ_of_le ( Nat.le_of_lt_succ ( by simp +decide [ Fin.ext_iff ] ) ) ) )
+    obtain ⟨ a, ha₁, ha₂ ⟩ := h₂; simp_all
+    exact absurd ha₂ ( by exact ne_of_lt ( Nat.lt_succ_of_le ( Nat.le_of_lt_succ ( by simp ) ) ) )
     · grind
     · rename_i h₁ h₂ h₃ h₄
-      obtain ⟨ a, ha₁, ha₂ ⟩ := h₂; simp_all +decide [ Fin.ext_iff ] 
-      exact absurd ha₂ ( by exact ne_of_lt ( Nat.lt_succ_of_le ( Nat.le_of_lt_succ ( by simp +decide [ Fin.ext_iff ] ) ) ) )
+      obtain ⟨ a, ha₁, ha₂ ⟩ := h₂; simp_all
+      exact absurd ha₂ ( by exact ne_of_lt ( Nat.lt_succ_of_le ( Nat.le_of_lt_succ ( by simp ) ) ) )
     · grind +qlia
     · intro h₁ h₂
       contrapose! h₂
       rw [ List.min_eq_head ]
-      · simp +decide [ actionContribUB ]
-        rw [ List.head_append ] ; simp +decide [ Fin.ext_iff ]
-        split_ifs <;> simp_all +decide [ Fin.ext_iff ]
+      · simp [ actionContribUB ]
+        rw [ List.head_append ] ; simp [ Fin.ext_iff ]
+        split_ifs <;> simp_all
         · congr! 2
-          ext f; simp +decide [ ignf_extend_emb ] 
+          ext f; simp
           convert ignf_extend_emb q f |> Eq.symm using 1
           grind +suggestions
         · grind
-      · simp +decide [ List.pairwise_append, List.pairwise_cons ]
+      · simp [ List.pairwise_append, List.pairwise_cons ]
         constructor
-        · rw [ List.filterMap_eq_nil_iff.mpr ] <;> simp +decide [ List.Pairwise ]
-          intro a ha x hx hx'; simp_all +decide [ Fin.ext_iff ] 
+        · rw [ List.filterMap_eq_nil_iff.mpr ] <;> simp
+          intro a ha x hx hx'; simp_all [ Fin.ext_iff ]
           bv_omega
-        · intro a x hx y hy hxy h₁ h₂; subst h₂; simp_all +decide [ Fin.ext_iff ] 
+        · intro a x hx y hy hxy h₁ h₂; subst h₂; simp_all [ Fin.ext_iff ]
           bv_omega
     · grind +splitIndPred
   · refine' ⟨ _, _, _ ⟩
     · grind +suggestions
     · grind +splitImp
-    · unfold applicable'; simp +decide [ vec_to_state_getElem ] 
-      unfold satisfies'; simp +decide [ vec_to_state_getElem ] 
+    · unfold applicable'; simp
+      unfold satisfies'; simp [ vec_to_state_getElem ]
       unfold ignf_extend
       simp_all only [Fin.getElem_fin, List.all_eq_true, Vector.getElem_ofFn, Fin.is_lt, ↓reduceDIte]
-  · unfold ignf_extend; simp +decide [ Fin.ext_iff ] 
+  · unfold ignf_extend; simp
 
 /-
 `ignf_extend` is an `h_1_step`-fixpoint of the normal form.
@@ -262,7 +262,7 @@ lemma ignf_extend_fixpoint {n : ℕ} (q : STRIPS n) :
   apply Vector.ext
   intro i hi
   by_cases hi' : i = n ∨ i = n + 1
-  · cases hi' <;> simp_all +decide [ Fin.ext_iff ]
+  · cases hi' <;> simp_all
     · convert ignf_extend_step_i q using 1
     · convert ignf_extend_step_g q using 1
   · convert ignf_extend_step_emb q ⟨ i, by omega ⟩ using 1
@@ -288,7 +288,7 @@ lemma ignf_fix_embed {n : ℕ} (q : STRIPS n) (f : Fin n) :
               W]
           have hW_f'_step : (h_1_step n q W)[f'] ≤ W[f'] := by
             apply h_1_step_le
-          cases h : ( h_1_step n q W)[f'] <;> simp_all +decide
+          cases h : ( h_1_step n q W)[f'] <;> simp_all
           exact le_antisymm hW_f'_step ( WithTop.coe_le_coe.mpr ( Nat.zero_le _ ) )
         · have := ignf_step_embed q (ignf_RN q) W (ignf_fix_i q) (fun j => by simp [W]) f' (by simpa using hf')
           rw [ ← this, show ( h_1_step ( n + 2 ) ( i_g_normal_form q ) ( ignf_RN q ) ) = ignf_RN q from h_1_iter_fix_is_fixpoint _ _ _ ]
@@ -297,7 +297,7 @@ lemma ignf_fix_embed {n : ℕ} (q : STRIPS n) (f : Fin n) :
       convert hW_fixpoint ⟨ i, by linarith ⟩)
     convert h_1_iter_fix_ge_of_fixpoint q ( h_1_base n q.init' ) W hW_fixpoint ( fun j => ?_ ) f using 1
     · simp_all only [Fin.getElem_fin, Fin.val_castLE, Vector.getElem_ofFn, W]
-    · by_cases hj : q.init'[j] = true <;> simp_all +decide [ h_1_base ]
+    · by_cases hj : q.init'[j] = true <;> simp_all [ h_1_base ]
       · have := ignf_fix_embed_init q j hj
         simp_all only [Fin.getElem_fin, Fin.val_castLE, Vector.getElem_ofFn,
           le_refl, W]
@@ -305,8 +305,8 @@ lemma ignf_fix_embed {n : ℕ} (q : STRIPS n) (f : Fin n) :
   · convert h_1_iter_fix_ge_of_fixpoint ( i_g_normal_form q ) ( h_1_base ( n + 2 ) ( i_g_normal_form q ).init' ) ( ignf_extend q ) _ _ ( Fin.castLE ( show n ≤ n + 2 by omega ) f ) using 1
     · rw [ ignf_extend_emb ]
     · exact ignf_extend_fixpoint q
-    · intro i; unfold ignf_extend; simp +decide [ h_1_base ] 
-      split_ifs <;> simp_all +decide [ i_g_normal_form ]
+    · intro i; unfold ignf_extend; simp [ h_1_base ]
+      split_ifs <;> simp_all [ i_g_normal_form ]
       · linarith
       · exact le_top
       · exact le_top
@@ -318,7 +318,7 @@ In the satisfied case, `h_1 q q.init'` is bounded by the maximal finite fixpoint
 lemma h_1_le_maxFinite_of_satisfies {n : ℕ} (q : STRIPS n)
     (h : satisfies' q.goal' (vec_to_state n (ignf_R0 q)) = true) :
     h_1 q q.init' ≤ Vector.maxFinite (ignf_R0 q) := by
-  simp_all +decide [ h_1 ]
+  simp_all [ h_1 ]
   split_ifs
   · exact Nat.zero_le _
   · have h_max_le : ∀ x ∈ (q.goal'.val.attach.map (fun x => (ignf_R0 q)[x.1].get (vec_to_state_isSome_of_satisfies n (ignf_R0 q) q.goal' h x.1 x.2))), x ≤ Vector.maxFinite (ignf_R0 q) := by
@@ -337,10 +337,10 @@ lemma ignf_fix_goal_isSome {n : ℕ} (q : STRIPS n) :
     ((ignf_RN q)[(⟨n + 1, by omega⟩ : Fin (n + 2))]).isSome
       = satisfies' q.goal' (vec_to_state n (ignf_R0 q)) := by
   by_contra h_contra
-  by_cases h : satisfies' q.goal' (vec_to_state n (ignf_R0 q)) <;> simp_all +decide
+  by_cases h : satisfies' q.goal' (vec_to_state n (ignf_R0 q)) <;> simp_all
   · obtain ⟨a, ha⟩ : ∃ a : Action (n + 2), a ∈ (i_g_normal_form q).actions' ∧ a.pre'.val = q.goal'.val.map (Fin.castLE (show n ≤ n + 2 by omega)) ∧ (⟨n + 1, by omega⟩ : Fin (n + 2)) ∈ a.add'.val := by
-                                                                                                                          unfold i_g_normal_form; simp +decide [ List.mem_append ] 
-                                                                                                                          exact ⟨ _, Or.inr <| Or.inr rfl, rfl, by simp +decide ⟩
+                                                                                                                          unfold i_g_normal_form; simp [ List.mem_append ]
+                                                                                                                          exact ⟨ _, Or.inr <| Or.inr rfl, rfl, by simp ⟩
     have h_precondition_some : ∀ f ∈ a.pre'.val, (ignf_RN q)[f].isSome := by
       grind +suggestions
     have := fixpoint_add_applicable_isSome (i_g_normal_form q) (ignf_RN q) (h_1_iter_fix_is_fixpoint (n + 2) (i_g_normal_form q) (h_1_base (n + 2) (i_g_normal_form q).init')) a ha.1 (⟨n + 1, by omega⟩ : Fin (n + 2)) ha.2.2 h_precondition_some
@@ -351,7 +351,7 @@ lemma ignf_fix_goal_isSome {n : ℕ} (q : STRIPS n) :
       have := fixpoint_get_attained ( i_g_normal_form q ) ( i_g_normal_form q ).init' ⟨ n + 1, by omega ⟩ ?_ ?_
       · exact ⟨ this.choose, this.choose_spec.1, this.choose_spec.2.2.1, this.choose_spec.2.1 ⟩
       · exact Option.isSome_iff_ne_none.mpr h_contra
-      · unfold i_g_normal_form; simp +decide [ Vector.getElem_push ] 
+      · unfold i_g_normal_form; simp
     obtain ⟨hcost, hpre⟩ := ignf_action_adds_goal q a ha happ
     have h_pre_some : ∀ f ∈ q.goal'.val, (ignf_RN q)[(Fin.castLE (show n ≤ n + 2 by omega) f)].isSome := by
                                                                     intros f hf
@@ -369,18 +369,18 @@ lemma ignf_goal_foldl_eq {n : ℕ} (q : STRIPS n)
     (h : satisfies' q.goal' (vec_to_state n (ignf_R0 q)) = true) :
     (q.goal'.val.map (fun f => ((ignf_R0 q)[f]).getD 0)).foldl max 0 = h_1 q q.init' := by
   unfold h_1
-  by_cases h : q.goal'.val = [] <;> simp_all +decide
+  by_cases h : q.goal'.val = [] <;> simp_all
   · convert ‹satisfies' q.goal' ( vec_to_state n ( ignf_R0 q ) ) = true› using 1
   · have h_foldl_max : ∀ (l : List ℕ) (hl : l ≠ []), List.foldl max 0 l = List.max l hl := by
-      intros l hl; induction' l using List.reverseRecOn with l ih <;> simp_all +decide [ List.max ] 
+      intros l hl; induction' l using List.reverseRecOn with l ih <;> simp_all [ List.max ]
       · contradiction
-      · cases l <;> simp_all +decide [ List.foldl ]
+      · cases l <;> simp_all [ List.foldl ]
     convert h_foldl_max _ _ using 2
-    all_goals simp_all +decide [ List.map ]
-    split_ifs ; simp_all +decide [ ignf_R0 ]
+    all_goals simp_all
+    split_ifs ; simp_all [ ignf_R0 ]
     · convert rfl
-      refine' List.ext_get _ _ <;> simp +decide [ List.get ]
-      intro i hi₁ hi₂; rw [ Option.getD_eq_iff ] ; simp +decide [ hi₁, hi₂ ] 
+      refine' List.ext_get _ _ <;> simp
+      intro i hi₁ hi₂; rw [ Option.getD_eq_iff ] ; simp
     · contradiction
 
 /-
@@ -390,12 +390,12 @@ lemma ignf_fix_goal_value {n : ℕ} (q : STRIPS n)
     (h : satisfies' q.goal' (vec_to_state n (ignf_R0 q)) = true) :
     (ignf_RN q)[(⟨n + 1, by omega⟩ : Fin (n + 2))] = some (h_1 q q.init') := by
   have := ignf_fix_goal_isSome q
-  have := fixpoint_get_attained ( i_g_normal_form q ) ( i_g_normal_form q ).init' ⟨ n + 1, by omega ⟩ ; simp_all +decide [ ignf_action_adds_goal ] 
+  have := fixpoint_get_attained ( i_g_normal_form q ) ( i_g_normal_form q ).init' ⟨ n + 1, by omega ⟩ ; simp_all +decide
   obtain ⟨ a, ha₁, ha₂, ha₃, ha₄ ⟩ := this ‹_› ( by
-    simp +decide [ i_g_normal_form ] )
+    simp [ i_g_normal_form ] )
   obtain ⟨ ha₅, ha₆ ⟩ := ignf_action_adds_goal q a ha₁ ha₃
   have ha₇ : actionContribUB (ignf_RN q) a = (q.goal'.val.map (fun f => ((ignf_R0 q)[f]).getD 0)).foldl max 0 := by
-    unfold actionContribUB; simp +decide [ ha₅, ha₆ ] 
+    unfold actionContribUB; simp [ ha₅, ha₆ ]
     exact congr_arg _ ( List.map_congr_left fun x hx => by have := ignf_fix_embed q x; simp_all only [Fin.getElem_fin, Fin.val_castLE, Function.comp_apply] )
   have ha₈ : (q.goal'.val.map (fun f => ((ignf_R0 q)[f]).getD 0)).foldl max 0 = h_1 q q.init' := by
     exact ignf_goal_foldl_eq q h
@@ -407,7 +407,7 @@ A uniform upper bound on all finite entries bounds `Vector.maxFinite`.
 -/
 lemma maxFinite_le {m : ℕ} (v : _root_.Vector (WithTop ℕ) m) (B : ℕ)
     (h : ∀ i : Fin m, ∀ c : ℕ, v[i] = some c → c ≤ B) : Vector.maxFinite v ≤ B := by
-  induction v using Vector.recOn ; simp_all +decide [ Vector.maxFinite ]
+  induction v using Vector.recOn ; simp_all [ Vector.maxFinite ]
   have h_foldl_le_B : ∀ (l : List (WithTop ℕ)), (∀ x ∈ l, ∀ c, x = some c → c ≤ B) → List.foldl (fun acc x => match x with | some c => max acc c | none => acc) 0 l ≤ B := by
     intro l hl
     induction' l using List.reverseRecOn with l ih
@@ -417,7 +417,7 @@ lemma maxFinite_le {m : ℕ} (v : _root_.Vector (WithTop ℕ) m) (B : ℕ)
   · rw [ ← List.foldl_toArray ]
     congr
     · grind +qlia
-    · simp +decide [ * ]
+    · simp [ * ]
   · grind
 
 /-
@@ -440,7 +440,7 @@ lemma ignf_maxFinite_eq {n : ℕ} (q : STRIPS n) :
       rw [ ignf_fix_embed ] at hc
       exact Vector.le_maxFinite hc
     · by_cases hidx' : idx.val = n
-      · have := ignf_fix_i q; simp_all +decide [ Fin.ext_iff ] 
+      · have := ignf_fix_i q; simp_all
         cases this.symm.trans hc
         simp_all only [zero_le, R, R0]
       · -- Since `idx.val = n + 1`, we have `R[idx] = some c` implies `satisfies' q.goal' (vec_to_state n R0)`.
@@ -478,25 +478,25 @@ lemma h_1_i_g_normal_form_eq {n : ℕ} (q : STRIPS n) :
   -- By definition of `h_1`, we know that `h_1 (i_g_normal_form q) (i_g_normal_form q).init'` is equal to `Vector.maxFinite (ignf_RN q) + 1` if the goal is not satisfied, and `pre_cost.max` otherwise.
   have h_def : h_1 (i_g_normal_form q) (i_g_normal_form q).init' = if (ignf_RN q)[(⟨n + 1, by omega⟩ : Fin (n + 2))].isSome then (ignf_RN q)[(⟨n + 1, by omega⟩ : Fin (n + 2))].get! else Vector.maxFinite (ignf_RN q) + 1 := by
     unfold h_1
-    unfold ignf_RN; simp +decide [ satisfies'_singleton, vec_to_state_getElem ] 
-    split_ifs <;> simp_all +decide [ Option.isSome_iff_exists ]
+    unfold ignf_RN; simp
+    split_ifs <;> simp_all [ Option.isSome_iff_exists ]
     · unfold i_g_normal_form at *
       simp_all only [BitVec.zero_eq, BitVec.zero_or, List.cons_ne_self]
-    · rename_i h₁ h₂ h₃; specialize h₃ 0; simp_all +decide [ i_g_normal_form ] 
-    · unfold i_g_normal_form; simp +decide [ satisfies'_singleton, vec_to_state_getElem ] 
+    · rename_i h₁ h₂ h₃; specialize h₃ 0; simp_all [ i_g_normal_form ]
+    · unfold i_g_normal_form; simp
       grind +suggestions
-    · unfold i_g_normal_form at *; simp_all +decide [ satisfies'_singleton, vec_to_state_getElem ] 
+    · unfold i_g_normal_form at *; simp_all
       grind +suggestions
-    · rename_i h₁ h₂; obtain ⟨ a, ha ⟩ := h₂; simp_all +decide [ satisfies'_singleton, vec_to_state_getElem ] 
-      unfold satisfies' at h₁; simp_all +decide [ vec_to_state_getElem ] 
-      unfold i_g_normal_form at h₁; simp_all +decide [ List.SortedLT, StrictMono ] 
-      unfold i_g_normal_form at ha; simp_all +decide [ List.SortedLT, StrictMono ] 
-  split_ifs at h_def <;> simp_all +decide [ ignf_maxFinite_eq ]
+    · rename_i h₁ h₂; obtain ⟨ a, ha ⟩ := h₂; simp_all
+      unfold satisfies' at h₁; simp_all [ vec_to_state_getElem ]
+      unfold i_g_normal_form at h₁; simp_all [ List.SortedLT, StrictMono ]
+      unfold i_g_normal_form at ha; simp_all [ List.SortedLT, StrictMono ]
+  split_ifs at h_def <;> simp_all [ ignf_maxFinite_eq ]
   · have := ignf_fix_goal_value q ( by
       exact ignf_fix_goal_isSome q |> fun h => h.symm.trans ‹_› )
     exact h ( by erw [ this ] ; rfl )
   · unfold h_1 at h
-    have := ignf_fix_goal_isSome q; simp_all +decide [ ignf_RN, ignf_R0 ] 
+    have := ignf_fix_goal_isSome q; simp_all [ ignf_RN, ignf_R0 ]
 
 /-
 **(B)** The `h_1`/`h^max` value of the goal fact of the i/g normal form (from its initial state)

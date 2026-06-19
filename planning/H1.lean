@@ -1,4 +1,3 @@
-
 import Mathlib.Tactic.Linarith
 
 import planning.CriticalPath
@@ -23,8 +22,8 @@ lemma vector_le_ne_implies_lex {n : ℕ} (v1 v2 : Vector (WithTop ℕ) n)
         refine lt_of_le_of_ne (hle 0 ?_) hxy
         linarith
       exact List.Lex.rel (by
-      cases x <;> cases y <;> simp_all +decide [ withTop.lex ]);
-  convert h_lex _ _ _ _ _ <;> simp_all +decide [ Vector.ext_iff ];
+      cases x <;> cases y <;> simp_all [ withTop.lex ]);
+  convert h_lex _ _ _ _ _ <;> simp_all [ Vector.ext_iff ];
   exact fun i hi => hle ⟨ i, hi ⟩
 
 /-- `h_1_step` is componentwise ≤ and when it differs, the result is lex-smaller. -/
@@ -170,7 +169,7 @@ If satisfies' g state holds and i ∈ g, then state[i] = true.
 lemma satisfies'_mem {n : ℕ} (g : VarSet' n) (state : State' n) (i : Fin n)
     (hsat : satisfies' g state = true) (hmem : i ∈ g.val) :
     state[i.val] = true := by
-  contrapose! hsat; simp_all +decide [ satisfies', List.all_eq_true ] ;
+  contrapose! hsat; simp_all [ satisfies', List.all_eq_true ] ;
   use i
 
 /-
@@ -196,7 +195,7 @@ If ¬ satisfies' g state, then there exists i ∈ g with state[i] = false.
 lemma not_satisfies'_exists {n : ℕ} (g : VarSet' n) (state : State' n)
     (hsat : ¬ satisfies' g state = true) :
     ∃ i ∈ g.val, state[i.val] = false := by
-  contrapose! hsat; simp_all +decide [ satisfies', List.all_eq_true ] ;
+  contrapose! hsat; simp_all [ satisfies', List.all_eq_true ] ;
 
 /-- The result vector for h_1 is the same regardless of the goal. -/
 lemma h_1_result_eq {n : ℕ} (prob : STRIPS n) (g : VarSet' n) (s : State' n) :
@@ -262,11 +261,11 @@ lemma fixpoint_get_le_action_cost {n : ℕ} (prob : STRIPS n)
       a.cost + a.pre'.val.attach.foldl (fun acc (x : { x : Fin n // x ∈ a.pre'.val }) =>
         max acc ((result[x.1]).get (vec_to_state_isSome_of_applicable n result a happ x.1 x.2))) 0 := by
   convert fixpoint_value_le_action_cost prob result hfix a ha i hadd happ using 1;
-  split_ifs <;> simp_all +decide
+  split_ifs <;> simp_all
   · have h_eq : result[i] ≤ some a.cost := by
       grind +suggestions;
     simp_all +singlePass [ WithTop.le_def ];
-    obtain ⟨ a, b, hab, h₁, h₂ ⟩ := h_eq; simp_all +decide [ WithTop.some_eq_coe ] ;
+    obtain ⟨ a, b, hab, h₁, h₂ ⟩ := h_eq; simp_all [ WithTop.some_eq_coe ] ;
     exact le_add_right hab;
   · rw [ ← WithTop.coe_le_coe ];
     congr! 1;
@@ -275,10 +274,11 @@ lemma fixpoint_get_le_action_cost {n : ℕ} (prob : STRIPS n)
         intros l hl_nonempty
         induction' l using List.reverseRecOn with l ih;
         · contradiction;
-        · cases l <;> simp_all +decide [ List.max ];
+        · cases l <;> simp_all [ List.max ];
       convert congr_arg ( fun x : ℕ => some ( a.cost + x ) ) ( h_foldl_eq_max _ _ ) using 1;
       rw [ List.foldl_map ];
       rfl
+
 /-- Upper-bound contribution of an action `a` at a value vector `v`, using `getD 0` so that no
 applicability/`isSome` proof is needed.  When `a` is applicable in `vec_to_state n v` (so every
 precondition value `isSome`), `(v[j]).getD 0 = (v[j]).get _`, so this matches the `attach`/`get`
@@ -296,11 +296,11 @@ lemma actionContribUB_eq_of_applicable {n : ℕ} (v : Vector (WithTop ℕ) n) (a
     actionContribUB v a =
       a.cost + a.pre'.val.attach.foldl (fun acc (x : { x : Fin n // x ∈ a.pre'.val }) =>
         max acc ((v[x.1]).get (vec_to_state_isSome_of_applicable n v a happ x.1 x.2))) 0 := by
-  simp +decide [ actionContribUB, List.foldl_map ];
+  simp [ actionContribUB, List.foldl_map ];
   rw [ ← List.foldl_map ];
   convert rfl using 2;
   rw [ ← List.foldl_map ] ; congr! 2;
-  refine' List.ext_get _ _ <;> simp +decide [ List.get ];
+  refine' List.ext_get _ _ <;> simp ;
   grind +suggestions
 
 /-
@@ -317,16 +317,16 @@ lemma h_1_step_getElem_contrib {n : ℕ} (prob : STRIPS n) (v : Vector (WithTop 
         else .none);
       if hL : L = [] then v[i] else updateIfCheaper (L.min hL) v[i]) := by
   rw [h_1_step_getElem];
-  unfold actionContribUB; simp +decide [ List.foldl_map ] ;
+  unfold actionContribUB; simp [ List.foldl_map ] ;
   congr! 3;
   · congr! 2;
-    split_ifs <;> simp_all +decide [ List.foldl_map ];
+    split_ifs <;> simp_all ;
     convert rfl using 2;
     have h_foldl_eq_max : ∀ (l : List ℕ) (h : l ≠ []), List.foldl (fun acc x => max acc x) 0 l = l.max h := by
       intros l hl_nonempty
       induction' l using List.reverseRecOn with l ih;
       · contradiction;
-      · cases l <;> simp_all +decide [ List.max ];
+      · cases l <;> simp_all [ List.max ];
     convert h_foldl_eq_max _ _ using 2;
     rw [ ← List.foldl_map ] ; congr! 2;
     grind +extAll;
@@ -344,7 +344,7 @@ lemma h_1_step_attained {n : ℕ} (prob : STRIPS n) (v : Vector (WithTop ℕ) n)
   obtain ⟨a, ha⟩ : ∃ a ∈ prob.actions', applicable' a (vec_to_state n v) = true ∧ i ∈ a.add'.val ∧ (h_1_step n prob v)[i] = some (actionContribUB v a) := by
     have hL_nonempty : (prob.actions'.filterMap (fun a => if i ∈ a.add'.val then if applicable' a (vec_to_state n v) then some (actionContribUB v a) else none else none)) ≠ [] := by
       contrapose! h_ne;
-      rw [ h_1_step_getElem_contrib, h_ne ] ; simp +decide [ updateIfCheaper ]
+      rw [ h_1_step_getElem_contrib, h_ne ] ; simp
     rw [ h_1_step_getElem_contrib ] at *;
     have h_min_mem : (List.min (List.filterMap (fun a => if i ∈ a.add'.val then if applicable' a (vec_to_state n v) then some (actionContribUB v a) else none else none) prob.actions') hL_nonempty) ∈ List.filterMap (fun a => if i ∈ a.add'.val then if applicable' a (vec_to_state n v) then some (actionContribUB v a) else none else none) prob.actions' := by
       exact List.min_mem hL_nonempty;
@@ -367,7 +367,7 @@ The base vector satisfies the attainment invariant: it is `some 0` exactly at th
 -/
 lemma h1_attained_invariant_base {n : ℕ} (prob : STRIPS n) (s : State' n) :
     h1_attained_invariant prob s (h_1_base n s) := by
-  intro i hi; by_cases hi' : s[i.val] = true <;> simp_all +decide [ h_1_base ] ;
+  intro i hi; by_cases hi' : s[i.val] = true <;> simp_all [ h_1_base ] ;
 
 /-
 `h_1_step` preserves the attainment invariant.  Values only decrease (`h_1_step_le`) and
@@ -379,41 +379,41 @@ set_option maxHeartbeats 1000000 in
 lemma h1_attained_invariant_step {n : ℕ} (prob : STRIPS n) (s : State' n)
     (v : Vector (WithTop ℕ) n) (hv : h1_attained_invariant prob s v) :
     h1_attained_invariant prob s (h_1_step n prob v) := by
-  intro i hi; by_cases h_cases : ( h_1_step n prob v )[i] = v[i] <;> simp_all +decide [ h1_attained_invariant, h_1_step_preserves_isSome ] ;
-  · rcases hv i hi with h | ⟨ a, ha₁, ha₂, ha₃, ha₄ ⟩ <;> simp_all +decide [ actionContribUB ];
+  intro i hi; by_cases h_cases : ( h_1_step n prob v )[i] = v[i] <;> simp_all [ h1_attained_invariant ] ;
+  · rcases hv i hi with h | ⟨ a, ha₁, ha₂, ha₃, ha₄ ⟩ <;> simp_all [ actionContribUB ];
     refine Or.inr ⟨ a, ha₁, ?_, ha₃, ?_ ⟩;
     · unfold applicable';
       unfold satisfies';
       grind +suggestions;
     · refine le_trans ?_ ha₄;
       have h_monotone : ∀ j ∈ a.pre'.val, (h_1_step n prob v)[j].getD 0 ≤ v[j].getD 0 := by
-        intro j hj; specialize h_cases; have := h_1_step_le n prob v j; simp_all +decide [ Vector.getElem_map ] ;
-        cases h : ( h_1_step n prob v )[ j ] <;> cases h' : v[ j ] <;> simp_all +decide [ WithTop.some_eq_coe ];
-        · exact absurd ( vec_to_state_isSome_of_applicable n v a ha₂ j hj ) ( by simp +decide [ h', vec_to_state ] );
+        intro j hj; specialize h_cases; have := h_1_step_le n prob v j; simp_all ;
+        cases h : ( h_1_step n prob v )[ j ] <;> cases h' : v[ j ] <;> simp_all ;
+        · exact absurd ( vec_to_state_isSome_of_applicable n v a ha₂ j hj ) ( by simp +decide [ h' ] );
         · exact this;
       have h_monotone_foldl : ∀ (l : List (Fin n)), (∀ j ∈ l, (h_1_step n prob v)[j].getD 0 ≤ v[j].getD 0) → List.foldl max 0 (List.map (fun j => (h_1_step n prob v)[j].getD 0) l) ≤ List.foldl max 0 (List.map (fun j => v[j].getD 0) l) := by
-        intros l hl; induction' l using List.reverseRecOn with l ih <;> simp_all +decide [ List.foldl ] ;
-        induction' l using List.reverseRecOn with l ih <;> simp_all +decide [ List.foldl ];
+        intros l hl; induction' l using List.reverseRecOn with l ih <;> simp_all [ List.foldl ] ;
+        induction' l using List.reverseRecOn with l ih <;> simp_all [ List.foldl ];
         grind;
       convert Nat.add_le_add_left ( h_monotone_foldl _ _ ) a.cost using 1;
       exact h_monotone;
-  · obtain ⟨ a, ha₁, ha₂, ha₃, ha₄ ⟩ := h_1_step_attained prob v i h_cases; use Or.inr ⟨ a, ha₁, ?_, ha₃, ?_ ⟩ <;> simp_all +decide [ actionContribUB ] ;
+  · obtain ⟨ a, ha₁, ha₂, ha₃, ha₄ ⟩ := h_1_step_attained prob v i h_cases; use Or.inr ⟨ a, ha₁, ?_, ha₃, ?_ ⟩ <;> simp_all [ actionContribUB ] ;
     · -- Since `a` is applicable in `v`, it remains applicable in `h_1_step n prob v` because `h_1_step` preserves `isSome`.
       have h_applicable : ∀ j : Fin n, j ∈ a.pre'.val → (vec_to_state n (h_1_step n prob v))[j.val] = true := by
         intro j hj; exact vec_to_state_getElem n _ j |> fun h => h.symm ▸ h_1_step_preserves_isSome prob v j ( vec_to_state_isSome_of_applicable n v a ha₂ j hj ) ;
-      unfold applicable'; simp_all +decide [ satisfies', List.all_eq_true ] ;
+      unfold applicable'; simp_all [ satisfies', List.all_eq_true ] ;
     · have h_monotone : ∀ j ∈ a.pre'.val, (h_1_step n prob v)[j].getD 0 ≤ v[j].getD 0 := by
         intros j hj; exact (by
         have h_monotone : (h_1_step n prob v)[j] ≤ v[j] := by
           exact h_1_step_le n prob v j;
-        cases h : ( h_1_step n prob v )[j] <;> cases h' : v[j] <;> simp_all +decide [ WithTop.le_def ];
-        · exact absurd ( vec_to_state_isSome_of_applicable n v a ha₂ j hj ) ( by simp +decide [ h', vec_to_state ] );
+        cases h : ( h_1_step n prob v )[j] <;> cases h' : v[j] <;> simp_all [ WithTop.le_def ];
+        · exact absurd ( vec_to_state_isSome_of_applicable n v a ha₂ j hj ) ( by simp +decide [ h' ] );
         · exact h_monotone);
       have h_monotone : ∀ (l : List (Fin n)), (∀ j ∈ l, (h_1_step n prob v)[j].getD 0 ≤ v[j].getD 0) → List.foldl max 0 (List.map (fun j => (h_1_step n prob v)[j].getD 0) l) ≤ List.foldl max 0 (List.map (fun j => v[j].getD 0) l) := by
-        intros l hl; induction' l using List.reverseRecOn with l ih <;> simp_all +decide [ List.foldl ] ;
-        induction' l using List.reverseRecOn with l ih <;> simp_all +decide [ List.foldl ];
+        intros l hl; induction' l using List.reverseRecOn with l ih <;> simp_all [ List.foldl ] ;
+        induction' l using List.reverseRecOn with l ih <;> simp_all [ List.foldl ];
         grind;
-      convert h_monotone ( a.pre'.val.map ( fun j => j ) ) _ using 1 <;> simp_all +decide [ List.map_map ]
+      convert h_monotone ( a.pre'.val.map ( fun j => j ) ) _ using 1 <;> simp_all
 
 /-- The attainment invariant propagates to the fixpoint, following the `h_1_iter_fix` recursion. -/
 lemma h1_attained_invariant_iter {n : ℕ} (prob : STRIPS n) (s : State' n)
@@ -441,8 +441,8 @@ lemma fixpoint_get_attained {n : ℕ} (prob : STRIPS n) (s : State' n)
       (happ : applicable' a (vec_to_state n (h_1_iter_fix n prob (h_1_base n s))) = true),
       ((h_1_iter_fix n prob (h_1_base n s))[i]).getD 0 = actionContribUB (h_1_iter_fix n prob (h_1_base n s)) a := by
   obtain ⟨a, ha, hadd, happ, hcost⟩ : ∃ a ∈ prob.actions', applicable' a (vec_to_state n (h_1_iter_fix n prob (h_1_base n s))) = true ∧ i ∈ a.add'.val ∧ (h_1_iter_fix n prob (h_1_base n s))[i].getD 0 ≥ actionContribUB (h_1_iter_fix n prob (h_1_base n s)) a := by
-    have := h1_attained_invariant_iter prob s ( h_1_base n s ) ( h1_attained_invariant_base prob s ) i; simp_all +decide [ h1_attained_invariant ] ;
-  have := fixpoint_get_le_action_cost prob ( h_1_iter_fix n prob ( h_1_base n s ) ) ( h_1_iter_fix_is_fixpoint n prob ( h_1_base n s ) ) a ha i happ hadd hi; simp_all +decide [ actionContribUB ] ;
+    have := h1_attained_invariant_iter prob s ( h_1_base n s ) ( h1_attained_invariant_base prob s ) i; simp_all ;
+  have := fixpoint_get_le_action_cost prob ( h_1_iter_fix n prob ( h_1_base n s ) ) ( h_1_iter_fix_is_fixpoint n prob ( h_1_base n s ) ) a ha i happ hadd hi; simp_all [ actionContribUB ] ;
   refine' ⟨ a, ha, hadd, happ, le_antisymm _ hcost ⟩;
   convert this using 1;
   · exact Eq.symm (Option.get_eq_getD (h_1_iter_fix n prob (h_1_base n s))[↑i]);
@@ -477,14 +477,14 @@ lemma h_1_multi_atom {n : ℕ} (prob : STRIPS n) (g : VarSet' n) (s : State' n)
       (g.1.map (fun g' => h_1 (replace_goal prob ⟨[g'], by simp [List.SortedLT, StrictMono]⟩) s)).max
         (by intro h2; simp_all) := by
   unfold h_1;
-  simp +decide [ h_1_iter_fix_replace_goal ];
-  split_ifs <;> simp_all +decide [ replace_goal ];
+  simp [ h_1_iter_fix_replace_goal ];
+  split_ifs <;> simp_all [ replace_goal ];
   case neg h h_1 =>
     -- Since the goal is satisfied, each singleton goal must also be satisfied.
     have h_singleton_satisfied : ∀ g' ∈ g.val, satisfies' ⟨[g'], by simp [List.SortedLT, StrictMono]⟩ (vec_to_state n (h_1_iter_fix n prob (h_1_base n s))) = true :=
       fun g' a => satisfies'_singleton_of_mem (replace_goal prob g).goal'
                     (vec_to_state n (h_1_iter_fix n prob (h_1_base n s))) g' h a
-    simp_all +decide [ List.max ];
+    simp_all [ List.max ];
     congr! 2;
     refine' List.ext_get _ _
     · simp_all only [gt_iff_lt, List.length_map, List.length_attach]
@@ -523,7 +523,7 @@ lemma g_atom_in_regressed_goal_if_not_added {n : ℕ}
   simp_all only [Fin.getElem_fin, Bool.not_eq_eq_eq_not, Bool.not_true, Bool.decide_or,
     Bool.decide_eq_false, Bool.decide_eq_true, List.all_eq_true, Bool.or_eq_true]
   unfold varset'_of_state';
-  simp +decide [ BitVec.getElem_cast, BitVec.getElem_ofBoolListLE ];
+  simp [ BitVec.getElem_cast, BitVec.getElem_ofBoolListLE ];
   grind +suggestions
 
 /-
@@ -534,17 +534,17 @@ lemma h_1_mono_of_mem {n : ℕ} (prob : STRIPS n) (g_atom : Fin n) (s : State' n
     h_1 (replace_goal prob rg) s ≥ h_1 (replace_goal prob ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩) s := by
   have h_simp : h_1_iter_fix n (replace_goal prob rg) (h_1_base n s) = h_1_iter_fix n prob (h_1_base n s) ∧ h_1_iter_fix n (replace_goal prob ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩) (h_1_base n s) = h_1_iter_fix n prob (h_1_base n s) := by
     exact ⟨ h_1_iter_fix_replace_goal prob rg ( h_1_base n s ), h_1_iter_fix_replace_goal prob ⟨ [ g_atom ], by simp [ List.SortedLT, StrictMono ] ⟩ ( h_1_base n s ) ⟩
-  unfold h_1; simp +decide [ h_simp ] ;
-  split_ifs <;> simp_all +decide [ replace_goal ];
+  unfold h_1; simp [ h_simp ] ;
+  split_ifs <;> simp_all [ replace_goal ];
   · apply List.le_max_of_mem; simp
     exact ⟨ g_atom, hmem, rfl ⟩;
-  · simp +decide [ List.max ];
+  · simp [ List.max ];
     exact Nat.le_succ_of_le ( Vector.le_maxFinite ( h_1_iter_fix n prob ( h_1_base n s ) |> fun x => x[g_atom] |> fun y => by
       simp_all only [Fin.getElem_fin, Option.some_get]
       rfl ) );
   · rename_i h₁ h₂ h₃
     generalize_proofs at *; (
-    contrapose! h₃; simp_all +decide [ satisfies' ] ;
+    contrapose! h₃; simp_all [ satisfies' ] ;
     exact h₁ _ hmem)
 
 /-
@@ -561,9 +561,9 @@ lemma h_1_singleton_bellman_add_case1 {n : ℕ} (prob : STRIPS n) (g_atom : Fin 
     -- Since `g_atom` is not discovered at the fixpoint, `h_1` returns `Vector.maxFinite result + 1` by definition.
     simp [h_1]
     split_ifs <;> simp_all
-    · simp_all +decide [ replace_goal ]
+    · simp_all [ replace_goal ]
     · rename_i h₁ h₂;
-      erw [ satisfies'_singleton ] at h₁ ; simp_all +decide [ vec_to_state_getElem ];
+      erw [ satisfies'_singleton ] at h₁ ; simp_all [ vec_to_state_getElem ];
       exact absurd h₁ ( by erw [ h_1_iter_fix_replace_goal ] ; simp_all only [Bool.not_eq_true, Option.isSome_eq_false_iff, Option.isNone_iff_eq_none] ; rfl);
     · rw [ h_1_iter_fix_replace_goal ];
   have h_not_discover_j : ∃ j ∈ a.pre'.val, (h_1_iter_fix n prob (h_1_base n s))[j] = ⊤ := by
@@ -609,8 +609,8 @@ lemma h_1_singleton_bellman_add_case2a {n : ℕ} (prob : STRIPS n) (g_atom : Fin
       have := h_1_mono_of_mem prob x.1 s (varset'_of_state' (regress' a (state'_of_varset' ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩))) ?_;
       · refine le_trans ?_ this;
         unfold h_1;
-        simp +decide [ h_1_iter_fix_replace_goal ];
-        split_ifs <;> simp_all +decide [ replace_goal ];
+        simp [ h_1_iter_fix_replace_goal ];
+        split_ifs <;> simp_all [ replace_goal ];
         · exact le_rfl;
         · exact Nat.le_succ_of_le ( Vector.le_maxFinite ( h := by simp_all only [Fin.getElem_fin, Option.some_get, result] ; simp_all only [result] ; rfl ) );
       · exact h_mem;
@@ -629,8 +629,8 @@ lemma h_1_singleton_bellman_add_case2a {n : ℕ} (prob : STRIPS n) (g_atom : Fin
         simp_all only [Fin.getElem_fin, List.all_cons, List.all_nil, Bool.and_true, result]
       · exact hSome.symm;
     unfold h_1;
-    simp +decide [ replace_goal ];
-    split_ifs ; simp_all +decide [ List.max ];
+    simp [ replace_goal ];
+    split_ifs ; simp_all [ List.max ];
     · congr! 1;
       convert h_1_iter_fix_replace_goal prob ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩ (h_1_base n s) |> congr_arg (fun x => x[g_atom]) using 1;
     · rename_i h;
@@ -650,21 +650,21 @@ lemma h_1_singleton_bellman_add_case2b {n : ℕ} (prob : STRIPS n) (g_atom : Fin
     h_1 (replace_goal prob ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩) s ≤
       a.cost + h_1 (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩)))) s := by
   have h_not_applicable : ∃ j ∈ a.pre'.val, (h_1_iter_fix n prob (h_1_base n s))[j].isSome = false := by
-    simp_all +decide [ applicable' ];
-    contrapose! hnapp; simp_all +decide [ satisfies', vec_to_state_getElem ] ;
+    simp_all [ applicable' ];
+    contrapose! hnapp; simp_all [ satisfies', vec_to_state_getElem ] ;
   obtain ⟨ j, hj₁, hj₂ ⟩ := h_not_applicable
   have h_j_in_rg : j ∈ (varset'_of_state' (regress' a (state'_of_varset' ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩))).val := by
     apply regress_singleton_add_contains_pre a g_atom j hj₁;
   have h_h_1_rg : h_1 (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩)))) s = Vector.maxFinite (h_1_iter_fix n prob (h_1_base n s)) + 1 := by
     unfold h_1;
-    simp +decide [ h_1_iter_fix_replace_goal ];
-    intro h; have := satisfies'_mem _ _ _ h h_j_in_rg; simp_all +decide [ vec_to_state_getElem ] ;
+    simp [ h_1_iter_fix_replace_goal ];
+    intro h; have := satisfies'_mem _ _ _ h h_j_in_rg; simp_all [ vec_to_state_getElem ] ;
   have h_h_1_g_atom : h_1 (replace_goal prob ⟨[g_atom], by simp [List.SortedLT, StrictMono]⟩) s = (h_1_iter_fix n prob (h_1_base n s))[g_atom].get hSome := by
     unfold h_1;
-    simp +decide [ h_1_iter_fix_replace_goal ];
-    split_ifs <;> simp_all +decide [ replace_goal ];
+    simp [ h_1_iter_fix_replace_goal ];
+    split_ifs <;> simp_all [ replace_goal ];
     · rfl;
-    · unfold satisfies' at *; simp_all +decide [ vec_to_state_getElem ] ;
+    · unfold satisfies' at *; simp_all [ vec_to_state_getElem ] ;
       grind;
   have h_h_1_g_atom_le_maxFinite : (h_1_iter_fix n prob (h_1_base n s))[g_atom].get hSome ≤ Vector.maxFinite (h_1_iter_fix n prob (h_1_base n s)) := by
     apply_rules [ Vector.le_maxFinite ];
@@ -784,6 +784,7 @@ lemma h_1_iter_fix_step {n : ℕ} (prob : STRIPS n) (bef : Vector (WithTop ℕ) 
   split
   · rename_i h; rw [h, h_1_iter_fix]; simp [h]
   · rfl
+
 /-
 The indexed iteration agrees with `h_1_iter_fix` once it has stabilised.
 -/
@@ -901,11 +902,11 @@ lemma h_1_rank_attained {n : ℕ} (prob : STRIPS n) (base : Vector (WithTop ℕ)
         apply h_1_iter_le_of_le; exact Nat.sub_le_of_le_add (by
         exact Nat.le_succ_of_le ( h_1_rank_le prob base w ( by aesop ) )))
       generalize_proofs at *; (
-      cases h : ( h_1_iter_fix n prob base )[ j ] <;> cases h' : ( h_1_iter prob base ( h_1_rank prob base w - 1 ) )[ j ] <;> simp_all +decide [ Option.getD ];
-      have := vec_to_state_isSome_of_applicable n ( h_1_iter prob base ( h_1_rank prob base w - 1 ) ) a happ j hj; simp_all +decide [ vec_to_state_getElem ] ;);
+      cases h : ( h_1_iter_fix n prob base )[ j ] <;> cases h' : ( h_1_iter prob base ( h_1_rank prob base w - 1 ) )[ j ] <;> simp_all [ Option.getD ];
+      have := vec_to_state_isSome_of_applicable n ( h_1_iter prob base ( h_1_rank prob base w - 1 ) ) a happ j hj; simp_all +decide;);
     have h_foldl_le : ∀ {l : List (Fin n)}, (∀ j ∈ l, (h_1_iter_fix n prob base)[j].getD 0 ≤ (h_1_iter prob base (h_1_rank prob base w - 1))[j].getD 0) → List.foldl max 0 (List.map (fun j => (h_1_iter_fix n prob base)[j].getD 0) l) ≤ List.foldl max 0 (List.map (fun j => (h_1_iter prob base (h_1_rank prob base w - 1))[j].getD 0) l) := by
-      intros l hl; induction' l using List.reverseRecOn with l ih <;> simp_all +decide [ List.foldl ] ;
-      induction' l using List.reverseRecOn with l ih <;> simp_all +decide [ List.foldl ];
+      intros l hl; induction' l using List.reverseRecOn with l ih <;> simp_all [ List.foldl ] ;
+      induction' l using List.reverseRecOn with l ih <;> simp_all [ List.foldl ];
       grind;
     exact h_foldl_le ‹_›;
   have h_foldl_ge : (h_1_iter_fix n prob base)[w].get hw ≤ a.cost + List.foldl max 0 (List.map (fun j => (h_1_iter_fix n prob base)[j].getD 0) a.pre'.val) := by
@@ -918,26 +919,28 @@ lemma h_1_rank_attained {n : ℕ} (prob : STRIPS n) (base : Vector (WithTop ℕ)
           exact fun k hk => h_1_iter_isSome_mono prob base hk j h_applicable;
         obtain ⟨ K, hK ⟩ := h_1_iter_eventually_fix prob base;
         grind +suggestions;
-      unfold applicable'; simp_all +decide [ vec_to_state_getElem ] ;
-      unfold satisfies'; simp_all +decide [ vec_to_state_getElem ] ;
+      unfold applicable'; simp_all ;
+      unfold satisfies'; simp_all [ vec_to_state_getElem ] ;
     convert fixpoint_get_le_action_cost prob ( h_1_iter_fix n prob base ) ( h_1_iter_fix_is_fixpoint n prob base ) a ha w hadd h_foldl_ge hw using 1;
     convert actionContribUB_eq_of_applicable _ _ h_foldl_ge using 1;
   have h_foldl_eq : (h_1_iter_fix n prob base)[w] = some (a.cost + List.foldl max 0 (List.map (fun j => (h_1_iter prob base (h_1_rank prob base w - 1))[j].getD 0) a.pre'.val)) := by
     convert hval using 1;
     rw [ ← h_1_rank_spec prob base w ];
     rw [ ← h_1_iter_succ ] ; congr ; omega;
-  simp_all +decide [ actionContribUB ];
+  simp_all [ actionContribUB ];
   exact ⟨ a, ha, happ, hadd, rfl, le_antisymm h_foldl_ge h_foldl_le ⟩
+
 theorem h_1_admissible {n : ℕ} (prob : STRIPS n) :
   heur_admissible prob (h_1 prob) :=
     admissible_of_h_1_regression_invariant prob h_1 (h_1_has_invar prob) prob.goal'
+
 /-
 `foldl max 0` is monotone in the mapped list (pointwise `≤`).
 -/
 lemma foldl_max_mono {β : Type*} (l : List β) (g h : β → ℕ)
     (hgh : ∀ x ∈ l, g x ≤ h x) :
     (l.map g).foldl max 0 ≤ (l.map h).foldl max 0 := by
-  induction' l using List.reverseRecOn with x l ih <;> simp_all +decide [ List.foldl ];
+  induction' l using List.reverseRecOn with x l ih <;> simp_all [ List.foldl ];
   grind
 
 /-
@@ -949,11 +952,11 @@ lemma actionContribUB_mono_of_applicable {n : ℕ} {v w : Vector (WithTop ℕ) n
     (haw : applicable' a (vec_to_state n w) = true) :
     applicable' a (vec_to_state n v) = true ∧ actionContribUB v a ≤ actionContribUB w a := by
   constructor;
-  · unfold applicable' at *; simp_all +decide [ vec_to_state_getElem ] ;
+  · unfold applicable' at *; simp_all +decide ;
     unfold satisfies' at *; simp_all +decide [ vec_to_state_getElem ] ;
     intro x hx; specialize h x; specialize haw x hx; cases h' : v[x] <;> cases h'' : w[x] <;> simp_all +decide ;
     exact Option.isSome_of_mem rfl;
-  · unfold applicable' at haw; simp_all +decide [ vec_to_state_getElem ] ;
+  · unfold applicable' at haw; simp_all +decide ;
     unfold actionContribUB; simp_all +decide [ satisfies' ] ;
     apply foldl_max_mono;
     intro x hx; specialize h x; cases h' : v[x] <;> cases h'' : w[x] <;> simp_all +decide [ Option.getD ] ;
@@ -969,13 +972,13 @@ lemma h_1_step_mono {n : ℕ} (prob : STRIPS n) {v w : Vector (WithTop ℕ) n}
     (h : ∀ i : Fin n, v[i] ≤ w[i]) (i : Fin n) :
     (h_1_step n prob v)[i] ≤ (h_1_step n prob w)[i] := by
   rw [ h_1_step_getElem_contrib, h_1_step_getElem_contrib ];
-  by_cases hL : List.filterMap ( fun a => if i ∈ a.add'.val then if applicable' a ( vec_to_state n v ) = true then some ( actionContribUB v a ) else none else none ) prob.actions' = [] <;> by_cases hL' : List.filterMap ( fun a => if i ∈ a.add'.val then if applicable' a ( vec_to_state n w ) = true then some ( actionContribUB w a ) else none else none ) prob.actions' = [] <;> simp +decide [ hL, hL' ];
+  by_cases hL : List.filterMap ( fun a => if i ∈ a.add'.val then if applicable' a ( vec_to_state n v ) = true then some ( actionContribUB v a ) else none else none ) prob.actions' = [] <;> by_cases hL' : List.filterMap ( fun a => if i ∈ a.add'.val then if applicable' a ( vec_to_state n w ) = true then some ( actionContribUB w a ) else none else none ) prob.actions' = [] <;> simp [ hL, hL' ];
   · exact h i;
-  · obtain ⟨ a, ha ⟩ := List.length_pos_iff_exists_mem.mp ( List.length_pos_iff.mpr hL' ) ; simp_all +decide [ List.mem_filterMap ] ;
-    obtain ⟨ a, ha₁, ha₂, ha₃, rfl ⟩ := ha; specialize hL a ha₁ ha₂; simp_all +decide [ applicable' ] ;
-    contrapose! hL; simp_all +decide [ satisfies' ] ;
-    intro x hx; specialize ha₃ x hx; specialize h x; simp_all +decide [ vec_to_state_getElem ] ;
-    cases h' : v[x] <;> cases h'' : w[x] <;> simp_all +decide [ Option.isSome ];
+  · obtain ⟨ a, ha ⟩ := List.length_pos_iff_exists_mem.mp ( List.length_pos_iff.mpr hL' ) ; simp_all [ List.mem_filterMap ] ;
+    obtain ⟨ a, ha₁, ha₂, ha₃, rfl ⟩ := ha; specialize hL a ha₁ ha₂; simp_all [ applicable' ] ;
+    contrapose! hL; simp_all [ satisfies' ] ;
+    intro x hx; specialize ha₃ x hx; specialize h x; simp_all [ vec_to_state_getElem ] ;
+    cases h' : v[x] <;> cases h'' : w[x] <;> simp_all [ Option.isSome ];
   · refine' le_trans _ ( h i );
     exact updateIfCheaper_le _ _;
   · -- Since `Lv.min ≤ Lw.min` and `v[i] ≤ w[i]`, we can conclude by a small case split on `v[i]`, `w[i]`.
@@ -989,10 +992,10 @@ lemma h_1_step_mono {n : ℕ} (prob : STRIPS n) {v w : Vector (WithTop ℕ) n}
       have := List.min_mem hL';
       obtain ⟨ y, hy₁, hy₂ ⟩ := h_min_le _ this;
       exact le_trans ( List.min_le_of_mem hy₁ ) hy₂;
-    cases h : v[i] <;> cases h' : w[i] <;> simp_all +decide [ updateIfCheaper ];
+    cases h : v[i] <;> cases h' : w[i] <;> simp_all [ updateIfCheaper ];
     · exact WithTop.coe_le_coe.mpr h_min_le;
-    · exact absurd ( ‹∀ i : Fin n, v[i] ≤ w[i]› i ) ( by simp +decide [ h, h' ] );
-    · split_ifs <;> simp_all +decide [ WithTop.some_eq_coe ];
+    · exact absurd ( ‹∀ i : Fin n, v[i] ≤ w[i]› i ) ( by simp [ h, h' ] );
+    · split_ifs <;> simp_all [ WithTop.some_eq_coe ];
       exact le_trans ‹_› h_min_le;
     · split_ifs <;> norm_cast at *;
       · exact WithTop.coe_le_coe.mpr h_min_le;
@@ -1012,7 +1015,7 @@ lemma h_1_iter_fix_ge_of_fixpoint {n : ℕ} (prob : STRIPS n)
     w[i] ≤ (h_1_iter_fix n prob base)[i] := by
   -- By induction on $k$, we show that $w[i] \leq (h_1_iter prob base k)[i]$ for all $k$.
   have h_ind : ∀ k, w[i] ≤ (h_1_iter prob base k)[i] := by
-    intro k; induction' k with k ih generalizing i; simp_all +decide [ h_1_iter ] ;
+    intro k; induction' k with k ih generalizing i; simp_all [ h_1_iter ] ;
     convert h_1_step_mono prob ih i using 1 ; aesop;
   obtain ⟨ K, hK ⟩ := h_1_iter_eventually_fix prob base; specialize h_ind K; aesop;
 
@@ -1057,11 +1060,11 @@ lemma h_1_step_ge_of_action_bound {n : ℕ} (prob : STRIPS n) (bef : Vector (Wit
     generalize_proofs at *; (
     grind +ring)
   generalize_proofs at *; (
-  use a, ha, hadd, happ.left; intro q hq; have := vec_to_state_isSome_of_applicable n bef a happ.left q hq; simp_all +decide [ vec_to_state_getElem ] ;
+  use a, ha, hadd, happ.left; intro q hq; have := vec_to_state_isSome_of_applicable n bef a happ.left q hq; simp_all ;
   cases h' : bef[q] <;> simp_all +decide [ actionContribUB ];
   refine' lt_of_le_of_lt _ h;
   have h_foldl_ge : ∀ {l : List (Fin n)}, (∀ j ∈ l, (bef[j].getD 0) ≤ List.foldl max 0 (List.map (fun j => (bef[j].getD 0)) l)) := by
-    intros l j hj; induction' l using List.reverseRecOn with l ih <;> simp_all +decide [ List.foldl ] ;
+    intros l j hj; induction' l using List.reverseRecOn with l ih <;> simp_all [ List.foldl ] ;
     grind
   generalize_proofs at *; (
   exact WithTop.coe_le_coe.mpr ( Nat.add_le_add_left ( by simpa [ h' ] using h_foldl_ge q hq ) _ )))
@@ -1106,18 +1109,18 @@ lemma h_1_step_isSome_eq_of_fields {n : ℕ} (prob1 prob2 : STRIPS n)
     convert h_1_step_applicable_effects prob1 bef1 a ha₁ ha₃ i ha₂ using 1;
     obtain ⟨ k, hk ⟩ := List.mem_iff_getElem.mp ha₁;
     obtain ⟨ hk₁, rfl ⟩ := hk;
-    convert h_1_step_applicable_effects prob2 bef2 ( prob2.actions'[k] ) ( by simp [ hlen.symm, hk₁ ] ) _ i _ using 1;
-    · unfold applicable' at *; simp_all +decide [ vec_to_state_getElem ] ;
+    convert h_1_step_applicable_effects prob2 bef2 ( prob2.actions'[k] ) ( by simp ) _ i _ using 1;
+    · unfold applicable' at *; simp_all ;
       grind +suggestions;
     · grind;
   · -- Since no action in prob1 adds i, the isSome of h_1_step for prob1 is equal to the isSome of bef1.
     have h_eq_bef1 : ((h_1_step n prob1 bef1)[i]).isSome = (bef1[i]).isSome := by
       rw [ h_1_step_getElem ] ; aesop;
     rw [ h_eq_bef1, show Option.isSome ( h_1_step n prob2 bef2 )[i] = Option.isSome bef2[i] from ?_ ];
-    · convert congr_arg ( fun s : State' n => s[i.val] ) hstate using 1 <;> simp +decide [ vec_to_state_getElem ];
+    · convert congr_arg ( fun s : State' n => s[i.val] ) hstate using 1 <;> simp [ vec_to_state_getElem ];
     · have h_eq_bef2 : ∀ a ∈ prob2.actions', ¬(i ∈ a.add'.val ∧ applicable' a (vec_to_state n bef2) = true) := by
-        intro a ha; contrapose! h; simp_all +decide [ List.mem_iff_getElem ] ;
-        obtain ⟨ j, hj, rfl ⟩ := ha; use j; simp_all +decide [ applicable' ] ;
+        intro a ha; contrapose! h; simp_all [ List.mem_iff_getElem ] ;
+        obtain ⟨ j, hj, rfl ⟩ := ha; use j; simp_all [ applicable' ] ;
       rw [ h_1_step_getElem ];
       rw [ List.filterMap_eq_nil_iff.mpr ] <;> aesop
 
@@ -1133,7 +1136,7 @@ lemma h_1_iter_isSome_eq_of_fields {n : ℕ} (prob1 prob2 : STRIPS n)
        prob1.actions'[i].add' = prob2.actions'[i].add')
     (base : Vector (WithTop ℕ) n) (k : ℕ) (i : Fin n) :
     ((h_1_iter prob1 base k)[i]).isSome = ((h_1_iter prob2 base k)[i]).isSome := by
-  induction' k with k ih generalizing i <;> simp_all +decide [ h_1_iter ];
+  induction' k with k ih generalizing i <;> simp_all [ h_1_iter ];
   convert h_1_step_isSome_eq_of_fields prob1 prob2 hlen ( fun i h1 h2 => hpre i h2 ) ( fun i h1 h2 => hadd i h2 ) ( h_1_iter prob1 base k ) ( h_1_iter prob2 base k ) _ i using 1;
   exact vec_to_state_eq_of_isSome_eq _ _ fun i => ih i
 
@@ -1154,4 +1157,5 @@ lemma h_1_iter_fix_isSome_eq_of_fields {n : ℕ} (prob1 prob2 : STRIPS n)
   apply h_1_iter_isSome_mono prob1 base (le_max_left K1 0) i
   rw [hK1]
   exact h
+
 end Validator

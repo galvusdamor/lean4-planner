@@ -59,7 +59,7 @@ lemma map_walk_cost_le {V1 V2 : Type} [FinEnum V1] [FinEnum V2]
       NatGraph.edgeCost (f_adj a b adj) ≤ NatGraph.edgeCost adj)
     {u v : V1} (w : G1.Walk u v) :
     (map_walk_to_abstract f f_adj w).cost ≤ w.cost := by
-      induction w <;> simp_all +decide [ NatGraph.edgeCost ];
+      induction w <;> simp_all [ NatGraph.edgeCost ];
       · rfl;
       · exact Nat.add_le_add ( cost_le_hyp _ _ ‹_› ) ‹_›
 
@@ -254,7 +254,7 @@ lemma project_pattern_state_satisfies_pre {n : ℕ} (pat : pattern n) (a : Actio
       split_ifs <;> simp_all [state'_of_varset']
       -- Since x is in the pattern and in the preconditions, and v[x] is true, the project_pattern should map x to true in the projected state.
       have h_proj_true : (List.map (fun i => decide (i ∈ List.filterMap (fun e => if e_in_pat : e ∈ pat then some (project_pattern n pat ⟨e, e_in_pat⟩) else none) (varset'_of_state' v).1)) (List.finRange (Finset.card pat)))[project_pattern n pat ⟨x, by assumption⟩] = true := by
-        unfold varset'_of_state' at *; simp_all +decide [ List.mem_filterMap ] ;
+        unfold varset'_of_state' at *; simp_all [ List.mem_filterMap ] ;
         exact ⟨ x, h x hx, by assumption, rfl ⟩;
       -- By definition of `BitVec.ofBoolListLE`, the element at position `i` in the BitVec is the same as the element at position `i` in the original list.
       have h_bitvec_eq_list : ∀ (l : List Bool), ∀ (i : Fin l.length), (BitVec.ofBoolListLE l)[i] = l[i] := by
@@ -263,11 +263,11 @@ lemma project_pattern_state_satisfies_pre {n : ℕ} (pat : pattern n) (a : Actio
       rotate_left;
       rotate_left;
       exact List.map ( fun i => decide ( i ∈ List.filterMap ( fun e => if e_in_pat : e ∈ pat then some ( project_pattern n pat ⟨ e, e_in_pat ⟩ ) else none ) ( varset'_of_state' v ).1 ) ) ( List.finRange ( Finset.card pat ) );
-      exact ⟨ project_pattern n pat ⟨ x, by assumption ⟩, by simp +decide ⟩;
+      exact ⟨ project_pattern n pat ⟨ x, by assumption ⟩, by simp ⟩;
       · simp
         congr! 1
         · grind
-        · simp +decide [ List.length_map, List.length_finRange ]
+        · simp [ List.length_map, List.length_finRange ]
           congr! 1
         · grind
         · grind

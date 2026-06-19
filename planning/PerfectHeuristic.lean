@@ -74,12 +74,12 @@ lemma perferct_heuristic_is_perfect {n : ℕ} (prob : STRIPS n):
     · -- Admissibility
       intro plan plan_1
       unfold perfect_heuristic
-      cases h : planner ( STRIPS.mk prob.varNames prob.actions' plan prob.goal' ) ( fun _ => 0 ) <;> simp_all +decide
+      cases h : planner ( STRIPS.mk prob.varNames prob.actions' plan prob.goal' ) ( fun _ => 0 ) <;> simp_all
       · have := planner_complete ( STRIPS.mk prob.varNames prob.actions' plan prob.goal' ) ( fun _ => 0 ) h
         contrapose! this
         exact ⟨ ⟨ plan_1.last, cast_path_to_replace prob plan plan_1.path, plan_1.goal ⟩ ⟩
       · have := planner_optimal ( STRIPS.mk prob.varNames prob.actions' plan prob.goal' ) ( fun _ => 0 ) ( zero_heur_admissible _ )
-        convert this ( by simp +decide [ h ] ) ( cast_plan_to_replace prob plan plan_1 ) |> le_trans <| ?_
+        convert this ( by simp [ h ] ) ( cast_plan_to_replace prob plan plan_1 ) |> le_trans <| ?_
         · grind
         · grind
         · exact le_of_eq ( cast_path_to_replace_cost prob plan plan_1.path )
@@ -87,7 +87,7 @@ lemma perferct_heuristic_is_perfect {n : ℕ} (prob : STRIPS n):
       intro v hv
       unfold perfect_heuristic
       obtain ⟨plan, hplan⟩ := hv
-      cases h : planner ( STRIPS.mk prob.varNames prob.actions' v prob.goal' ) ( fun _ => 0 ) <;> simp_all +decide
+      cases h : planner ( STRIPS.mk prob.varNames prob.actions' v prob.goal' ) ( fun _ => 0 ) <;> simp_all
       · have := planner_complete ( STRIPS.mk prob.varNames prob.actions' v prob.goal' ) ( fun _ => 0 ) h
         contrapose! this
         exact ⟨ ⟨ plan, cast_path_to_replace prob v hplan, by assumption ⟩ ⟩
@@ -229,8 +229,8 @@ lemma Successor_of_applicable' {n : ℕ} (a : Action n) (s : State' n)
     Successor a (convertState s) (convertState (successor' a s)) := by
       constructor;
       · intro x hx;
-        unfold convertState; simp_all +decide [ Action.pre ] ;
-        unfold convertVarSet at hx; simp_all +decide [ applicable' ] ;
+        unfold convertState; simp_all [ Action.pre ] ;
+        unfold convertVarSet at hx; simp_all [ applicable' ] ;
         unfold satisfies' at happ
         simp_all only [Fin.getElem_fin, List.all_eq_true]
       · -- By definition of successor', we know that for every variable x, x is in the successor state exactly when it's in the original state and not in del, or in add.
@@ -260,12 +260,12 @@ lemma solvable_non_goal_has_applicable {n : ℕ} (prob : STRIPS n) (s : State' n
     (prob.actions'.filter (fun a => applicable' a s)) ≠ [] := by
       obtain ⟨ plan, hplan ⟩ := hs;
       obtain ⟨a, ha⟩ : ∃ a : Action n, a ∈ prob.actions ∧ applicable' a s = true := by
-        cases hplan <;> simp_all +decide [ applicable' ];
+        cases hplan <;> simp_all [ applicable' ];
         · exact False.elim <| hng.not_gt <| GoalState_implies_satisfies' prob s ‹_›;
-        · use ‹Action n›; simp_all +decide [ Successor ] ;
+        · use ‹Action n›; simp_all [ Successor ] ;
           rename_i a s2 ha π succ;
           unfold satisfies';
-          simp_all +decide [ Applicable ];
+          simp_all [ Applicable ];
           intro x hx
           have := succ.1 ( show x ∈ a.pre from by
                                         exact Finset.mem_coe.mpr ( List.mem_toFinset.mpr hx ) )
@@ -343,18 +343,18 @@ lemma perfect_achieves_min {n : ℕ} (prob : STRIPS n) (h : State' n → ℕ)
         -- By hp.2.1 s hs, get plan with plan.path.cost = h s.
         obtain ⟨plan, hplan⟩ := hp.2.1 s hs
         rcases plan with ⟨last, path, goal_sat⟩
-        rcases path with ( _ | ⟨a₀, s2, ha₀, succ₀, rest⟩ ) <;> simp_all +decide;
+        rcases path with ( _ | ⟨a₀, s2, ha₀, succ₀, rest⟩ ) <;> simp_all;
         · exact absurd ( GoalState_implies_satisfies' prob s goal_sat ) ( by simp_all only [Bool.false_eq_true, not_false_eq_true] );
         · -- By the definition of successor, we know that s2 is the successor state of a₀ and s.
           have hs2 : s2 = convertState (successor' a₀ s) := by
             obtain ⟨ _, foo ⟩ := succ₀
             generalize_proofs at *;
             ext i; simp [foo, successor'];
-            unfold convertState; simp +decide [ BitVec.getElem_ofBoolListLE ] ;
-            simp +decide [ or_comm, Action.add, Action.del ];
-            unfold convertVarSet; simp +decide [ and_comm ] ;
+            unfold convertState; simp [ BitVec.getElem_ofBoolListLE ] ;
+            simp [ or_comm, Action.add, Action.del ];
+            unfold convertVarSet; simp [ and_comm ] ;
           subst hs2;
-          have := hp.1 ( successor' a₀ s ) ⟨ last, rest, goal_sat ⟩ ; simp_all +decide [ Path.cost ] ;
+          have := hp.1 ( successor' a₀ s ) ⟨ last, rest, goal_sat ⟩ ; simp_all [ Path.cost ] ;
           exact ⟨ a₀, ⟨ mem_actions'_of_mem_actions ha₀, successor_implies_applicable succ₀ ⟩,
             by have := perfect_le_action_succ prob h hp s a₀ ( mem_actions'_of_mem_actions ha₀ )
                            ( successor_implies_applicable succ₀ ) ⟨ last, rest, goal_sat ⟩; omega ⟩
@@ -421,7 +421,7 @@ lemma weak_invariant_gives_le {n : ℕ} (prob : STRIPS n) (h : State' n → ℕ)
     (a : Action n) (ha : a ∈ prob.actions') (happ : applicable' a s = true) :
     h s ≤ a.cost + h (successor' a s) := by
       have := hi s hs;
-      rcases k : List.min? ( List.map ( fun a => a.cost + h ( successor' a s ) ) ( List.filter ( fun a => applicable' a s ) prob.actions' ) ) with ( _ | k ) <;> simp_all +decide;
+      rcases k : List.min? ( List.map ( fun a => a.cost + h ( successor' a s ) ) ( List.filter ( fun a => applicable' a s ) prob.actions' ) ) with ( _ | k ) <;> simp_all;
       rw [ List.min?_eq_some_iff ] at k;
       split_ifs at this
       case pos hi =>
@@ -548,13 +548,13 @@ lemma apply_regressable_achieves_goal {n : ℕ} (a : Action n)
       use ⟨ x, by
         exact x.2 ⟩
       generalize_proofs at *;
-      simp_all +decide [ convertVarSet, state'_of_varset'_getElem ];
+      simp_all [ convertVarSet, state'_of_varset'_getElem ];
       have hconvert : convertVarSet a.del' = a.del ∧ convertVarSet a.add' = a.add := by
         exact Prod.mk_inj.mp rfl
       simp_all [ Set.ext_iff ]
       exact ⟨ by simpa [ convertVarSet ] using hconvert.1 x |>.2 ( hreg.1 ( hprev ( by
-        unfold regress' at *; simp_all +decide [ convertVarSet ] ;
-        unfold varset'_of_state' at *; simp_all +decide [ BitVec.getElem_ofBoolListLE ] ;
+        unfold regress' at *; simp_all [ convertVarSet ] ;
+        unfold varset'_of_state' at *; simp_all [ BitVec.getElem_ofBoolListLE ] ;
         exact Or.inr ( by rw [ state'_of_varset'_getElem ] ; simp_all only [decide_true]) ) ) ), by simpa [ convertVarSet ] using hconvert.2 x |>.not.mpr hreg.2 ⟩
 
 /-- Cast a path from one `replace_goal` problem to another (same actions). -/
@@ -601,13 +601,13 @@ lemma heur_le_regressable_action_cost {n : ℕ} (prob : STRIPS n)
         obtain ⟨plan_rg, hplan_rg⟩ := hperf (varset'_of_state' (regress' a (state'_of_varset' g))) |>.2.1 s h_solvable;
         obtain ⟨last_state, succ⟩ : ∃ last_state : State n, Successor a plan_rg.last last_state ∧ convertVarSet g ⊆ last_state := by
           have h_succ : Successor a plan_rg.last ((plan_rg.last \ a.del) ∪ a.add) := by
-            have := plan_rg.goal; unfold STRIPS.GoalState at this; simp_all +decide [ Successor ] ;
+            have := plan_rg.goal; unfold STRIPS.GoalState at this; simp_all [ Successor ] ;
             exact fun x hx => this <| by
-              unfold replace_goal; simp_all +decide [ convertVarSet ] ;
-              unfold regress' at *; simp_all +decide [ state'_of_varset', varset'_of_state' ] ;
-              unfold regressable' at hreg; simp_all +decide [ Action.pre ] ;
+              unfold replace_goal; simp_all [ convertVarSet ] ;
+              unfold regress' at *; simp_all [ state'_of_varset', varset'_of_state' ] ;
+              unfold regressable' at hreg; simp_all [ Action.pre ] ;
               unfold convertVarSet at hx; simp_all
-              rw [ BitVec.getElem_ofBoolListLE ] ; simp +decide [ hx ] ;
+              rw [ BitVec.getElem_ofBoolListLE ] ; simp [ hx ] ;
           generalize_proofs at *; (
           exact ⟨ _, h_succ, apply_regressable_achieves_goal a plan_rg.last g hreg plan_rg.goal ⟩)
         generalize_proofs at *; (
@@ -657,7 +657,7 @@ lemma heur_eq_last_action_cost {n : ℕ} (prob : STRIPS n)
             have h_admissible : ∀ (path : Path (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g))) ) (convertState s) prefix_path), path.cost ≥ h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g))) ) s := by
               intros path
               apply (hperf (varset'_of_state' (regress' a (state'_of_varset' g)))).left s ⟨prefix_path, path, h_goal⟩;
-            exact h_admissible ( cast_path_replace_goal prob g ( varset'_of_state' ( regress' a ( state'_of_varset' g ) ) ) ha ) |> le_trans <| by simp +decide [ cast_path_replace_goal_cost ] ;
+            exact h_admissible ( cast_path_replace_goal prob g ( varset'_of_state' ( regress' a ( state'_of_varset' g ) ) ) ha ) |> le_trans <| by simp [ cast_path_replace_goal_cost ] ;
           have h_eq : h (replace_goal prob g) s ≤ a.cost + h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g)))) s := by
             exact heur_le_regressable_action_cost prob h g s hperf hs a s_prev hreg
           grind
@@ -895,10 +895,10 @@ lemma weaker_regression_invariant_le {n : ℕ} (prob : STRIPS n)
     simp_all only [Bool.not_eq_true, Bool.false_eq_true, ↓reduceIte, ne_eq, List.filter_eq_nil_iff, not_forall, Bool.not_eq_false, forall_const, not_isEmpty_of_nonempty, IsEmpty.forall_iff, ge_iff_le, and_true, ↓existsAndEq, and_self]
   have h_min_le : ∀ {l : List ℕ}, l ≠ [] → ∀ x ∈ l, (List.min? l).getD 0 ≤ x := by
     exact fun {l} a x a_1 => List.min?_getD_le_of_mem a_1
-  specialize h_min_le ( show List.map ( fun a => a.cost + h ( replace_goal prob ( varset'_of_state' ( regress' a ( state'_of_varset' g ) ) ) ) s ) regressi ≠ [ ] from ?_ ) ( a.cost + h ( replace_goal prob ( varset'_of_state' ( regress' a ( state'_of_varset' g ) ) ) ) s ) ?_ <;> simp_all +decide;
+  specialize h_min_le ( show List.map ( fun a => a.cost + h ( replace_goal prob ( varset'_of_state' ( regress' a ( state'_of_varset' g ) ) ) ) s ) regressi ≠ [ ] from ?_ ) ( a.cost + h ( replace_goal prob ( varset'_of_state' ( regress' a ( state'_of_varset' g ) ) ) ) s ) ?_ <;> simp_all;
   · exact ⟨ a, ha, hreg ⟩;
   · exact ⟨ a, ⟨ ha, hreg ⟩, rfl ⟩;
-  · cases h : List.min? ( List.map ( fun a => a.cost + h ( replace_goal prob ( varset'_of_state' ( regress' a ( state'_of_varset' g ) ) ) ) s ) ( List.filter ( fun a => regressable' a ( state'_of_varset' g ) ) prob.actions' ) ) <;> simp_all +decide;
+  · cases h : List.min? ( List.map ( fun a => a.cost + h ( replace_goal prob ( varset'_of_state' ( regress' a ( state'_of_varset' g ) ) ) ) s ) ( List.filter ( fun a => regressable' a ( state'_of_varset' g ) ) prob.actions' ) ) <;> simp_all;
     grind
 
 /-
@@ -1164,8 +1164,8 @@ lemma plan_for_conjunction_gives_plan_for_atom {n : ℕ} (prob : STRIPS n)
   refine' ⟨ ⟨ _, _, _ ⟩ ⟩;
   exact plan.last;
   · exact cast_path_replace_goal prob g ⟨[g'], by simp [List.SortedLT, StrictMono]⟩ plan.path;
-  · have := plan.goal; simp_all +decide [ replace_goal, STRIPS.GoalState ] ;
-    exact fun x hx => this <| by simp_all +decide [ convertVarSet ] ;
+  · have := plan.goal; simp_all [ replace_goal, STRIPS.GoalState ] ;
+    exact fun x hx => this <| by simp_all [ convertVarSet ] ;
 
 /-- Goal-awareness from the h_1 regression invariant: if the state satisfies the goal, h = 0. -/
 lemma goal_aware_of_h_1_regression_invariant {n : ℕ} (prob : STRIPS n)
@@ -1240,7 +1240,7 @@ private lemma goalState_atom_of_goalState_conjunction {n : ℕ} (prob : STRIPS n
     {s_prev : State n}
     (hgoal : (replace_goal prob rg).GoalState s_prev) :
     (replace_goal prob ⟨[g'], by simp [List.SortedLT, StrictMono]⟩).GoalState s_prev := by
-  unfold replace_goal; simp_all +decide [ STRIPS.GoalState ] ;
+  unfold replace_goal; simp_all [ STRIPS.GoalState ] ;
   exact fun x hx => hgoal <| by unfold convertVarSet at *
                                 simp_all only [List.coe_toFinset, List.toFinset_cons, List.toFinset_nil, insert_empty_eq, Finset.coe_singleton,
       Set.mem_singleton_iff, Set.mem_setOf_eq]

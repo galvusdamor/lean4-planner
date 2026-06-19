@@ -117,7 +117,7 @@ lemma successor_regressable {n : ℕ} (a : Action n) (f : State' n):
     applicable' a f → regressable' a (successor' a f) := by
       unfold regressable';
       unfold successor';
-      simp_all +decide [ BitVec.getElem_ofBoolListLE ];
+      simp_all [ BitVec.getElem_ofBoolListLE ];
       intro appli x x_in_del
       rw [state'_of_varset'_getElem]
       simp
@@ -131,10 +131,10 @@ lemma successor_regress {n : ℕ} (a : Action n) (f : State' n) :
       ext x;
       erw [ BitVec.getElem_ofBoolListLE ];
       rw [ List.getElem_map, List.getElem_finRange ];
-      erw [ BitVec.getElem_ofBoolListLE ] ; simp +decide [ List.getElem_finRange ] ;
-      all_goals simp_all +decide [ successor' ];
-      erw [ BitVec.getElem_ofBoolListLE ] ; simp +decide [ List.getElem_finRange ] ;
-      unfold applicable' at ha; simp_all +decide [ satisfies' ] ;
+      erw [ BitVec.getElem_ofBoolListLE ] ; simp [ List.getElem_finRange ] ;
+      all_goals simp_all [ successor' ];
+      erw [ BitVec.getElem_ofBoolListLE ] ; simp [ List.getElem_finRange ] ;
+      unfold applicable' at ha; simp_all [ satisfies' ] ;
       grind
 
 abbrev is_successor_state {n : ℕ} (prob : STRIPS n) (f t : State' n) :=
@@ -460,15 +460,15 @@ lemma cost_snoc {n} {pt : STRIPS n} {a : Action n} {s1 s2 s3 : State n}
     {ha : a ∈ pt.actions} {path : Path pt s1 s2} {succ : Successor a s2 s3} :
     (Path.snoc a s2 ha path succ).cost = path.cost + a.cost := by
       unfold snoc;
-      cases path <;> simp_all +arith +decide [ Path.cost ];
+      cases path <;> simp_all +decide [ Path.cost ];
       rename_i a' s2' ha' succ' π';
-      have h_ind : ∀ {s s' : State n} (a : Action n) (s1 s2 : State n) (ha : a ∈ pt.actions) (succ : Successor a s1 s2) (π : Path pt s s1), (snoc a s1 ha π succ).cost = π.cost + a.cost := by
-        intro s s' a s1 s2 ha succ π
-        induction π;
-        case empty s_1 => exact Eq.symm (Nat.add_zero ((empty s_1).cost.add a.cost))
-        · unfold snoc; simp_all +arith +decide [ Path.cost ]
-      rw [ h_ind a s2 s3 ha succ π', add_comm ]
-      exact s1
+      have h_ind : ∀ {s : State n} (a : Action n) (s1 s2 : State n) (ha : a ∈ pt.actions) (succ : Successor a s1 s2) (π : Path pt s s1), (snoc a s1 ha π succ).cost = π.cost + a.cost := by
+        intro s a s1 s2 ha succ π
+        induction π with
+        | empty s_1 => exact Eq.symm (Nat.add_zero ((empty s_1).cost.add a.cost))
+        | cons => unfold snoc; simp_all +arith [ Path.cost ]
+      rw [ h_ind a s2 s3 ha succ π' ]
+      omega
 end Path
 
 /-! ### Helper lemmas for planner optimality -/
@@ -511,7 +511,7 @@ lemma cost_of_le_action_cost {n : ℕ} (prob : STRIPS n) (f t : State' n) (a : A
     (a_applicable : applicable' a f = true) (a_produces : is_successor' a f t = true) :
     cost_of prob f t is_succ ≤ a.cost := by
   have h_a_in_applicableActs : a ∈ prob.actions'.filter (fun a => applicable' a f ∧ is_successor' a f t) := by
-    grind +ring;
+    grind;
   apply List.min_le_of_mem;
   exact List.mem_map.mpr ⟨ a, h_a_in_applicableActs, rfl ⟩
 
@@ -700,7 +700,7 @@ private lemma edge_cost_le_max_action_cost {n : ℕ} (prob : STRIPS n)
       obtain ⟨a, ha_mem, ha_cost⟩ := h_cost_of_le_max
       have h_max_ge_a : a.cost ≤ max_action_cost prob := by
         unfold max_action_cost;
-        split_ifs <;> simp_all +decide;
+        split_ifs <;> simp_all;
         exact List.le_max_of_mem ( List.mem_map.mpr ⟨ a, ha_mem, rfl ⟩ ) |> le_trans ha_cost.ge
       exact le_trans ha_cost.ge h_max_ge_a
 
@@ -713,7 +713,7 @@ private lemma walk_cost_le_length_mul_bound {V : Type} [FinEnum V] {G : NatGraph
     (h_edge : ∀ (a b : V) (adj : G.Adj a b), NatGraph.edgeCost adj ≤ bound) :
     w.cost ≤ w.length * bound := by
       induction w;
-      · simp +decide [ WeightedDiGraph.Walk.length ];
+      · simp [ WeightedDiGraph.Walk.length ];
       · rw [ WeightedDiGraph.Walk.length, WeightedDiGraph.Walk.cost ];
         grind
 
@@ -783,7 +783,7 @@ lemma predecessor_satisfies_regressed_goal {n : ℕ} (a : Action n)
     (hgoal : convertVarSet g ⊆ goal) :
     convertVarSet (varset'_of_state' (regress' a (state'_of_varset' g))) ⊆ s_prev := by
       unfold Successor at hsucc; unfold convertVarSet;
-      intro x hx; simp_all +decide [ Set.subset_def ] ;
+      intro x hx; simp_all [ Set.subset_def ] ;
       unfold varset'_of_state' at hx; unfold regress' at hx; simp_all [ List.finRange ] ;
       rw [ BitVec.getElem_ofBoolListLE ] at hx ; simp_all [ List.getElem_ofFn ] ;
       cases hx <;> simp_all [ convertVarSet ];

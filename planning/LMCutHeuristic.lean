@@ -70,9 +70,9 @@ lemma ignf_embedded_action {n : ℕ} (P : STRIPS n) {a : Action n} (ha : a ∈ P
       e.pre = ignf_embF n '' a.pre ∪ {ignf_iFin n} ∧
       e.add = ignf_embF n '' a.add ∧
       e.del = ignf_embF n '' a.del := by
-  simp +decide [ STRIPS.actions, i_g_normal_form ]
-  refine' Or.inr ( Or.inr ⟨ a, ha, rfl, _, _, _ ⟩ ) <;> simp +decide [ ignf_embF, ignf_iFin ]
-  · simp +decide [ Action.pre, convertVarSet ]
+  simp [ STRIPS.actions, i_g_normal_form ]
+  refine' Or.inr ( Or.inr ⟨ a, ha, rfl, _, _, _ ⟩ ) <;> simp [ ignf_embF, ignf_iFin ]
+  · simp [ Action.pre, convertVarSet ]
     rfl
   · ext; simp [Action.add, convertVarSet]
   · ext; simp [Action.del, convertVarSet]
@@ -87,14 +87,14 @@ lemma ignf_init_action {n : ℕ} (P : STRIPS n) :
       aI.add = ignf_embF n '' (convertState P.init') ∧
       aI.del = ∅ ∧
       aI.cost = 0 := by
-  simp +decide [ STRIPS.actions, i_g_normal_form ]
-  refine Or.inl ⟨ ?_, ?_, ?_ ⟩ <;> simp +decide [ Action.pre, Action.add, Action.del ]
+  simp [ STRIPS.actions, i_g_normal_form ]
+  refine Or.inl ⟨ ?_, ?_, ?_ ⟩ <;> simp [ Action.pre, Action.add, Action.del ]
   · unfold convertVarSet
     simp_all only [toFinset_cons, toFinset_nil, insert_empty_eq, Finset.coe_singleton, Set.singleton_eq_singleton_iff]
     rfl
   · ext; simp [convertVarSet, convertState, ignf_embF]
-    simp +decide [ varset'_of_state', Fin.castLE ]
-  · simp +decide [ convertVarSet ]
+    simp [ varset'_of_state', Fin.castLE ]
+  · simp [ convertVarSet ]
 
 /-
 The `goal` action of the normal form: its precondition is the embedded goal of `P`, its only add
@@ -106,8 +106,8 @@ lemma ignf_goal_action {n : ℕ} (P : STRIPS n) :
       aG.add = {ignf_gFin n} ∧
       aG.del = ∅ ∧
       aG.cost = 0 := by
-  unfold i_g_normal_form; simp +decide [ STRIPS.actions, convertVarSet ] 
-  refine Or.inr <| Or.inl ⟨ ?_, ?_, ?_ ⟩ <;> simp +decide [ Action.pre, Action.add, Action.del ]
+  unfold i_g_normal_form; simp [ STRIPS.actions, convertVarSet ]
+  refine Or.inr <| Or.inl ⟨ ?_, ?_, ?_ ⟩ <;> simp [ Action.pre, Action.add, Action.del ]
   · ext; simp [convertVarSet, ignf_embF]
   · unfold convertVarSet
     simp_all only [toFinset_cons, toFinset_nil, insert_empty_eq, Finset.coe_singleton, Set.singleton_eq_singleton_iff]
@@ -125,8 +125,8 @@ only touch the embedded original variables.)
 lemma ignf_lift_successor {n : ℕ} (a : Action n) (S : State n) :
     ignf_lift_state ((S \ a.del) ∪ a.add)
       = (ignf_lift_state S \ (ignf_embF n '' a.del)) ∪ (ignf_embF n '' a.add) := by
-  simp +decide [ Set.ext_iff, ignf_lift_state ]
-  intro x; by_cases hx : x = ignf_iFin n <;> simp_all +decide [ ignf_embF ] 
+  simp [ Set.ext_iff, ignf_lift_state ]
+  intro x; by_cases hx : x = ignf_iFin n <;> simp_all [ ignf_embF ]
   · exact Or.inl fun x hx => ne_of_lt <| Fin.castSucc_lt_last _
   · grind
 
@@ -188,8 +188,8 @@ lemma ignf_goal_step {n : ℕ} (P : STRIPS n) {S : State n} (hg : P.GoalState S)
   obtain ⟨aG, haG_mem, haG_pre, haG_add, haG_del, haG_cost⟩ := ignf_goal_action P
   refine ⟨(ignf_lift_state S \ aG.del) ∪ aG.add, ?_, ?_⟩
   · -- the result is a goal state of the normal form
-    simp +decide [ STRIPS.GoalState, i_g_normal_form, haG_add, haG_del ]
-    unfold convertVarSet; simp +decide [ ignf_gFin ] 
+    simp [ STRIPS.GoalState, i_g_normal_form, haG_add, haG_del ]
+    unfold convertVarSet; simp [ ignf_gFin ]
   · refine ⟨Path.cons aG _ haG_mem ⟨?_, rfl⟩ (Path.empty _), by simp [Path.cost, haG_cost]⟩
     -- applicability of the goal action
     show aG.pre ⊆ ignf_lift_state S

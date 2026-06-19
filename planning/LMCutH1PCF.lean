@@ -102,7 +102,7 @@ lemma h1_goal_value_init_zero {m : ℕ} (p : STRIPS m) (u_i : unitary_init p) :
   convert h_1_goal_aware p ( singletonVarSet ( get_unitary_init p u_i ) ) p.init' _
   convert get_unitary_init_is_init p u_i
   unfold satisfies' singletonVarSet
-  simp +decide [ STRIPS.init, convertState ]
+  simp [ STRIPS.init, convertState ]
   constructor <;> intro h
   · convert get_unitary_init_is_init p u_i
   · exact h.symm.subset rfl
@@ -116,9 +116,9 @@ lemma mem_pre_of_mem_regress_add {m : ℕ} (a : Action m) (t : Fin m) (ht : t �
     (hg' : g' ∈ (varset'_of_state' (regress' a (state'_of_varset' (singletonVarSet t)))).val) :
     g' ∈ a.pre'.val := by
   unfold varset'_of_state' at hg'
-  unfold regress' at hg'; simp +decide [ singletonVarSet ] at hg'
+  unfold regress' at hg'; simp [ singletonVarSet ] at hg'
   contrapose! hg'
-  rw [ BitVec.getElem_ofBoolListLE ] ; simp +decide [ hg', ht ]
+  rw [ BitVec.getElem_ofBoolListLE ] ; simp [ hg' ]
   grind +suggestions
 
 /-
@@ -134,9 +134,9 @@ lemma h1_goal_value_bellman_argmax {m : ℕ} (p : STRIPS m) (a : Action m) (ha :
     exact fun g' hg' => h1_argmax_pre_max p a hne <| mem_pre_of_mem_regress_add a t ht hg'
   have h_regressed_le_max : h_1 (replace_goal p (varset'_of_state' (regress' a (state'_of_varset' (singletonVarSet t)))) ) p.init' ≤ h1_goal_value p (h1_argmax_pre p a hne) := by
     cases' e : ( varset'_of_state' ( regress' a ( state'_of_varset' ( singletonVarSet t ) ) ) ).val with g' rg'
-    · unfold h_1; simp +decide [ e ] 
-      unfold replace_goal; simp +decide [ e ] 
-      unfold satisfies'; simp +decide [ e ] 
+    · unfold h_1; simp
+      unfold replace_goal; simp [ e ]
+      unfold satisfies'; simp [ e ]
     · by_cases hlen : rg'.length > 0
       · have := h_1_multi_atom p ( varset'_of_state' ( regress' a ( state'_of_varset' ( singletonVarSet t ) ) ) ) p.init' ( by
           grind )
@@ -144,7 +144,7 @@ lemma h1_goal_value_bellman_argmax {m : ℕ} (p : STRIPS m) (a : Action m) (ha :
         rw [ List.max_le_iff ]
         simp +zetaDelta at *
         exact fun x hx => h_regressed_le_max x hx
-      · cases rg' <;> simp_all +decide
+      · cases rg' <;> simp_all
         convert h_regressed_le_max using 1
         congr
         exact Subtype.ext e
@@ -185,7 +185,7 @@ lemma h1_goal_value_zero_of_zero_walk {n : ℕ} (p : STRIPS (n + 2)) (hp : has_p
     have h_a_zero : h1_goal_value p a = 0 := by
       have := jgraph_zero_cost_edge_witness p hp ih h_edge_cost_zero
       obtain ⟨ a, ha₁, ha₂, ha₃ ⟩ := this
-      have := h1_goal_value_bellman_argmax p a.val a.property ( hp a.val a.property ) _ ( List.mem_toFinset.mp ha₂ ) ; simp_all +decide [ h1_pcf ] 
+      have := h1_goal_value_bellman_argmax p a.val a.property ( hp a.val a.property ) _ ( List.mem_toFinset.mp ha₂ ) ; simp_all [ h1_pcf ]
     unfold WeightedDiGraph.Walk.cost at hcost
     simp_all only [forall_const, Nat.add_eq_zero_iff]
 
@@ -203,7 +203,7 @@ lemma h1_goal_value_edge_bound {n : ℕ} (p : STRIPS (n + 2)) (hp : has_precondi
   obtain ⟨a, ha₁, ha₂, ha₃⟩ : ∃ a : {a : Action (n + 2) // a ∈ p.actions'}, (↑(h1_pcf p hp a) : Fin (n + 2)) = f ∧ t ∈ a.val.add'.val.toFinset ∧ a.val.cost = (justification_graph p (h1_pcf p hp)).Payload f t adj := by
     unfold justification_graph at *
     grind +suggestions
-  have := h1_goal_value_bellman_argmax p a.val a.property ( hp a.val a.property ) t ( by simpa using ha₂ ) ; simp_all +decide [ h1_pcf ] 
+  have := h1_goal_value_bellman_argmax p a.val a.property ( hp a.val a.property ) t ( by simpa using ha₂ ) ; simp_all [ h1_pcf ]
 
 /-
 **Generalized propagation along a walk.** Along a justification-graph walk from `v` to `w`, the
@@ -239,10 +239,10 @@ lemma h1_goal_value_eq_fixpoint {n : ℕ} (p : STRIPS (n + 2)) (w : Fin (n + 2))
     (h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'))[w] = some (h1_goal_value p w) := by
   unfold h1_goal_value
   unfold h_1
-  simp +decide [ h_1_iter_fix_replace_goal, vec_to_state_getElem, satisfies'_singleton ]
-  split_ifs <;> simp_all +decide [ replace_goal, singletonVarSet ]
-  · simp +decide [ List.max ]
-  · unfold satisfies' at *; simp_all +decide [ vec_to_state_getElem ] 
+  simp [ h_1_iter_fix_replace_goal ]
+  split_ifs <;> simp_all [ replace_goal, singletonVarSet ]
+  · simp [ List.max ]
+  · unfold satisfies' at *; simp_all [ vec_to_state_getElem ]
 
 /-- On `WithTop ℕ`, `getD 0` is monotone when the larger value is finite. -/
 theorem withTop_getD_le_getD {a b : WithTop ℕ} (hab : a ≤ b) (hb : b.isSome) :
@@ -340,16 +340,16 @@ lemma h1_goal_value_walk_lb {n : ℕ} (p : STRIPS (n + 2)) (hp : has_preconditio
         subst N
         simp_all only [Fin.getElem_fin, h_1_iter_zero, not_lt_zero, not_isEmpty_of_nonempty, IsEmpty.forall_iff,
           implies_true, Rfix, base, I]
-      unfold base at hw_eq_I; simp_all +decide [ h_1_base ] 
+      unfold base at hw_eq_I; simp_all [ h_1_base ]
       grind
     have hw_eq_I : w = I := by
       convert get_unitary_init_is_init p u_i
       constructor <;> intro h
       · convert get_unitary_init_is_init p u_i
       · convert get_unitary_init_is_init p u_i
-        constructor <;> intro h <;> simp_all +decide [ Finset.ext_iff, Set.ext_iff ]
+        constructor <;> intro h <;> simp_all [ Set.ext_iff ]
         exact h w |>.1 ( by simpa [ Fin.ext_iff ] using hw_eq_I )
-    exact hw_eq_I.symm ▸ ⟨ WeightedDiGraph.Walk.nil, by simp +decide [ h1_goal_value_init_zero ] ⟩
+    exact hw_eq_I.symm ▸ ⟨ WeightedDiGraph.Walk.nil, by simp ⟩
   · obtain ⟨a, ha₁, ha₂, ha₃, ha₄⟩ := h_1_rank_attained p base w hw (Nat.pos_of_ne_zero hw0)
     have hvf : (h_1_iter p base (h_1_rank p base w - 1))[h1_argmax_pre p a (hp a ha₁)] = Rfix[h1_argmax_pre p a (hp a ha₁)] := by
       apply withTop_eq_of_getD_eq
@@ -482,7 +482,7 @@ lemma h1_optimal_walk_single_crossing {n : ℕ} (p : STRIPS (n + 2)) (hp : has_p
   refine' ⟨ u, v, adj, P, hu, hv, mem_edges_entering_goal_zone _ _ _ _ adj, _ ⟩
   · assumption
   · exact hv
-  · have := h1_goal_value_le_of_walk p hp ( P.concat adj |> WeightedDiGraph.Walk.append <| T ) ; simp_all +decide [ NatGraph.edgeCost ] 
+  · have := h1_goal_value_le_of_walk p hp ( P.concat adj |> WeightedDiGraph.Walk.append <| T ) ; simp_all [ NatGraph.edgeCost ]
     linarith [ h1_goal_value_init_zero p u_i ]
 
 /-! ### The Helmert–Domshlak reduction (`h^max → additive landmarks`), in full
@@ -617,18 +617,18 @@ lemma h1_lm'_argmax_pre_not_mem_goal_zone {n : ℕ} (p : STRIPS (n + 2)) (u_g : 
     (hne : a.pre'.val ≠ []) :
     h1_argmax_pre p a hne ∉
       goal_zone (justification_graph p (h1_pcf p hp)) (get_unitary_goal p u_g) := by
-  unfold get_all_equiv_delete_relaxed_actions at ha; simp_all +decide [ delete_relax_action ] 
-  obtain ⟨ b, hb₁, hb₂, hb₃, hb₄, hb₅ ⟩ := ha.2; simp_all +decide [ h1_pcf ] 
+  unfold get_all_equiv_delete_relaxed_actions at ha; simp_all [ delete_relax_action ]
+  obtain ⟨ b, hb₁, hb₂, hb₃, hb₄, hb₅ ⟩ := ha.2; simp_all
   -- From `hb₁` (membership in `landmark_induced_by_cut`), `b` is a genuine action in `p.actions'`.
   have hb_act : b ∈ p.actions' := by
-    unfold lmcut_step at hb₁; simp_all +decide [ landmark_induced_by_cut ] 
+    unfold lmcut_step at hb₁; simp_all [ landmark_induced_by_cut ]
     grind +splitIndPred
   -- From `hb₁` (membership in `landmark_induced_by_cut`), there exist a cut edge `(f,t) ∈ edges_entering_goal_zone jg g` and a proof `hl'` with `f = (↑(h1_pcf p hp ⟨b,hl'⟩) : Fin (n+2))` and `t ∈ b.add'.val.toFinset`.
   obtain ⟨ f, t, hf, ht, hft ⟩ : ∃ f t, (f, t) ∈ edges_entering_goal_zone (justification_graph p (h1_pcf p hp)) (get_unitary_goal p u_g) ∧ b.pre'.val ≠ [] ∧ f = h1_argmax_pre p b (hp b hb_act) ∧ t ∈ b.add'.val.toFinset := by
-    unfold lmcut_step at hb₁; simp_all +decide [ landmark_induced_by_cut ] 
-    unfold h1_pcf at hb₁; simp_all +decide [ h1_argmax_pre ] 
+    unfold lmcut_step at hb₁; simp_all [ landmark_induced_by_cut ]
+    unfold h1_pcf at hb₁; simp_all [ h1_argmax_pre ]
     exact hb₁
-  unfold edges_entering_goal_zone at hf; simp_all +decide [ List.mem_flatMap, List.mem_filterMap ] 
+  unfold edges_entering_goal_zone at hf; simp_all [ List.mem_flatMap, List.mem_filterMap ]
   convert hf.2.1 using 1
   rw [ h1_argmax_pre_congr p a b hne ( hp b hb_act ) ( by simpa [ Subtype.ext_iff ] using hb₃ ) ]
 
@@ -651,8 +651,8 @@ lemma h1_goal_value_of_not_isSome {n : ℕ} (p : STRIPS (n + 2)) (f : Fin (n + 2
   -- By definition of `h1_goal_value`, we know that `h1_goal_value p f` is the value of `h_1` at `f` after replacing the goal with `singletonVarSet f`.
   unfold h1_goal_value
   unfold h_1
-  simp +decide [ h_1_iter_fix_replace_goal, vec_to_state_getElem, satisfies'_singleton ]
-  unfold replace_goal; simp +decide [ singletonVarSet ] 
+  simp [ h_1_iter_fix_replace_goal ]
+  unfold replace_goal; simp [ singletonVarSet ]
   grind
 
 /-
@@ -674,9 +674,9 @@ lemma h1_init_isSome {n : ℕ} (p : STRIPS (n + 2)) (u_i : unitary_init p) :
   convert h_1_iter_fix_isSome_of_iter p _ _ _ _ using 1
   exact 0
   convert Option.isSome_iff_ne_none.mpr _
-  unfold h_1_iter h_1_base; simp +decide [ h_1_iter_zero ] 
+  unfold h_1_iter h_1_base; simp
   convert get_unitary_init_is_init p u_i
-  constructor <;> intro h <;> simp_all +decide [ Finset.ext_iff, Set.ext_iff ]
+  constructor <;> intro h <;> simp_all [ Set.ext_iff ]
   · grind +suggestions
   · convert h ( get_unitary_init p u_i ) |>.2 rfl using 1
 
@@ -701,8 +701,8 @@ lemma h1_edge_preserves_isSome {n : ℕ} (p : STRIPS (n + 2)) (hp : has_precondi
       rw [ha.1]; rfl
     linarith [hq_goal_value, hf_goal_value]
   have h_applicable : applicable' a.val (vec_to_state (n + 2) (h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'))) = true := by
-    unfold applicable' satisfies'; simp_all +decide [ vec_to_state_getElem ] 
-  have := h_1_step_applicable_effects p ( h_1_iter_fix ( n + 2 ) p ( h_1_base ( n + 2 ) p.init' ) ) a.val a.property h_applicable t ( by simpa using ha.2 ) ; simp_all +decide [ h_1_iter_fix_is_fixpoint ] 
+    unfold applicable' satisfies'; simp_all [ vec_to_state_getElem ]
+  have := h_1_step_applicable_effects p ( h_1_iter_fix ( n + 2 ) p ( h_1_base ( n + 2 ) p.init' ) ) a.val a.property h_applicable t ( by simpa using ha.2 ) ; simp_all [ h_1_iter_fix_is_fixpoint ]
 
 /-
 **A maximiser justification-graph walk out of a discovered fact ends in a discovered fact.**
@@ -770,7 +770,7 @@ lemma graphDist_jg_postfixpoint {n : ℕ} (prob : STRIPS (n + 2))
           (Vector.ofFn (fun f => graphDist (justification_graph prob pcf) src f)))[i] := by
   convert h_1_step_ge_of_action_bound prob ( Vector.ofFn fun f => graphDist ( justification_graph prob pcf ) src f ) i _ using 1
   · grind
-  · intro a ha hi ha'; use ( pcf ⟨ a, ha ⟩ : Fin ( n + 2 ) ) ; simp_all +decide [ vec_to_state_getElem ] 
+  · intro a ha hi ha'; use ( pcf ⟨ a, ha ⟩ : Fin ( n + 2 ) ) ; simp_all
     refine' ⟨ _, _ ⟩
     · convert ( pcf ⟨ a, ha ⟩ ).property using 1
       ext; simp [Action.pre, convertVarSet]
@@ -808,7 +808,7 @@ lemma h1_partition_witness_below_base {n : ℕ} (p : STRIPS (n + 2)) (u_i : unit
       ≤ (h_1_base (n + 2)
           (partition_STRIPS p (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩).init')[i] := by
   by_cases hi : (partition_STRIPS p (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩).init'[i] = true
-  · simp +decide [ h_1_base, Vector.getElem_ofFn ]
+  · simp [ h_1_base, Vector.getElem_ofFn ]
     have h_eq : i = get_unitary_init p u_i := by
       have h_eq : i ∈ p.init := by
         convert hi using 1
@@ -816,7 +816,7 @@ lemma h1_partition_witness_below_base {n : ℕ} (p : STRIPS (n + 2)) (u_i : unit
     rw [ h_eq, graphDist_self ]
     subst h_eq
     simp_all only [Fin.mk_one, Fin.isValue, Fin.getElem_fin, ↓reduceIte, zero_le]
-  · unfold h_1_base; simp_all +decide [ Vector.getElem_ofFn ] 
+  · unfold h_1_base; simp_all [ Vector.getElem_ofFn ]
     exact le_top
 
 /-! ### Helper lemmas for the single-crossing lower bound -/
@@ -829,11 +829,11 @@ lemma iInf_withTop_add {ι : Type*} (f : ι → WithTop ℕ) (c : ℕ) :
   refine' le_antisymm _ _
   · exact le_iInf fun i => add_le_add ( iInf_le f i ) le_rfl
   · by_cases h : ∃ i, f i = ⨅ i, f i
-    · obtain ⟨ i, hi ⟩ := h; exact le_trans ( ciInf_le ( show BddBelow ( Set.range ( fun i => f i + c ) ) from ⟨ ⊥, Set.forall_mem_range.2 fun i => bot_le ⟩ ) i ) ( by simp +decide [ hi ] ) 
+    · obtain ⟨ i, hi ⟩ := h; exact le_trans ( ciInf_le ( show BddBelow ( Set.range ( fun i => f i + c ) ) from ⟨ ⊥, Set.forall_mem_range.2 fun i => bot_le ⟩ ) i ) ( by simp [ hi ] )
     · contrapose! h
-      cases h' : ⨅ i, f i <;> simp_all +decide [ WithTop.add_eq_top ]
-      cases isEmpty_or_nonempty ι <;> simp_all +decide [ iInf ]
-      · simp_all +decide [ Set.range_eq_empty ]
+      cases h' : ⨅ i, f i <;> simp_all
+      cases isEmpty_or_nonempty ι <;> simp_all [ iInf ]
+      · simp_all [ Set.range_eq_empty ]
       · exact h'.symm ▸ ( csInf_mem ( Set.range_nonempty f ) )
 
 /-
@@ -853,7 +853,7 @@ The second endpoint of an edge entering the goal zone lies in the goal zone.
 -/
 lemma snd_mem_goal_zone {V : Type} [FinEnum V] (g : NatGraph V) (goal : V) {u v : V}
     (h : (u, v) ∈ edges_entering_goal_zone g goal) : v ∈ goal_zone g goal := by
-  unfold edges_entering_goal_zone at h; simp_all +decide [ List.mem_flatMap, List.mem_filterMap ] 
+  unfold edges_entering_goal_zone at h; simp_all [ List.mem_flatMap, List.mem_filterMap ]
 
 /-- The cost the partition-`1` cost partitioning assigns to action index `i`: the discounted
 `cost - minCost` for cut-closure actions, the original cost otherwise. -/
@@ -863,7 +863,8 @@ lemma lmcut_step_partition_one_apply {n : ℕ} (prob : STRIPS n) (u_g : unitary_
       (if prob.actions'[i] ∈ get_all_equiv_delete_relaxed_actions prob (lmcut_step prob u_g pcf).1
         then prob.actions'[i].cost - (lmcut_step prob u_g pcf).2.1
         else prob.actions'[i].cost) := by
-  rfl
+  unfold lmcut_step
+  dsimp only
 
 /-
 **Action correspondence under partition-`1` cost partitioning.** Every action of the
@@ -906,8 +907,8 @@ lemma h1_lm'_has_goal_zone_add {n : ℕ} (p : STRIPS (n + 2)) (u_g : unitary_goa
     ∃ t : Fin (n + 2), t ∈ b.add'.val.toFinset ∧
       t ∈ goal_zone (justification_graph p (h1_pcf p hp)) (get_unitary_goal p u_g) := by
   unfold get_all_equiv_delete_relaxed_actions at hb
-  unfold lmcut_step at hb; simp_all +decide [ landmark_induced_by_cut ] 
-  unfold delete_relax_action at hb; simp_all +decide [ h1_pcf ] 
+  unfold lmcut_step at hb; simp_all [ landmark_induced_by_cut ]
+  unfold delete_relax_action at hb; simp_all [ h1_pcf ]
   grind +suggestions
 
 /-
@@ -935,7 +936,7 @@ lemma h1_partition_edge_step {n : ℕ} (p : STRIPS (n + 2)) (u_g : unitary_goal 
   obtain ⟨a, ha⟩ : ∃ a : {b : Action (n + 2) // b ∈ (partition_STRIPS p (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩).actions'},
     x = (h1_partition_pcf p hp u_g a).1 ∧ y ∈ a.val.add'.val.toFinset ∧ (justification_graph (partition_STRIPS p (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩) (h1_partition_pcf p hp u_g)).Payload x y adj1 = a.val.cost := by
       convert justification_graph_payload_eq_witness _ _ adj1 using 1
-  simp_all +decide [ h1_partition_pcf ] 
+  simp_all [ h1_partition_pcf ]
   obtain ⟨b, hb⟩ := h1_partition_action_correspondence p u_g hp a.property
   by_cases hb' : b ∈ get_all_equiv_delete_relaxed_actions p (lmcut_step p u_g (h1_pcf p hp)).1
   · obtain ⟨t, ht⟩ := h1_lm'_has_goal_zone_add p u_g hp hb'
@@ -950,14 +951,14 @@ lemma h1_partition_edge_step {n : ℕ} (p : STRIPS (n + 2)) (u_g : unitary_goal 
     obtain ⟨Tg, hTg⟩ : ∃ Tg : (justification_graph p (h1_pcf p hp)).Walk t (get_unitary_goal p u_g), Tg.cost = 0 := by
       exact walk_of_zero_cost_reachable _ ( mem_goal_zone_iff _ _ _ |>.1 ht.2 )
     have h_walk : h1_goal_value p (get_unitary_goal p u_g) ≤ h1_goal_value p t := by
-      have := h1_goal_value_le_of_walk p hp Tg; simp_all +decide [ NatGraph.edgeCost ] 
+      have := h1_goal_value_le_of_walk p hp Tg; simp_all
     have h_walk : h1_goal_value p t ≤ (justification_graph p (h1_pcf p hp)).Payload x t adj_xt + h1_goal_value p x := by
       exact h1_goal_value_edge_bound p hp adj_xt
     grind
   · have h_edge : ∃ adj : (justification_graph p (h1_pcf p hp)).Adj (h1_argmax_pre p b (hp b hb.1)) y, (justification_graph p (h1_pcf p hp)).Payload (h1_argmax_pre p b (hp b hb.1)) y adj ≤ b.cost := by
       exact ⟨ ⟨ ⟨ b, hb.1 ⟩, rfl, by simpa [ hb.2.2.1 ] using ha.2.1 ⟩, justification_graph_payload_le p ( h1_pcf p hp ) _ ⟨ b, hb.1 ⟩ rfl ( by simpa [ hb.2.2.1 ] using ha.2.1 ) ⟩
     obtain ⟨ adj, h_adj ⟩ := h_edge
-    have := h1_goal_value_edge_bound p hp adj; simp_all +decide [ h1_argmax_pre_congr ] 
+    have := h1_goal_value_edge_bound p hp adj; simp_all
     grind +suggestions
 
 /-
@@ -981,8 +982,8 @@ lemma h1_partition_walk_bound {n : ℕ} (p : STRIPS (n + 2)) (u_g : unitary_goal
         intro x y W
         induction' W with x y adj1 rest ih
         (
-        exact Or.inl ( by simp +decide [ WeightedDiGraph.Walk.cost ] ))
-        have := h1_partition_edge_step p u_g hp ih; simp_all +decide [ WeightedDiGraph.Walk.cost, NatGraph.edgeCost ] 
+        exact Or.inl ( by simp [ WeightedDiGraph.Walk.cost ] ))
+        have := h1_partition_edge_step p u_g hp ih; simp_all [ WeightedDiGraph.Walk.cost, NatGraph.edgeCost ]
         grind
   (
   grind)

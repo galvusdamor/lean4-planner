@@ -160,7 +160,7 @@ lemma h_1_step_le (n : ℕ) (prob : STRIPS n) (bef : Vector (WithTop ℕ) n) (i 
 lemma h_1_foldl_le {n : ℕ} (prob : STRIPS n) (s : State' n) (l : List (Fin prob.actions'.length))
     (i : Fin n) :
     (l.foldl (fun a _ => h_1_step n prob a) (h_1_base n s))[i] ≤ (h_1_base n s)[i] := by
-      induction l using List.reverseRecOn <;> simp_all +decide [ List.foldl ];
+      induction l using List.reverseRecOn <;> simp_all [ List.foldl ];
       exact le_trans ( h_1_step_le _ _ _ _ ) ‹_›
 
 /-- The base values are admissible: if initially some c, then c = 0 ≤ path.cost.
@@ -187,7 +187,7 @@ lemma h_1_step_discovers {n : ℕ} (prob : STRIPS n) (bef : Vector (WithTop ℕ)
       have h_applicable : applicable' a (vec_to_state n bef) = true := by
         unfold applicable';
         unfold satisfies';
-        simp_all +decide [ vec_to_state_getElem ];
+        simp_all [ vec_to_state_getElem ];
       grind
 
 /-- After applying h_1_step, all previously discovered facts remain discovered. -/
@@ -207,7 +207,7 @@ lemma h_1_step_preserves_isSome {n : ℕ} (prob : STRIPS n) (bef : Vector (WithT
 lemma h_1_foldl_preserves_isSome {n : ℕ} (prob : STRIPS n) (base : Vector (WithTop ℕ) n)
     (l : List α) (i : Fin n) (h : (base[i]).isSome = true) :
     ((l.foldl (fun a _ => h_1_step n prob a) base)[i]).isSome = true := by
-      induction l generalizing base <;> simp_all +decide;
+      induction l generalizing base <;> simp_all;
       rename_i _ _ ih
       exact ih _ ( h_1_step_preserves_isSome prob base i h )
 
@@ -236,13 +236,13 @@ lemma walk_at_fixpoint_goal_isSome {n : ℕ} (prob : STRIPS n) (bef : Vector (Wi
       · rename_i h₁ h₂ h₃;
         apply h₃ bef hfix;
         · have := is_successor_state_of_trans_STRIPS_adj prob t w h₁;
-          unfold is_successor_state at this; simp_all +decide [ List.any_eq_true ] ;
-          obtain ⟨ a, ha₁, ha₂, ha₃ ⟩ := this; unfold is_successor' at ha₃; simp_all +decide [ List.all_eq_true ] ;
-          intro i hi; specialize ha₃ i; split_ifs at ha₃ <;> simp_all +decide ;
+          unfold is_successor_state at this; simp_all [ List.any_eq_true ] ;
+          obtain ⟨ a, ha₁, ha₂, ha₃ ⟩ := this; unfold is_successor' at ha₃; simp_all [ List.all_eq_true ] ;
+          intro i hi; specialize ha₃ i; split_ifs at ha₃ <;> simp_all ;
           exact hfix a ha₁ ( by
             have h_applicable : ∀ i ∈ a.pre'.val, (vec_to_state n bef)[i] = true := by
-              intro i hi; specialize hs i; simp_all +decide [ vec_to_state_getElem ] ;
-              unfold applicable' at ha₂; simp_all +decide [ satisfies' ] ;
+              intro i hi; specialize hs i; simp_all [ vec_to_state_getElem ] ;
+              unfold applicable' at ha₂; simp_all [ satisfies' ] ;
             unfold applicable' satisfies'
             simp_all only [Fin.getElem_fin, List.all_eq_true, implies_true] ) i ‹_›
         · exact hj
@@ -265,8 +265,8 @@ lemma h_1_step_isSome_determined {n : ℕ} (prob : STRIPS n) (bef1 bef2 : Vector
     (i : Fin n) :
     ((h_1_step n prob bef1)[i]).isSome = ((h_1_step n prob bef2)[i]).isSome := by
       have h_isSome_eq : ((h_1_step n prob bef1)[i]).isSome = true ↔ ((h_1_step n prob bef2)[i]).isSome = true := by
-        by_cases h : ∃ a : Action n, a ∈ prob.actions' ∧ i ∈ a.add'.val ∧ applicable' a (vec_to_state n bef1) = true <;> simp_all +decide
-        · obtain ⟨ a, ha, hi, ha' ⟩ := h; have := h_1_step_applicable_effects prob bef1 a; have := h_1_step_applicable_effects prob bef2 a; simp_all +decide
+        by_cases h : ∃ a : Action n, a ∈ prob.actions' ∧ i ∈ a.add'.val ∧ applicable' a (vec_to_state n bef1) = true <;> simp_all
+        · obtain ⟨ a, ha, hi, ha' ⟩ := h; have := h_1_step_applicable_effects prob bef1 a; have := h_1_step_applicable_effects prob bef2 a; simp_all
         · unfold h_1_step;
           rw [ Vector.getElem_map, Vector.getElem_map ];
           simp +zetaDelta at *;
@@ -314,7 +314,7 @@ lemma applicable_filter_grows {n : ℕ} (prob : STRIPS n)
           exact hprev;
         unfold applicable' at *; simp_all
         unfold satisfies' at *; simp_all
-        intro i hi; specialize h_filter_superset i hi; simp_all +decide [ vec_to_state_getElem ] ;
+        intro i hi; specialize h_filter_superset i hi; simp_all [ vec_to_state_getElem ] ;
       -- Since there's at least one action applicable in bef but not in bef_prev, the filtered list for bef must have at least one more element than the filtered list for bef_prev.
       have h_filter_length : ∃ a ∈ prob.actions', applicable' a (vec_to_state n bef) ∧ ¬applicable' a (vec_to_state n bef_prev) := by
         contrapose! hchanged;
@@ -338,9 +338,9 @@ lemma applicable_filter_grows {n : ℕ} (prob : STRIPS n)
         · convert vec_to_state_getElem n bef ⟨ i, by assumption ⟩ using 1;
       have h_filter_length : List.Perm (List.filter (fun a => applicable' a (vec_to_state n bef)) prob.actions') (List.filter (fun a => applicable' a (vec_to_state n bef_prev)) prob.actions' ++ List.filter (fun a => applicable' a (vec_to_state n bef) ∧ ¬applicable' a (vec_to_state n bef_prev)) prob.actions') := by
         rw [ List.perm_iff_count ];
-        intro a; by_cases ha : a ∈ prob.actions' <;> simp_all +decide [ List.count_eq_zero_of_not_mem ] ;
+        intro a; by_cases ha : a ∈ prob.actions' <;> simp_all [ List.count_eq_zero_of_not_mem ] ;
         grind +suggestions;
-      have := h_filter_length.length_eq; simp_all +decide ;
+      have := h_filter_length.length_eq; simp_all ;
 
 --/-- Iteration function for h_1_step. -/
 --def h_1_iter {n : ℕ} (prob : STRIPS n) (base : Vector (WithTop ℕ) n) : ℕ → Vector (WithTop ℕ) n
@@ -380,10 +380,10 @@ lemma fixpoint_implies_stable {n : ℕ} (prob : STRIPS n) (bef : Vector (WithTop
       ∀ i ∈ a.add'.val, (bef[i]).isSome = true) :
     vec_to_state n (h_1_step n prob bef) = vec_to_state n bef := by
       have h_vec_to_state_eq : ∀ i : Fin n, (vec_to_state n (h_1_step n prob bef))[i.val] = (vec_to_state n bef)[i.val] := by
-        intro i; by_cases hi : ( bef[i] ).isSome = true <;> simp_all +decide [ vec_to_state_getElem ] ;
+        intro i; by_cases hi : ( bef[i] ).isSome = true <;> simp_all [ vec_to_state_getElem ] ;
         · exact h_1_step_preserves_isSome prob bef i hi;
         · unfold h_1_step;
-          simp +decide [ hi, updateIfCheaper ];
+          simp [ hi, updateIfCheaper ];
           grind;
       ext i;
       exact h_vec_to_state_eq ⟨ i, by assumption ⟩

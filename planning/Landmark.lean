@@ -1,7 +1,7 @@
 import planning.DeleteRelaxation
 import planning.Planner
-
-import Mathlib
+import Mathlib.Tactic.Cases
+import Mathlib.Tactic.NormNum
 
 namespace Validator
 
@@ -68,10 +68,10 @@ private lemma path_remove_to_path_orig {n : ℕ} (prob : STRIPS n) (lm : List (A
   · rename_i h₁ h₂ h₃
     obtain ⟨p'', hp'', hp'''⟩ := h₃
     use Path.cons s1 ha (show s1 ∈ prob.actions from by
-      simp_all +decide [set_init, remove_actions]
-      simp_all +decide [STRIPS.actions]) h₁ p''
-    simp_all +decide [Path.actionsUsed, Path.cost]
-    unfold set_init at hp'; simp_all +decide [remove_actions]
+      simp_all [set_init, remove_actions]
+      simp_all [STRIPS.actions]) h₁ p''
+    simp_all [Path.actionsUsed, Path.cost]
+    unfold set_init at hp'; simp_all [remove_actions]
     unfold STRIPS.actions at hp'
     simp_all only [List.toFinset_filter, Bool.not_eq_eq_eq_not, Bool.not_true,
       decide_eq_false_iff_not, Finset.coe_filter, List.mem_toFinset, Set.mem_setOf_eq, not_false_eq_true]
@@ -88,15 +88,15 @@ private lemma path_orig_to_path_remove {n : ℕ} (prob : STRIPS n) (lm : List (A
     (s : State' n) {s1 s2 : State n}
     (p : Path prob s1 s2) (h : ∀ a, a ∈ p.actionsUsed → a ∉ lm) :
     ∃ p' : Path (set_init (remove_actions prob lm) s) s1 s2, p'.cost = p.cost := by
-  induction p <;> simp_all +decide [Path.cost]
+  induction p <;> simp_all [Path.cost]
   · exact ⟨Path.empty _, rfl⟩
   · rename_i a s1 s2 ha succ π ih
     obtain ⟨p', hp'⟩ := ih (fun a ha => h a <| List.mem_cons_of_mem _ ha)
     refine' ⟨Path.cons _ _ _ _ p', _⟩
     exact ‹Action n›
-    all_goals simp_all +decide [set_init, remove_actions]
+    all_goals simp_all [set_init, remove_actions]
     all_goals norm_num [Path.actionsUsed, Path.cost] at *
-    · simp_all +decide [STRIPS.actions]
+    · simp_all [STRIPS.actions]
     · exact And.imp_right (fun a_2 => rfl) succ
     · exact hp'
 
@@ -129,7 +129,7 @@ lemma disjunctive_action_landmarks_iff_unsolvability {n : ℕ} (prob : STRIPS n)
   · refine ⟨h.1, ?_⟩
     intro plan
     contrapose! h
-    simp +decide [action_set_removal_implies_unsolvable_for_state]
+    simp [action_set_removal_implies_unsolvable_for_state]
     exact fun _ => plan_orig_to_plan_remove prob lm s plan fun a ha => by
       apply Aesop.BuiltinRules.not_intro
       intro a_1
@@ -174,7 +174,7 @@ lemma delete_relaxed_disjunctive_action_landmarks_iff_unsolvability_of_delete_re
       action_set_removal_implies_unsolvable_for_state (delete_relaxation prob)
       (lm.map (fun a => delete_relax_action a)) s := by
         convert disjunctive_action_landmarks_of_delete_relax_iff_unsolvability_of_delete_relax prob ( List.map ( fun a => delete_relax_action a ) lm ) s using 1
-        simp +decide [ is_delete_relaxed_disjunctive_action_landmark_for_state, is_disjunctive_action_landmark_for_state, List.all_map ]
+        simp [ is_delete_relaxed_disjunctive_action_landmark_for_state, is_disjunctive_action_landmark_for_state, List.all_map ]
 
 /-- Relaxing a path: every path of the original task, started from a (pointwise) larger state,
 can be replayed in the delete relaxation using the delete-relaxed versions of the same actions,
@@ -191,17 +191,17 @@ lemma relax_path {n : ℕ} (prob : STRIPS n) {s1 s2 : State n} (p : Path prob s1
   · rename_i h₁ h₂
     intro t1 ht1
     obtain ⟨t1', ht1', ht1'_succ⟩ : ∃ t1', Successor (delete_relax_action s1) t1 t1' ∧ s1.add ⊆ t1' ∧ t1 ⊆ t1' := by
-      refine' ⟨ t1 ∪ s1.add, _, _, _ ⟩ <;> simp_all +decide [ Successor, Applicable ]
-      simp_all +decide [ delete_relax_action ]
-      simp_all +decide [ Action.pre, Action.add, Action.del, Set.subset_def ]
-      simp +decide [ convertVarSet ]
+      refine' ⟨ t1 ∪ s1.add, _, _, _ ⟩ <;> simp_all [ Successor, Applicable ]
+      simp_all [ delete_relax_action ]
+      simp_all [ Action.pre, Action.add, Action.del, Set.subset_def ]
+      simp [ convertVarSet ]
     obtain ⟨t2, ht2, q, hq⟩ := h₂ (by
     grind : ha ⊆ t1')
     use t2, ht2, Path.cons (delete_relax_action s1) t1' (by
-    simp_all +decide [ STRIPS.actions, delete_relaxation ]
+    simp_all [ STRIPS.actions, delete_relaxation ]
     exact ⟨ s1, π, rfl ⟩) (by
     exact ht1') q
-    simp +decide [ Path.actionsUsed, hq ]
+    simp [ Path.actionsUsed, hq ]
 
 /-- Every original plan uses an action whose delete relaxation is one of the landmark's relaxed
 actions.
@@ -247,7 +247,6 @@ lemma delete_relaxation_landmarks_have_landmark_property {n : ℕ} (prob : STRIP
 def get_all_equiv_delete_relaxed_actions {n : ℕ} (prob : STRIPS n) (lm : List (Action n)) : List (Action n) :=
   prob.actions'.filter (fun a => lm.any (fun l => delete_relax_action a = delete_relax_action l))
 
-
 /-
 stronger statement: if the actions a ∈ lm are actually part of the original problem, then if lm is part of every delete relaxed plan, then it must be part of any plan. The reasoning is that the set of all delete-relaxed plans is a "superset" (not in the strict sende due to missing deleting effects) of all plans. I.e. for every actual plan there is an equivalent delete relaxed one that contains an action a ∈ lm thus the actual plan must too. The proof here succeeds as all the actions a ∈ lm are part of prob and those are the only actions in plans
 -/
@@ -258,14 +257,14 @@ lemma delete_relaxation_landmarks_are_landmarks {n : ℕ} (prob : STRIPS n) (lm 
       is_disjunctive_action_landmark_for_state prob (get_all_equiv_delete_relaxed_actions prob lm) s := by
         intro h
         refine' ⟨ _, _ ⟩
-        · simp_all +decide [ List.all_eq_true, get_all_equiv_delete_relaxed_actions ]
+        · simp_all [ List.all_eq_true, get_all_equiv_delete_relaxed_actions ]
           exact fun x hx => Or.inr <| by simpa [ STRIPS.actions ] using hx
         · intro plan
           have := delete_relaxation_landmarks_have_landmark_property prob lm s h plan
-          obtain ⟨ a, ha₁, ha₂ ⟩ := this; use a; simp_all +decide [ get_all_equiv_delete_relaxed_actions ] 
+          obtain ⟨ a, ha₁, ha₂ ⟩ := this; use a; simp_all [ get_all_equiv_delete_relaxed_actions ]
           exact ⟨ by
             have h_mem : ∀ {s1 s2 : State n} {p : Path prob s1 s2}, ∀ a ∈ p.actionsUsed, a ∈ prob.actions' := by
-              intros s1 s2 p a ha; induction p <;> simp_all +decide [ Path.actionsUsed ] 
+              intros s1 s2 p a ha; induction p <;> simp_all [ Path.actionsUsed ]
               unfold STRIPS.actions at *
               rename_i succ π π_ih
               simp_all only [List.coe_toFinset, Set.mem_setOf_eq]
@@ -326,7 +325,7 @@ private lemma action_in_path_mem_actions {n : ℕ} {pt : STRIPS n} {s s' : State
     (p : Path pt s s') (a : Action n) (ha : a ∈ p.actionsUsed) : a ∈ pt.actions := by
   induction' p with a' s2 ha' succ p' ih generalizing a
   · cases ha
-  · cases ha 
+  · cases ha
     · simp_all only
     · rename_i succ_1 π π_ih a_1
       obtain ⟨left, right⟩ := succ_1
@@ -341,13 +340,13 @@ private lemma path_cost_ge_action_cost {n : ℕ} {pt : STRIPS n} {s s' : State n
     (p : Path pt s s') (a : Action n) (ha : a ∈ p.actionsUsed) : p.cost ≥ a.cost := by
   induction' p with a' s2 ha' succ p' ih generalizing a
   · cases ha
-  · cases ha <;> simp_all +decide [ Path.cost ]
+  · cases ha <;> simp_all [ Path.cost ]
     exact le_add_right ( by solve_by_elim )
 
 lemma elementary_landmark_heuristic_is_admissible {n : ℕ} (prob : STRIPS n)
     (lm : List (Action n)) :
     heur_admissible prob (elementary_landmark_heuristic prob lm) := by
-  intro s plan; by_cases h : is_disjunctive_action_landmark_for_state prob lm s <;> by_cases h' : lm = [] <;> simp_all +decide 
+  intro s plan; by_cases h : is_disjunctive_action_landmark_for_state prob lm s <;> by_cases h' : lm = [] <;> simp_all
   · have := h.2 plan
     subst h'
     simp_all only [List.not_mem_nil, false_and, exists_false]
@@ -361,6 +360,7 @@ lemma elementary_landmark_heuristic_is_admissible {n : ℕ} (prob : STRIPS n)
     simp_all only [↓reduceIte, zero_le]
   · unfold elementary_landmark_heuristic
     simp_all only [↓reduceIte, zero_le]
+
 /-- Every action appearing in a `Path` is a member of the problem's action set. -/
 lemma mem_actions_of_mem_actionsUsed {n : ℕ} {pt : STRIPS n} {s s' : State n}
     (p : Path pt s s') {a : Action n} (ha : a ∈ p.actionsUsed) : a ∈ pt.actions :=

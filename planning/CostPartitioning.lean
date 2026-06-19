@@ -1,5 +1,5 @@
 import planning.Heuristics
-import Mathlib
+import Mathlib.Algebra.BigOperators.Fin
 
 namespace Validator
 
