@@ -3,8 +3,9 @@ import planning.CostPartitioning
 import Mathlib.Tactic.Ring
 import Mathlib.Tactic.Linarith
 import Mathlib.Data.Set.Card
+import Mathlib
 
-namespace Validator
+namespace STRIPS
 
 open List
 
@@ -24,76 +25,55 @@ private lemma sortedLT_append_top {m : ℕ} {l : List (Fin m)} {t : Fin m}
     (hl : l.SortedLT) (ht : ∀ x ∈ l, x < t) : (l ++ [t]).SortedLT := by
   grind
 
-def i_g_normal_form {n : ℕ} (prob : STRIPS n) : STRIPS (n+2) :=
+def i_g_normal_form {n : ℕ} (prob : PlanningTask n) : PlanningTask (n+2) :=
   let emb : Fin n → Fin (n + 2) := Fin.castLE (by omega)
-  let goal_pre : VarSet' (n + 2) :=
-       ⟨ prob.goal'.val.map emb, sortedLT_map_castLE (by omega) prob.goal'.property⟩
+  let goal_pre : VarSet' (n + 2) := toVarSet' (prob.goal'.toList.map emb)
        -- the current goal is the precondition of the goal action
-
-  STRIPS.mk
+  PlanningTask.mk
     (prob.varNames.append (⟨#["i","g"] , by rfl⟩))
     ((prob.actions'.map (fun a =>
       Action.mk  a.name
-        ⟨ (a.pre'.val.map emb) ++ [⟨n, by omega⟩],
-          sortedLT_append_top (sortedLT_map_castLE (by omega) a.pre'.property)
-            (by
-              intro x hx
-              simp only [List.mem_map] at hx
-              obtain ⟨y, _, rfl⟩ := hx
-              simpa only [Fin.lt_def, Fin.val_castLE] using y.isLt)⟩
+        (toVarSet' ((a.pre'.toList.map emb) ++ [⟨n, by omega⟩]))
           -- every action gets n as an additional precondition
-        ⟨ a.add'.val.map emb, sortedLT_map_castLE (by omega) a.add'.property⟩
-        ⟨ a.del'.val.map emb, sortedLT_map_castLE (by omega) a.del'.property⟩
+        (toVarSet' (a.add'.toList.map emb))
+        (toVarSet' (a.del'.toList.map emb))
         a.cost
       )) ++
       [Action.mk
         "init"
-        (⟨[⟨ n, by simp⟩ ], by grind⟩) -- pre is only init
-        -- Corrected `add` effect.  The original
-        --   `varset'_of_state' ((prob.init'.concat false).concat false)`
-        -- is buggy: `BitVec.concat` shifts the bits **up**, so it would place the initial facts at
-        -- positions `2 .. n+1` whereas the original variables are embedded (via `emb = Fin.castLE`)
-        -- at positions `0 .. n-1`.  Hence the `init` action would never establish the embedded
-        -- initial facts, breaking `i_g_normal_form_keeps_h_plus`.  We instead add exactly the
-        -- embedded initial facts.
-        (⟨(varset'_of_state' prob.init').val.map emb,
-            sortedLT_map_castLE (by omega) (varset'_of_state' prob.init').property⟩)
-        ⟨[],by apply List.sortedLT_iff_pairwise.mpr ; simp⟩ -- no deletes
+        (singletonVarSet ⟨n, by omega⟩) -- pre is only init
+        -- Corrected `add` effect: add exactly the embedded initial facts.
+        (toVarSet' ((prob.init').toList.map emb))
+        (∅ : VarSet' (n+2)) -- no deletes
         0,
         Action.mk
         "goal"
         goal_pre
-        (⟨[⟨ n+1, by simp⟩ ], by grind⟩) -- add is only goal
-        ⟨[],by apply List.sortedLT_iff_pairwise.mpr ; simp⟩ -- no deletes
+        (singletonVarSet ⟨n+1, by omega⟩) -- add is only goal
+        (∅ : VarSet' (n+2)) -- no deletes
         0
       ]
     )
     (BitVec.zero (n+2) ||| (BitVec.twoPow (n+2) (n))) -- the initial state now contains only i
-    (⟨[⟨ n+1, by simp⟩ ], by grind⟩) -- only g is now a goal
-
+    (singletonVarSet ⟨n+1, by omega⟩) -- only g is now a goal
 /-- The cost of a concatenation of paths is the sum of the costs. -/
-private lemma Path.cost_append {n : ℕ} {pt : STRIPS n} {a b c : State n}
+private lemma Path.cost_append {n : ℕ} {pt : PlanningTask n} {a b c : State n}
     (p : Path pt a b) (q : Path pt b c) : (p.append q).cost = p.cost + q.cost := by
   induction p <;> simp_all [ Path.append ]
   · rfl
   · simp_all [ Path.cost ]
     ring
 
-/--
+/-
 In a delete relaxation every action has an empty delete effect.
 -/
-private lemma dr_action_del_empty {n : ℕ} (X : STRIPS n) {a : Action n}
+private lemma dr_action_del_empty {n : ℕ} (X : PlanningTask n) {a : Action n}
     (ha : a ∈ (delete_relaxation X).actions) : a.del = ∅ := by
-  unfold delete_relaxation at ha; simp_all [ STRIPS.actions ]
-  obtain ⟨ b, hb, rfl ⟩ := ha; unfold delete_relax_action; simp [ Action.del ]
-  unfold convertVarSet; simp
+  unfold delete_relaxation at ha;
+  simp_all +decide [PlanningTask.actions];
+  unfold delete_relax_action at ha; aesop;
 
-/--
-The cross-dimensional lifting at the heart of the forward direction.  An original delete-relaxed
-path can be replayed in the normal form whenever the start state embeds (with the auxiliary `i`
-variable present), using the embedded original actions, with the same cost.
--/
-private lemma lift_forward {n : ℕ} (prob : STRIPS n) {S1 S2 : State n}
+private lemma lift_forward {n : ℕ} (prob : PlanningTask n) {S1 S2 : State n}
     (p : Path (delete_relaxation prob) S1 S2)
     {T0 : State (n + 2)}
     (hi : (⟨n, by omega⟩ : Fin (n + 2)) ∈ T0)
@@ -102,339 +82,205 @@ private lemma lift_forward {n : ℕ} (prob : STRIPS n) {S1 S2 : State n}
       (⟨n, by omega⟩ : Fin (n + 2)) ∈ T2 ∧
       (∀ x ∈ S2, (Fin.castLE (show n ≤ n + 2 by omega) x) ∈ T2) ∧
       ∃ q : Path (delete_relaxation (i_g_normal_form prob)) T0 T2, q.cost = p.cost := by
-  induction' p with a s2 s3 ha succ p ih generalizing T0
-  · exact ⟨ T0, hi, hsub, Path.empty T0, rfl ⟩
-  · obtain ⟨a, ha_mem, ha_eq⟩ : ∃ a ∈ prob.actions', s2 = delete_relax_action a := by
-      unfold delete_relaxation at p; simp_all [ STRIPS.actions ]
-      grind
-    -- Define the embedded action `e` in the normal form.
-    set e : Action (n + 2) := delete_relax_action (Action.mk a.name ⟨a.pre'.val.map (Fin.castLE (by omega)) ++ [⟨n, by omega⟩], sortedLT_append_top (sortedLT_map_castLE (by omega) a.pre'.property) (by
-      intro x hx
-      simp only [mem_map] at hx
-      obtain ⟨y, _, rfl⟩ := hx
-      simpa only [Fin.lt_def, Fin.val_castLE] using y.isLt)⟩ ⟨a.add'.val.map (Fin.castLE (by omega)), sortedLT_map_castLE (by omega) a.add'.property⟩ ⟨a.del'.val.map (Fin.castLE (by omega)), sortedLT_map_castLE (by omega) a.del'.property⟩ a.cost)
-    -- Show that `e` is in the actions of the delete-relaxed normal form.
-    have he_mem : e ∈ (delete_relaxation (i_g_normal_form prob)).actions := by
-      unfold delete_relaxation i_g_normal_form; simp [ STRIPS.actions, List.mem_map ]
-      exact Or.inr <| Or.inr <| ⟨ a, ha_mem, rfl ⟩
-    have he_pre : e.pre ⊆ T0 := by
-      intro x hx
-      unfold e at hx; simp_all [ delete_relax_action, Action.pre ]
-      unfold convertVarSet at hx; simp_all
-      rcases hx with ( rfl | ⟨ y, hy, rfl ⟩ ) <;> [ exact hi; exact hsub y ( by
-        exact ih.1 ( by unfold Action.pre; unfold convertVarSet; simp; subst ha_eq; simp_all only [e] ) ) ]
-    have he_succ : Successor e T0 (T0 ∪ e.add) := by
-      refine ⟨he_pre, ?_⟩
-      rw [show e.del = ∅ from dr_action_del_empty _ he_mem, Set.diff_empty]
-    rename_i h
-    obtain ⟨ T2, hT2₁, hT2₂, q, hq ⟩ := h ( show ⟨ n, by omega ⟩ ∈ T0 ∪ e.add from by
-                                              grind ) ( show ∀ x ∈ ha, Fin.castLE ( by omega ) x ∈ T0 ∪ e.add from by
-                                                                                                  intro x hx; specialize ih; cases ih; simp_all [ Successor ]
-                                                                                                  unfold e; simp [ delete_relax_action ]
-                                                                                                  unfold delete_relax_action at hx; simp_all [ Action.del, Action.add ]
-                                                                                                  unfold convertVarSet at *; simp_all
-                                                                                                  grind )
-    use T2, hT2₁, hT2₂, Path.cons e (T0 ∪ e.add) (by
-    exact he_mem) (by
-    exact he_succ) q
-    simp [ *, Path.cost ]
-    unfold e; simp [ delete_relax_action ]
+  induction' p with a S_mid hS_mid succ rest ih generalizing T0;
+  · exact ⟨ T0, hi, hsub, Path.empty T0, rfl ⟩;
+  · obtain ⟨a0, ha0⟩ : ∃ a0 : Action n, S_mid = delete_relax_action a0 ∧ a0 ∈ prob.actions := by
+      unfold delete_relaxation at ih; simp_all +decide [PlanningTask.actions];
+      grind;
+    rename_i h₁ h₂ h₃;
+    -- Let `T0' := T0 ∪ emb '' (a0.add)` be the successor of `T0` under `A` (delete-relaxed: `Successor A T0 T0'` with no deletions).
+    obtain ⟨A, hA⟩ : ∃ A : Action (n + 2), A = delete_relax_action (Action.mk a0.name (toVarSet' ((a0.pre'.toList.map (Fin.castLE (by omega))) ++ [Fin.mk n (by omega)])) (toVarSet' (a0.add'.toList.map (Fin.castLE (by omega)))) (toVarSet' (a0.del'.toList.map (Fin.castLE (by omega)))) a0.cost) ∧ A ∈ (delete_relaxation (i_g_normal_form prob)).actions := by
+      unfold delete_relaxation i_g_normal_form; simp +decide [PlanningTask.actions] ;
+      unfold PlanningTask.actions at ha0; aesop;
+    have hT0' : ⟨n, by omega⟩ ∈ (T0 ∪ A.add) ∧ (∀ x ∈ succ, Fin.castLE (by omega) x ∈ (T0 ∪ A.add)) := by
+      simp_all +decide [ delete_relax_action, Successor ];
+      grind;
+    obtain ⟨ T2, hT2₁, hT2₂, q, hq ⟩ := h₃ hT0'.1 hT0'.2;
+    refine' ⟨ T2, hT2₁, hT2₂, Path.cons A ( T0 ∪ A.add ) _ _ q, _ ⟩ <;> simp_all +decide [ Path.cost ];
+    · exact hA.1 ▸ hA.2;
+    · constructor;
+      · intro x hx; simp_all +decide [ delete_relax_action ] ;
+        cases h₁ ; aesop;
+      · unfold delete_relax_action; aesop;
+    · unfold delete_relax_action; aesop;
 
-/--
-Forward direction: a delete-relaxed plan of the original task gives a delete-relaxed plan of the
-i/g normal form with the *same* cost.  Replay the original plan after the (free) `init` action and
-close it with the (free) `goal` action; the auxiliary variable `i` is supplied by `init` and never
-deleted, so every original action stays applicable.
+/-
+The single delete-relaxed "init" step of the normal form: from the initial state (only `i`)
+we reach a state containing `i` and the embedding of every original initial fact, at cost 0.
 -/
-private lemma ignf_dr_plan_of_dr_plan {n : ℕ} (prob : STRIPS n)
+private lemma ignf_init_path {n : ℕ} (prob : PlanningTask n) :
+    ∃ T : State (n + 2),
+      (⟨n, by omega⟩ : Fin (n + 2)) ∈ T ∧
+      (∀ x ∈ (delete_relaxation prob).init, (Fin.castLE (show n ≤ n + 2 by omega) x) ∈ T) ∧
+      ∃ q : Path (delete_relaxation (i_g_normal_form prob))
+        (delete_relaxation (i_g_normal_form prob)).init T, q.cost = 0 := by
+          constructor;
+          swap;
+          exact convertState ( prob.init' |> fun s => ( BitVec.zero ( n + 2 ) ||| ( BitVec.twoPow ( n + 2 ) n ) ) ||| ( BitVec.ofNat ( n + 2 ) ( s.toNat ) ) );
+          simp +decide [ mem_convertState, PlanningTask.init, delete_relaxation ];
+          refine' ⟨ fun x hx => Or.inr hx, _, _ ⟩;
+          refine' Path.cons _ _ _ _ ( Path.empty _ );
+          exact Action.mk "init" ( singletonVarSet ⟨ n, by omega ⟩ ) ( toVarSet' ( prob.init'.toList.map ( Fin.castLE ( by omega ) ) ) ) ∅ 0;
+          all_goals norm_num [ i_g_normal_form, delete_relax_action ];
+          all_goals norm_num [ PlanningTask.actions,PlanningTask.actions',Path.cost ];
+          unfold Successor convertState; simp +decide [ singletonVarSet, toVarSet' ] ;
+          unfold Applicable; simp +decide [ Finset.ext_iff, Set.ext_iff ] ;
+          simp +decide [ Finset.subset_iff, Set.subset_def ];
+          intro x; by_cases hx : x.val < n <;> simp +decide [ hx, Fin.ext_iff ] ;
+          · exact ⟨ fun h => h.imp id fun h => ⟨ ⟨ x, hx ⟩, h, rfl ⟩, fun h => h.imp id fun ⟨ a, ha, ha' ⟩ => by simpa [ ha' ] using ha ⟩;
+          · grind
+
+private lemma ignf_goal_path {n : ℕ} (prob : PlanningTask n) {T2 : State (n + 2)}
+    (hgoal : ∀ x ∈ prob.goal'.toList, (Fin.castLE (show n ≤ n + 2 by omega) x) ∈ T2) :
+    ∃ T3 : State (n + 2),
+      (delete_relaxation (i_g_normal_form prob)).GoalState T3 ∧
+      ∃ q : Path (delete_relaxation (i_g_normal_form prob)) T2 T3, q.cost = 0 := by
+  refine' ⟨ T2 ∪ { ⟨ n + 1, by linarith ⟩ }, _, Path.cons _ _ _ _ ( Path.empty _ ), _ ⟩ <;> norm_num [ delete_relaxation, i_g_normal_form, PlanningTask.actions ];
+  rotate_left;
+  exact delete_relax_action ⟨ "goal", toVarSet' ( map ( Fin.castLE ( by omega ) ) prob.goal'.toList ), singletonVarSet ⟨ n + 1, by omega ⟩, ∅, 0 ⟩;
+  all_goals norm_num [ delete_relax_action, Path.cost ];
+  · constructor <;> simp +decide [ singletonVarSet, PlanningTask.GoalState ];
+    · intro x hx; simp_all +decide [ mem_toVarSet' ] ;
+      grind;
+    · ext; simp [toVarSet'];
+      tauto;
+  · intro x hx; simp_all +decide [ singletonVarSet ] ;
+
+private lemma ignf_dr_plan_of_dr_plan {n : ℕ} (prob : PlanningTask n)
     (plan : Plan (delete_relaxation prob) (delete_relaxation prob).init) :
     ∃ eplan : Plan (delete_relaxation (i_g_normal_form prob))
         (delete_relaxation (i_g_normal_form prob)).init,
       eplan.path.cost = plan.path.cost := by
-  revert plan
-  intro plan
-  obtain ⟨last, p, hgoal⟩ := plan
-  have h_init : (delete_relaxation (i_g_normal_form prob)).init = {y | y = (⟨n, by omega⟩ : Fin (n + 2))} := by
-    unfold delete_relaxation i_g_normal_form; simp [ STRIPS.init ]
-    ext ⟨x, hx⟩; simp [convertState, BitVec.getElem_twoPow]
-  obtain ⟨T0, hT0⟩ : ∃ T0 : State (n + 2), (⟨n, by omega⟩ : Fin (n + 2)) ∈ T0 ∧ (∀ x ∈ (delete_relaxation prob).init, (Fin.castLE (show n ≤ n + 2 by omega) x) ∈ T0) ∧ ∃ q : Path (delete_relaxation (i_g_normal_form prob)) (delete_relaxation (i_g_normal_form prob)).init T0, q.cost = 0 := by
-                                                                                                                                    use {y | y = (⟨n, by omega⟩ : Fin (n + 2))} ∪ (delete_relaxation prob).init.image (Fin.castLE (show n ≤ n + 2 by omega))
-                                                                                                                                    refine' ⟨ _, _, _ ⟩
-                                                                                                                                    · exact Set.mem_union_left _ rfl
-                                                                                                                                    · exact fun x hx => Or.inr ⟨ x, hx, rfl ⟩
-                                                                                                                                    · constructor
-                                                                                                                                      swap
-                                                                                                                                      refine' Path.cons _ _ _ _ ( Path.empty _ )
-                                                                                                                                      exact delete_relax_action ( Action.mk "init" ⟨ [ ⟨ n, by omega ⟩ ], by grind ⟩ ⟨ ( varset'_of_state' prob.init' ).val.map ( Fin.castLE ( by omega ) ), sortedLT_map_castLE ( by omega ) ( varset'_of_state' prob.init' ).property ⟩ ⟨ [ ], by apply List.sortedLT_iff_pairwise.mpr ; simp ⟩ 0 )
-                                                                                                                                      all_goals norm_num [ delete_relax_action, Successor ]
-                                                                                                                                      all_goals norm_num [ Applicable, Successor, Path.cost ]
-                                                                                                                                      · unfold delete_relaxation i_g_normal_form; simp [ STRIPS.actions, List.mem_map ]
-                                                                                                                                        exact Or.inl rfl
-                                                                                                                                      · simp [ Set.subset_def, Set.ext_iff ]
-                                                                                                                                        simp [ h_init, Action.pre, Action.add, Action.del ]
-                                                                                                                                        simp [ convertVarSet, varset'_of_state' ]
-                                                                                                                                        simp [ delete_relaxation, STRIPS.init, convertState ]
-  obtain ⟨T2, hT2₁, hT2₂, q, hq⟩ := lift_forward prob p hT0.left hT0.right.left
-  -- Construct the goal step
-  obtain ⟨aG, haG⟩ : ∃ aG : Action (n + 2), aG ∈ (delete_relaxation (i_g_normal_form prob)).actions ∧ aG.pre ⊆ T2 ∧ aG.del = ∅ ∧ aG.cost = 0 ∧ aG.add = {⟨n + 1, by omega⟩} := by
-    unfold delete_relaxation i_g_normal_form; simp [ STRIPS.actions, List.mem_map ]
-    refine Or.inr <| Or.inl ⟨ ?_, ?_, ?_, ?_ ⟩ <;> simp [ delete_relax_action ]
-    · intro x hx; unfold Action.pre at hx; unfold convertVarSet at hx; simp_all
-      obtain ⟨ a, ha, rfl ⟩ := hx; exact hT2₂ a ( hgoal ( by unfold convertVarSet; simp; obtain ⟨left, right⟩ := hT0; obtain ⟨left_1, right⟩ := right; obtain ⟨w, h⟩ := right; exact ha ) )
-    · unfold Action.del; simp [ convertVarSet ]
-    · unfold Action.add; simp [ convertVarSet ]
-  obtain ⟨q', hq'⟩ : ∃ q' : Path (delete_relaxation (i_g_normal_form prob)) T2 (T2 ∪ aG.add), q'.cost = 0 := by
-    use Path.cons aG (T2 ∪ aG.add) haG.left (by
-    unfold Successor
-    simp_all only [Set.setOf_eq_eq_singleton, Set.union_singleton, Set.diff_empty, and_self]) (Path.empty (T2 ∪ aG.add))
-    simp [ Path.cost, haG ]
-  use ⟨T2 ∪ aG.add, (hT0.right.right.choose.append q).append q', by
-    unfold delete_relaxation i_g_normal_form at *; simp_all [ STRIPS.GoalState, convertVarSet ] ;⟩
-  simp only [Path.cost_append, hT0.right.right.choose_spec, hq, hq', Nat.zero_add, Nat.add_zero]
+  obtain ⟨T0, hi0, hinit, q0, hq0⟩ := ignf_init_path prob
+  obtain ⟨T2, _hi2, hlast, q1, hq1⟩ := lift_forward prob plan.path hi0 hinit
+  obtain ⟨T3, hgoalstate, q2, hq2⟩ := ignf_goal_path prob (T2 := T2) (by
+    intro x hx
+    exact hlast x (plan.goal (mem_convertVarSet.mpr (VarSet'.mem_toList.mp hx))))
+  refine ⟨⟨T3, (q0.append q1).append q2, hgoalstate⟩, ?_⟩
+  simp only [Path.cost_append, hq0, hq1, hq2, Nat.add_zero, Nat.zero_add]
 
-/--
-Delete-relaxed paths are monotone: facts are only ever added.
--/
-private lemma dr_path_mono {n : ℕ} {pt : STRIPS n} (hdel : ∀ a ∈ pt.actions, a.del = ∅)
+private lemma dr_path_mono {n : ℕ} {pt : PlanningTask n} (hdel : ∀ a ∈ pt.actions, a.del = ∅)
     {s1 s2 : State n} (p : Path pt s1 s2) : s1 ⊆ s2 := by
-  induction p
-  · exact Set.Subset.refl _
-  · grind
+  induction p;
+  · exact Set.Subset.rfl;
+  · rename_i a s1 s2 s3 ha succ π ih;
+    intro x hx; have := succ.2; simp_all +decide [ Finset.subset_iff, Set.subset_def ] ;
 
-/--
-If the auxiliary goal variable `g` becomes true along a normal-form delete-relaxed path that did
-not start with `g`, then the embedded original goal facts are all true at the end (the only action
-that can add `g` is the `goal` action, whose precondition is exactly the embedded goal).
--/
-private lemma ep_goal_facts {n : ℕ} (prob : STRIPS n) {E1 E2 : State (n + 2)}
+private lemma ep_goal_facts {n : ℕ} (prob : PlanningTask n) {E1 E2 : State (n + 2)}
     (q : Path (delete_relaxation (i_g_normal_form prob)) E1 E2)
     (h1 : (⟨n + 1, by omega⟩ : Fin (n + 2)) ∉ E1)
     (h2 : (⟨n + 1, by omega⟩ : Fin (n + 2)) ∈ E2) :
     ∀ x ∈ convertVarSet prob.goal', (Fin.castLE (show n ≤ n + 2 by omega) x) ∈ E2 := by
-  induction q
-  · tauto
-  · rename_i a s1 s2 s3 ha succ π ih
-    by_cases h : ⟨n + 1, by omega⟩ ∈ s2 <;> simp_all [ Successor ]
-    unfold delete_relaxation i_g_normal_form at ha; simp_all [ STRIPS.actions, List.mem_map ]
-    rcases ha with ( rfl | rfl | ⟨ a, ha, rfl ⟩ ) <;> simp_all [ delete_relax_action, Action.add ]
-    · unfold convertVarSet at h; simp_all
-      obtain ⟨ a, ha, ha' ⟩ := h; replace ha' := congr_arg Fin.val ha'; simp_all
-      grind
-    · have := dr_path_mono ( show ∀ a ∈ ( delete_relaxation ( i_g_normal_form prob ) ).actions, a.del = ∅ from fun a ha => dr_action_del_empty _ ha ) π; simp_all [ Set.subset_def ]
-      simp_all [ Action.pre, Action.del ]
-      unfold convertVarSet at *; simp_all
-    · unfold convertVarSet at h; simp_all
-      obtain ⟨ x, hx, hx' ⟩ := h; have := Fin.is_lt x; simp_all [ Fin.ext_iff ]
+                                                  have h_goal : ∀ {s1 s2 : State (n + 2)}, (⟨n + 1, by omega⟩ : Fin (n + 2)) ∈ s2 → ∀ q : Path (delete_relaxation (i_g_normal_form prob)) s1 s2, (⟨n + 1, by omega⟩ : Fin (n + 2)) ∉ s1 → ∀ x ∈ convertVarSet prob.goal', (Fin.castLE (by omega) x) ∈ s2 := by
+                                                    intros s1 s2 hs2 q hs1 x hx;
+                                                    induction q <;> simp_all +decide [ Fin.castLE ];
+                                                    rename_i a s1 s2 s3 π ih;
+                                                    unfold delete_relaxation at s3; simp_all +decide [ PlanningTask.actions ] ;
+                                                    unfold i_g_normal_form at s3; simp_all +decide [ PlanningTask.actions' ] ;
+                                                    rcases s3 with ⟨ a, ⟨ ⟨ b, hb, rfl ⟩ | rfl | rfl, rfl ⟩ ⟩ <;> simp_all +decide [ delete_relax_action ];
+                                                    · exact ih fun y hy => ne_of_lt ( Nat.lt_succ_of_le ( Nat.le_of_lt_succ ( by simp +decide [ Fin.ext_iff ] ) ) );
+                                                    · exact ih fun x hx => ne_of_lt ( Nat.lt_succ_of_le ( Nat.le_of_lt_succ ( by simp +decide [ Fin.ext_iff ] ) ) );
+                                                    · cases π ; simp_all +decide [ singletonVarSet ];
+                                                      rename_i h₁ h₂;
+                                                      have := dr_path_mono ( show ∀ a ∈ ( delete_relaxation ( i_g_normal_form prob ) ).actions, a.del = ∅ from ?_ ) s2; simp_all +decide [ Finset.subset_iff, Set.subset_def ] ;
+                                                      · exact this _ ( Or.inl ( h₁ _ hx ) );
+                                                      · grind +suggestions;
+                                                  exact h_goal h2 q h1
 
-/--
-Projecting `Fin.castLE`-embedded membership back: `emb x` lies in the image list iff `x` lies in
-the original list (`Fin.castLE` is injective).
--/
 private lemma castLE_mem_map_castLE {n m : ℕ} (h : n ≤ m) (l : List (Fin n)) (x : Fin n) :
     (Fin.castLE h x) ∈ (l.map (Fin.castLE h)).toFinset ↔ x ∈ l.toFinset := by
   simp_all only [mem_toFinset, mem_map, Fin.castLE_inj, exists_eq_right]
 
-/--
+/-
 Prepending a projected original action to an original delete-relaxed path.
 -/
-private lemma project_cons_embedded {n : ℕ} (prob : STRIPS n) {a : Action n}
-    (ha : a ∈ prob.actions') {D0 F : State n} (hpre : a.pre ⊆ D0)
-    (dq : Path (delete_relaxation prob) (D0 ∪ a.add) F) :
+private lemma project_cons_embedded {n : ℕ} (prob : PlanningTask n) {a : Action n}
+    (ha : a ∈ prob.actions') {D0 F : State n} (hpre : (↑a.pre : Set (Fin n)) ⊆ D0)
+    (dq : Path (delete_relaxation prob) (D0 ∪ (↑a.add : Set (Fin n))) F) :
     ∃ dq' : Path (delete_relaxation prob) D0 F, dq'.cost = dq.cost + a.cost := by
-  use Path.cons (delete_relax_action a) (D0 ∪ a.add) (by
-  unfold delete_relaxation; simp [ STRIPS.actions, List.mem_map ]
-  grind) (by
-  unfold Successor; simp_all [ delete_relax_action, Action.pre, Action.add, Action.del ]
-  unfold convertVarSet at *; simp_all
-  exact fun x hx => hpre <| by unfold Action.pre at hx; unfold convertVarSet at hx; simp_all ;) dq
-  simp [ Path.cost, delete_relax_action ]
+  refine' ⟨ Path.cons _ _ _ _ dq, _ ⟩;
+  exact delete_relax_action a;
+  all_goals norm_num [ delete_relax_action, Path.cost ];
+  · unfold delete_relaxation; simp +decide [ PlanningTask.actions ] ;
+    exact ⟨ a, ha, rfl ⟩;
+  · constructor <;> aesop
 
-/-- The projection at the heart of the backward direction.  Projecting a normal-form delete-relaxed
-path to the original variables, starting from any original state `D0` that already contains the
-original initial state and the projection of the start state, yields an original delete-relaxed path
-of no greater cost reaching `D0` together with the projection of the end state. -/
-private lemma project_backward {n : ℕ} (prob : STRIPS n) {E1 E2 : State (n + 2)}
+private lemma project_backward {n : ℕ} (prob : PlanningTask n) {E1 E2 : State (n + 2)}
     (q : Path (delete_relaxation (i_g_normal_form prob)) E1 E2)
     {D0 : State n}
     (hD : convertState prob.init' ⊆ D0)
     (hD0 : {x : Fin n | (Fin.castLE (show n ≤ n + 2 by omega) x) ∈ E1} ⊆ D0) :
-    ∃ dq : Path (delete_relaxation prob) D0
-        (D0 ∪ {x : Fin n | (Fin.castLE (show n ≤ n + 2 by omega) x) ∈ E2}),
-      dq.cost ≤ q.cost := by
-  induction q generalizing D0 with
-  | empty s =>
-    rw [Set.union_eq_left.mpr hD0]
-    exact ⟨Path.empty D0, by simp [Path.cost]⟩
-  | cons a' s2 ha' succ' rest ih =>
-    rename_i Estart Eend
-    obtain ⟨b, hb, hbeq⟩ : ∃ b ∈ (i_g_normal_form prob).actions', delete_relax_action b = a' := by
-      have h2 : a' ∈ ((i_g_normal_form prob).actions'.map delete_relax_action).toFinset := ha'
-      rw [List.mem_toFinset, List.mem_map] at h2
-      exact h2
-    subst hbeq
-    have hpre' : (delete_relax_action b).pre ⊆ Estart := succ'.1
-    have hs2 : s2 = Estart ∪ (delete_relax_action b).add := by
-      have h := succ'.2; rwa [dr_action_del_empty _ ha', Set.diff_empty] at h
-    have hmono : s2 ⊆ Eend := dr_path_mono (fun c hc => dr_action_del_empty _ hc) rest
-    have hcons_cost : (Path.cons (delete_relax_action b) s2 ha' succ' rest).cost
-        = rest.cost + (delete_relax_action b).cost := rfl
-    have hEstart_sub : {x : Fin n | (Fin.castLE (show n ≤ n + 2 by omega) x) ∈ Estart} ⊆ D0 := hD0
-    simp only [i_g_normal_form, List.mem_append, List.mem_map, List.mem_cons,
-      List.not_mem_nil, or_false] at hb
-    obtain ⟨a, ha, rfl⟩ | rfl | rfl := hb
-    · -- embedded action `b = embedded a`
-      have hsub2 : {x : Fin n | (Fin.castLE (show n ≤ n + 2 by omega) x) ∈ s2} ⊆ D0 ∪ a.add := by
-        intro x hx
-        simp only [Set.mem_setOf_eq] at hx
-        simp only [hs2, Set.mem_union, delete_relax_action, Action.add, convertVarSet,
-          Finset.mem_coe, List.mem_toFinset, List.mem_map] at hx
-        rcases hx with hx | ⟨y, hy, hyx⟩
-        · exact Or.inl (hEstart_sub hx)
-        · have hyx' : y = x :=
-            Fin.ext (by have := congrArg Fin.val hyx; simpa [Fin.val_castLE] using this)
-          subst hyx'
-          refine Or.inr ?_
-          rw [Action.add, convertVarSet, Finset.mem_coe, List.mem_toFinset]; exact hy
-      have hpreD0 : a.pre ⊆ D0 := by
-        intro y hy
-        apply hD0
-        apply hpre'
-        simp only [delete_relax_action, Action.pre, convertVarSet, Finset.mem_coe,
-          List.mem_toFinset, List.mem_append, List.mem_map, List.mem_singleton]
-        refine Or.inl ⟨y, ?_, rfl⟩
-        rw [Action.pre, convertVarSet, Finset.mem_coe, List.mem_toFinset] at hy
-        exact hy
-      obtain ⟨dq_rest, hdq_rest⟩ := ih (D0 := D0 ∪ a.add)
-        (Set.Subset.trans hD Set.subset_union_left) hsub2
-      obtain ⟨dq', hdq'⟩ := project_cons_embedded prob ha hpreD0 dq_rest
-      have haS : a.add ⊆ {x : Fin n | (Fin.castLE (show n ≤ n + 2 by omega) x) ∈ Eend} := by
-        intro x hx
-        apply hmono
-        simp only [hs2, Set.mem_union]
-        refine Or.inr ?_
-        simp only [delete_relax_action, Action.add, convertVarSet, Finset.mem_coe,
-          List.mem_toFinset, List.mem_map]
-        rw [Action.add, convertVarSet, Finset.mem_coe, List.mem_toFinset] at hx
-        exact ⟨x, hx, rfl⟩
-      have key : (D0 ∪ a.add) ∪ {x : Fin n | (Fin.castLE (show n ≤ n + 2 by omega) x) ∈ Eend}
-          = D0 ∪ {x : Fin n | (Fin.castLE (show n ≤ n + 2 by omega) x) ∈ Eend} := by
-        rw [Set.union_assoc, Set.union_eq_right.mpr haS]
-      rw [← key]
-      exact ⟨dq', by rw [hdq']; exact Nat.add_le_add_right hdq_rest _⟩
-    · -- init action
-      have hsub2 : {x : Fin n | (Fin.castLE (show n ≤ n + 2 by omega) x) ∈ s2} ⊆ D0 := by
-        intro x hx
-        simp only [Set.mem_setOf_eq] at hx
-        simp only [hs2, Set.mem_union, delete_relax_action, Action.add, convertVarSet,
-          Finset.mem_coe, List.mem_toFinset, List.mem_map] at hx
-        rcases hx with hx | ⟨y, hy, hyx⟩
-        · exact hEstart_sub hx
-        · have hyx' : y = x :=
-            Fin.ext (by have := congrArg Fin.val hyx; simpa [Fin.val_castLE] using this)
-          subst hyx'
-          apply hD
-          rw [varset'_of_state'_mem] at hy
-          simpa [convertState] using hy
-      obtain ⟨dq, hdq⟩ := ih hD hsub2
-      exact ⟨dq, by rw [hcons_cost]; exact hdq.trans (Nat.le_add_right _ _)⟩
-    · -- goal action
-      have hsub2 : {x : Fin n | (Fin.castLE (show n ≤ n + 2 by omega) x) ∈ s2} ⊆ D0 := by
-        intro x hx
-        simp only [Set.mem_setOf_eq] at hx
-        simp only [hs2, Set.mem_union, delete_relax_action, Action.add, convertVarSet,
-          Finset.mem_coe, List.mem_toFinset, List.mem_singleton] at hx
-        rcases hx with hx | hx
-        · exact hEstart_sub hx
-        · exfalso
-          have hlt := x.isLt
-          have := congrArg Fin.val hx
-          simp only [Fin.val_castLE] at this
-          exact absurd this (Nat.ne_of_lt (hlt.trans (Nat.lt_succ_self n)))
-      obtain ⟨dq, hdq⟩ := ih hD hsub2
-      exact ⟨dq, by rw [hcons_cost]; exact hdq.trans (Nat.le_add_right _ _)⟩
+    ∃ (D' : State n),
+      {x : Fin n | (Fin.castLE (show n ≤ n + 2 by omega) x) ∈ E2} ⊆ D' ∧
+      ∃ dq : Path (delete_relaxation prob) D0 D', dq.cost ≤ q.cost := by
+        revert E1 E2 q D0 hD hD0;
+        -- Let's unfold the definition of `i_g_normal_form` and `delete_relaxation`.
+        intro E1 E2 q D0 hD hD0
+        induction' q with a s1 s2 s3 ha succ π ih generalizing D0;
+        · exact ⟨ _, hD0, Path.empty _, rfl.le ⟩;
+        · -- The action `s1` is one of three shapes: free "goal", free "init", or `delete_relax_action (embedded a0)`.
+          unfold delete_relaxation i_g_normal_form at succ; simp [PlanningTask.actions] at succ; rcases succ with (rfl | rfl | ⟨ a0, ha0, rfl ⟩) <;> simp [delete_relax_action] at *;
+          · rename_i h;
+            unfold delete_relax_action at π; simp_all +decide [ delete_relaxation, i_g_normal_form ] ;
+            obtain ⟨ D', hD', dq, hdq ⟩ := h hD ( by
+              exact fun x hx => hx.elim ( fun hx => hD0 hx ) fun hx => hD ( by simpa [ convertState ] using hx ) );
+            exact ⟨ D', hD', dq, by simpa [ Path.cost ] using hdq ⟩;
+          · cases π ; simp_all +decide [ Successor ];
+            rename_i h₁ h₂ h₃; specialize h₃ hD; simp_all +decide [ delete_relax_action ] ;
+            contrapose! h₃; simp_all +decide [ Set.subset_def ] ;
+            constructor;
+            · rintro x ( hx | hx ) <;> [ exact hD0 x hx; exact absurd hx ( by exact ne_of_lt ( Nat.lt_succ_of_le ( Nat.le_of_lt_succ ( by simp +decide [ Fin.ext_iff ] ) ) ) ) ];
+            · intro D' hD' dq; specialize h₃ D' hD' dq; simp_all +decide [ Path.cost ] ;
+          · obtain ⟨ D', hD', dq, hdq ⟩ := ‹∀ { D0 : State n }, convertState prob.init' ⊆ D0 → { x | Fin.castLE _ x ∈ s3 } ⊆ D0 → ∃ D', { x | Fin.castLE _ x ∈ ha } ⊆ D' ∧ ∃ dq : Path ( delete_relaxation prob ) D0 D', dq.cost ≤ ih.cost› ( show convertState prob.init' ⊆ D0 ∪ a0.add from by
+                                                                                                                                                                                                                                                        exact Set.Subset.trans hD ( Set.subset_union_left ) ) ( show { x | Fin.castLE _ x ∈ s3 } ⊆ D0 ∪ a0.add from by
+                                                                                                                                                                                                                                                                                                                              intro x hx; cases' π with h1 h2 h3; simp_all +decide [ Finset.subset_iff, Set.subset_def ] ;
+                                                                                                                                                                                                                                                                                                                              cases hx <;> simp_all +decide [ delete_relax_action ] );
+            obtain ⟨ dq', hdq' ⟩ := project_cons_embedded prob ha0 ( show ( a0.pre : Set ( Fin n ) ) ⊆ D0 from by
+                                                                      intro x hx; have := π.1; simp_all +decide [ Finset.subset_iff, Set.subset_def ] ;
+                                                                      exact hD0 x ( by have := π.1; exact this ( by unfold delete_relax_action; simp +decide [ mem_toVarSet' ] ; aesop ) ) ) dq;
+            exact ⟨ D', hD', dq', by simp +decide [ Path.cost, hdq', hdq ] ⟩
 
-/-- Backward direction: a delete-relaxed plan of the i/g normal form gives a delete-relaxed plan of
-the original task whose cost is no larger.  Drop the `init`/`goal` actions (both of cost `0`) and
-project the remaining actions back to the original task. -/
-private lemma dr_plan_of_ignf_dr_plan {n : ℕ} (prob : STRIPS n)
+private lemma dr_plan_of_ignf_dr_plan {n : ℕ} (prob : PlanningTask n)
     (eplan : Plan (delete_relaxation (i_g_normal_form prob))
         (delete_relaxation (i_g_normal_form prob)).init) :
     ∃ plan : Plan (delete_relaxation prob) (delete_relaxation prob).init,
       plan.path.cost ≤ eplan.path.cost := by
-  obtain ⟨elast, ep_p, ehgoal⟩ := eplan
-  have h_init : (delete_relaxation (i_g_normal_form prob)).init
-      = {y : Fin (n + 2) | y = ⟨n, by omega⟩} := by
-    unfold delete_relaxation i_g_normal_form
-    simp only [STRIPS.init]
-    ext ⟨x, hx⟩
-    simp [convertState, BitVec.getElem_twoPow]
-  have hD0 : {x : Fin n | (Fin.castLE (show n ≤ n + 2 by omega) x)
-      ∈ (delete_relaxation (i_g_normal_form prob)).init} ⊆ convertState prob.init' := by
-    intro x hx
-    rw [h_init] at hx
-    simp only [Set.mem_setOf_eq] at hx
-    have hval := congrArg Fin.val hx
-    simp only [Fin.val_castLE] at hval
-    exact absurd hval (Nat.ne_of_lt x.isLt)
-  obtain ⟨dq, hdq⟩ := project_backward prob ep_p (Set.Subset.refl _) hD0
-  have hg_notin : (⟨n + 1, by omega⟩ : Fin (n + 2))
-      ∉ (delete_relaxation (i_g_normal_form prob)).init := by
-    rw [h_init]; simp [Fin.ext_iff]
-  have hg_in : (⟨n + 1, by omega⟩ : Fin (n + 2)) ∈ elast := by
-    apply ehgoal
-    unfold delete_relaxation i_g_normal_form
-    simp [convertVarSet]
-  have hgoalfacts := ep_goal_facts prob ep_p hg_notin hg_in
-  refine ⟨⟨convertState prob.init'
-      ∪ {x : Fin n | (Fin.castLE (show n ≤ n + 2 by omega) x) ∈ elast}, dq, ?_⟩, hdq⟩
-  intro z hz
-  exact Set.mem_union_right _ (hgoalfacts z hz)
+        obtain ⟨eplan, hplan⟩ := eplan;
+        rename_i hgoal;
+        obtain ⟨ D', hD', dq, hdq ⟩ := project_backward prob hplan ( show convertState prob.init' ⊆ convertState prob.init' from Set.Subset.refl _ ) ( by
+                                                                      unfold delete_relaxation i_g_normal_form; simp +decide [ PlanningTask.init ] ;
+                                                                      grind );
+        refine' ⟨ ⟨ D', dq, _ ⟩, hdq ⟩;
+        intro x hx; have := hgoal; simp_all +decide [ PlanningTask.GoalState ] ;
+        have := ep_goal_facts prob hplan ( show ( ⟨ n + 1, by omega ⟩ : Fin ( n + 2 ) ) ∉ ( delete_relaxation ( i_g_normal_form prob ) ).init from ?_ ) ( show ( ⟨ n + 1, by omega ⟩ : Fin ( n + 2 ) ) ∈ eplan from ?_ );
+        · exact hD' ( this x ( by simpa [ convertVarSet ] using hx ) );
+        · unfold delete_relaxation i_g_normal_form; simp +decide [ PlanningTask.init ] ;
+        · exact hgoal ( by simp +decide [ convertVarSet, delete_relaxation, i_g_normal_form ] )
 
-/-- `i_g_normal_form` preserves `h_plus`, **provided** the delete relaxation of `prob` is solvable
-from its initial state.
-
-The solvability hypothesis is necessary: the original unconditional statement
-`h_plus prob prob.init' = h_plus (i_g_normal_form prob) (i_g_normal_form prob).init'`
-is **false**.  When the delete relaxation is unsolvable, `h_plus` returns the sentinel
-`2 ^ k * max_action_cost`, but the two sides are evaluated in different dimensions, `k = n` on the
-left and `k = n + 2` on the right, so they disagree by a factor of `4` (and `max_action_cost` may
-differ as well).  Concretely, for `n = 1` with no actions, initial variable `false`, and a goal
-requiring that variable to be `true`, one computes `h_plus prob prob.init' = 2` while
-`h_plus (i_g_normal_form prob) _ = 0`. -/
-lemma i_g_normal_form_keeps_h_plus {n : ℕ} {prob : STRIPS n}
+lemma i_g_normal_form_keeps_h_plus {n : ℕ} {prob : PlanningTask n}
     (hsolv : ¬ Unsolvable (delete_relaxation prob)) :
    h_plus prob prob.init' = h_plus (i_g_normal_form prob) (i_g_normal_form prob).init'  := by
-     obtain ⟨dplan⟩ : Nonempty (Plan (delete_relaxation prob) (delete_relaxation prob).init) := by
-       contrapose! hsolv
-       simp_all only
-     -- Let `rdp := (planner dp (fun _ => 0)).get hdp` and `rep := (planner ep (fun _ => 0)).get hep`.
-     obtain ⟨rdp, hrdp⟩ : ∃ rdp, (Validator.planner (Validator.delete_relaxation prob) (fun _ => 0)) = some rdp := by
-       exact Option.isSome_iff_exists.mp ( by exact Option.isSome_iff_ne_none.mpr fun h => hsolv <| Validator.planner_complete _ _ h )
-     obtain ⟨rep, hrep⟩ : ∃ rep, (Validator.planner (Validator.delete_relaxation (i_g_normal_form prob)) (fun _ => 0)) = some rep := by
-       obtain ⟨eplan, heplan⟩ : ∃ eplan : Plan (delete_relaxation (i_g_normal_form prob)) (delete_relaxation (i_g_normal_form prob)).init, True := by
-         exact ⟨ ignf_dr_plan_of_dr_plan prob dplan |> Classical.choose, trivial ⟩
-       have := planner_complete ( delete_relaxation ( i_g_normal_form prob ) ) ( fun _ => 0 ) ; simp_all [ Unsolvable ]
-       cases h : planner ( delete_relaxation ( i_g_normal_form prob ) ) ( fun x => 0 ) <;> simp_all [ UnsolvableState ]
-       exact this.elim eplan
-     obtain ⟨eplan, heplan⟩ : ∃ eplan, (Validator.planner (Validator.delete_relaxation (i_g_normal_form prob)) (fun _ => 0)) = some eplan ∧ eplan.path.cost ≤ rdp.path.cost := by
-       obtain ⟨eplan, heplan⟩ : ∃ eplan, (Validator.planner (Validator.delete_relaxation (i_g_normal_form prob)) (fun _ => 0)) = some eplan ∧ eplan.path.cost ≤ rdp.path.cost := by
-         have := ignf_dr_plan_of_dr_plan prob rdp
-         obtain ⟨eplan, heplan⟩ := this
-         have := Validator.planner_optimal (Validator.delete_relaxation (Validator.i_g_normal_form prob)) (fun _ => 0) (Validator.zero_heur_admissible (Validator.delete_relaxation (Validator.i_g_normal_form prob))) (by
-         exact hrep.symm ▸ rfl) eplan
-         grind
-       use eplan
-     obtain ⟨plan, hplan⟩ : ∃ plan, (Validator.planner (Validator.delete_relaxation prob) (fun _ => 0)) = some plan ∧ plan.path.cost ≤ rep.path.cost := by
-       obtain ⟨plan, hplan⟩ : ∃ plan : Plan (Validator.delete_relaxation prob) (Validator.delete_relaxation prob).init, plan.path.cost ≤ rep.path.cost := by
-         exact ⟨ _, dr_plan_of_ignf_dr_plan prob rep |> Classical.choose_spec ⟩
-       have := Validator.planner_optimal ( Validator.delete_relaxation prob ) ( fun _ => 0 ) ( Validator.zero_heur_admissible ( Validator.delete_relaxation prob ) ) ( show ( Validator.planner ( Validator.delete_relaxation prob ) ( fun _ => 0 ) ).isSome from by
-                                                                                                                                                                         grind ) plan
-       grind
-     unfold h_plus
-     simp_all [ delete_relaxation ]
-     grind
+     -- Since `planner A (fun _=>0) ≠ none`, it must be `some retA`.
+     obtain ⟨retA, hA⟩ : ∃ retA, planner (delete_relaxation prob) (fun _ => 0) = some retA := by
+       contrapose! hsolv; have := planner_complete ( delete_relaxation prob ) ( fun _ => 0 ) ( zero_heur_admissible' ( delete_relaxation prob ) ) ; aesop;
+     obtain ⟨retB, hB⟩ : ∃ retB, planner (delete_relaxation (i_g_normal_form prob)) (fun _ => 0) = some retB := by
+       have hB : ¬Unsolvable (delete_relaxation (i_g_normal_form prob)) := by
+         exact fun h => hsolv <| by obtain ⟨ eplan, heplan ⟩ := ignf_dr_plan_of_dr_plan prob retA; exact h.elim eplan;
+       exact Option.ne_none_iff_exists'.mp ( planner_complete _ _ ( zero_heur_admissible' _ ) |> fun h => by tauto );
+     -- By `planner_optimal`, we have `retA.path.cost ≤ retB.path.cost`.
+     have h_le : retA.path.cost ≤ retB.path.cost := by
+       obtain ⟨plan, hplan⟩ := dr_plan_of_ignf_dr_plan prob retB;
+       convert planner_optimal ( delete_relaxation prob ) ( fun _ => 0 ) ( zero_heur_admissible _ ) ( show ( planner ( delete_relaxation prob ) fun _ => 0 ).isSome from by simp +decide [ hA ] ) plan |> le_trans <| hplan using 1;
+       grind +splitIndPred;
+     -- By `planner_optimal`, we have `retB.path.cost ≤ retA.path.cost`.
+     have h_ge : retB.path.cost ≤ retA.path.cost := by
+       have := ignf_dr_plan_of_dr_plan prob retA;
+       have := planner_optimal ( delete_relaxation ( i_g_normal_form prob ) ) ( fun _ => 0 ) ( zero_heur_admissible _ ) ( show ( planner ( delete_relaxation ( i_g_normal_form prob ) ) ( fun _ => 0 ) ).isSome from by simp +decide [ hB ] ) this.choose;
+       grind;
+     unfold h_plus; simp_all +decide [ delete_relaxation, i_g_normal_form ] ;
+     exact le_antisymm h_le h_ge
 
-lemma i_g_normal_form_keeps_solvability {n : ℕ} {prob : STRIPS n} :
+lemma i_g_normal_form_keeps_solvability {n : ℕ} {prob : PlanningTask n} :
     Unsolvable (delete_relaxation prob) ↔
       Unsolvable (delete_relaxation ((i_g_normal_form prob))) := by
   constructor <;> intro h
@@ -447,7 +293,7 @@ lemma i_g_normal_form_keeps_solvability {n : ℕ} {prob : STRIPS n} :
 /- Theory of PCFs and justification graphs -/
 
 /-- should be a type of functions that take an action from prob and return one of their preconditions -/
-abbrev precondition_choice_function {n : ℕ} (prob : STRIPS n):=
+abbrev precondition_choice_function {n : ℕ} (prob : PlanningTask n):=
     Π (a : {b : Action n // b ∈ prob.actions'}), { p : Fin n // p ∈ a.val.pre}
 
 /-- A planning problem `prob` *has preconditions* if every one of its actions has at least one
@@ -455,20 +301,18 @@ precondition fact.  This is exactly the condition under which a `precondition_ch
 can exist (the subtype `{ p : Fin n // p ∈ a.val.pre }` is nonempty for every action).  The i/g
 normal form of a problem with a nonempty goal always has this property, and cost partitioning
 preserves it. -/
-def has_preconditions {n : ℕ} (prob : STRIPS n) : Prop :=
-  ∀ a ∈ prob.actions', a.pre'.val ≠ []
-
-/-- An element of `a.val.pre'.val` is a member of `a.val.pre` (the `Set`-level precondition). -/
-lemma mem_pre_of_mem_pre'_val {n : ℕ} (a : Action n) {x : Fin n} (hx : x ∈ a.pre'.val) :
-    x ∈ a.pre := by
-  unfold Action.pre convertVarSet
-  simpa using hx
+def has_preconditions {n : ℕ} (prob : PlanningTask n) : Prop :=
+  ∀ a ∈ prob.actions', a.pre'.toList ≠ []
 
 /-
-Cost partitioning preserves `has_preconditions`: it only relabels action costs, leaving the
-preconditions untouched.
+An element of `a.val.pre'.toList` is a member of `a.val.pre` (the `Set`-level precondition).
 -/
-lemma partition_STRIPS_has_preconditions {n P : ℕ} (prob : STRIPS n)
+lemma mem_pre_of_mem_pre_val {n : ℕ} (a : Action n) {x : Fin n} (hx : x ∈ a.pre'.toList) :
+    x ∈ a.pre := by
+  contrapose! hx;
+  exact fun h => hx <| by simpa [ Set.ext_iff ] using h;
+
+lemma partition_STRIPS_has_preconditions {n P : ℕ} (prob : PlanningTask n)
     (partitioning : cost_partitioning prob P) (p : Fin P)
     (hp : has_preconditions prob) :
     has_preconditions (partition_STRIPS prob partitioning p) := by
@@ -481,25 +325,20 @@ The i/g normal form of a problem with a nonempty goal has preconditions: every e
 gains the auxiliary `i` variable as a precondition, the `init` action has `{i}` as precondition,
 and the `goal` action has the (nonempty) embedded goal as precondition.
 -/
-lemma i_g_normal_form_has_preconditions {n : ℕ} (prob : STRIPS n)
-    (hg : prob.goal'.val ≠ []) :
+lemma i_g_normal_form_has_preconditions {n : ℕ} (prob : PlanningTask n)
+    (hg : prob.goal'.toList ≠ []) :
     has_preconditions (i_g_normal_form prob) := by
-  unfold has_preconditions; simp_all [ i_g_normal_form ]
-  rintro a ( ⟨ b, hb, rfl ⟩ | rfl | rfl ) <;> simp [ hg ]
+      intro a ha;
+      unfold i_g_normal_form at ha;
+      unfold toVarSet' at *; simp_all +decide [ List.map ] ;
+      rcases ha with ( ⟨ a, ha, rfl ⟩ | rfl | rfl ) <;> simp_all +decide [ singletonVarSet ];
+      · simp +decide [ VarSet'.toList ];
+        exact ne_of_apply_ne List.length ( by simp +decide [ Finset.length_sort ] );
+      · unfold toVarSet'; simp +decide [ List.SortedLT ] ;
+        exact List.ne_nil_of_mem ( List.mem_singleton_self _ );
+      · simp_all +decide [ List.eq_nil_iff_forall_not_mem ]
 
-/-- A precondition choice function is *relax invariant* if it picks the same precondition for any
-two actions that have the same delete relaxation (i.e. that agree on name, preconditions, add- and
-delete-effects modulo the delete effect, and on cost).  Such pcfs make the induced landmark closed
-under delete-relaxation equivalence, which is exactly what is needed to turn a delete-relaxed
-landmark into a genuine one.  A canonical pcf (e.g. "pick the smallest precondition") is relax
-invariant.
-
-NOTE: this invariant is **no longer needed** for the admissibility of `lmcut` (see
-`lmcut_admissible`, `lmcut_inner_admissible_for_init`).  Admissibility holds for *every* pcf, because
-each step charges its value on the whole relax-equivalence class of the cut-induced landmark
-(`get_all_equiv_delete_relaxed_actions`), which is a genuine landmark unconditionally.  The
-definition and `landmark_induced_closed_under_relax` below are kept only for documentation. -/
-def relax_invariant_pcf {n : ℕ} (prob : STRIPS n) (pcf : precondition_choice_function prob) : Prop :=
+def relax_invariant_pcf {n : ℕ} (prob : PlanningTask n) (pcf : precondition_choice_function prob) : Prop :=
   ∀ (a b : {x : Action n // x ∈ prob.actions'}),
     delete_relax_action a.val = delete_relax_action b.val → (↑(pcf a) : Fin n) = (↑(pcf b) : Fin n)
 
@@ -507,67 +346,58 @@ def relax_invariant_pcf {n : ℕ} (prob : STRIPS n) (pcf : precondition_choice_f
 
 /-- the IG normalform has only one init fact and one goal fact and we are able to obtain them -/
 
-def unitary_init {n : ℕ} (prob : STRIPS n) : Prop := prob.init.ncard == 1
-def unitary_goal {n : ℕ} (prob : STRIPS n) : Prop := prob.goal'.val.length == 1
-/-- In the i/g normal form the only initial fact is the auxiliary variable `i` (at index `n`). -/
-lemma i_g_normalform_init_eq {n : ℕ} (prob : STRIPS n) :
-    (i_g_normal_form prob).init = {(⟨n, by omega⟩ : Fin (n + 2))} := by
-  unfold STRIPS.init i_g_normal_form
-  ext ⟨x, hx⟩
-  simp [convertState, BitVec.getElem_twoPow]
+def unitary_init {n : ℕ} (prob : PlanningTask n) : Prop := prob.init.ncard == 1
+def unitary_goal {n : ℕ} (prob : PlanningTask n) : Prop := prob.goal'.toList.length == 1
 
-lemma i_g_normalform_is_unitary_init {n : ℕ} (prob : STRIPS n):
+/-
+In the i/g normal form the only initial fact is the auxiliary variable `i` (at index `n`).
+-/
+lemma i_g_normalform_init_eq {n : ℕ} (prob : PlanningTask n) :
+    (i_g_normal_form prob).init = {(⟨n, by omega⟩ : Fin (n + 2))} := by
+      convert Set.ext _;
+      simp +decide [ i_g_normal_form, PlanningTask.init' ];
+      simp +decide [ PlanningTask.init, SetLike.coe ];
+      exact fun x => ⟨ fun hx => Fin.ext hx, fun hx => hx ▸ rfl ⟩
+
+lemma i_g_normalform_is_unitary_init {n : ℕ} (prob : PlanningTask n):
     unitary_init (i_g_normal_form prob) := by
   rw [unitary_init, beq_iff_eq, i_g_normalform_init_eq, Set.ncard_singleton]
-lemma i_g_normalform_is_unitary_goal {n : ℕ} (prob : STRIPS n):
+
+lemma i_g_normalform_is_unitary_goal {n : ℕ} (prob : PlanningTask n):
     unitary_goal (i_g_normal_form prob) := by
-  rfl
+      rw [ i_g_normal_form ];
+      use Eq.symm (by
+      rw [ eq_comm, ← Multiset.coe_card ] ;
+      rw [ ← Multiset.toFinset_card_of_nodup ] <;> norm_num [ singletonVarSet ];
+      · rw [ Finset.card_eq_one ] ; use ⟨ n + 1, by omega ⟩ ; ext ; simp +decide [ mem_toVarSet' ] ;
+      · grind +suggestions)
 
-/-
-The initial state, viewed as a `Set (Fin n)`, is the coercion of the finite set of variables
-that are `true` in the underlying bit vector `prob.init'`.
--/
-lemma init_eq_varset_toFinset {n : ℕ} (prob : STRIPS n) :
-    prob.init = ↑(varset'_of_state' prob.init').val.toFinset := by
-      convert Set.ext _
-      intro x; unfold STRIPS.init; simp [ convertState, varset'_of_state'_mem ]
+lemma init_eq_varset_toFinset {n : ℕ} (prob : PlanningTask n) :
+    prob.init = ↑(prob.init').toList.toFinset :=
+  (State'.coe_toList_toFinset prob.init').symm
+lemma init_ncard_eq_varset_length {n : ℕ} (prob : PlanningTask n) :
+    prob.init.ncard = (prob.init').toList.length :=
+  State'.ncard_convertState_eq_toList_length prob.init'
+lemma unitary_init_varset_length {n : ℕ} (prob : PlanningTask n) (u : unitary_init prob) :
+    (prob.init').toList.length = 1 := by
+  have h : prob.init.ncard = 1 := by simpa [unitary_init, beq_iff_eq] using u
+  rw [← init_ncard_eq_varset_length]; exact h
+def get_unitary_init {n : ℕ} (prob : PlanningTask n) (u : unitary_init prob) : Fin n :=
+  prob.init'.toList.head
+    (List.ne_nil_of_length_pos (by rw [unitary_init_varset_length prob u]; norm_num))
+def get_unitary_goal{n : ℕ} (prob : PlanningTask n) (u : unitary_goal prob) : Fin n :=
+  prob.goal'.toList.head (by unfold unitary_goal at u ; grind)
 
-/-
-The number of true variables in the initial state equals the length of the sorted list of
-true variables of `prob.init'`.
--/
-lemma init_ncard_eq_varset_length {n : ℕ} (prob : STRIPS n) :
-    prob.init.ncard = (varset'_of_state' prob.init').val.length := by
-      rw [init_eq_varset_toFinset, Set.ncard_coe_finset, List.toFinset_card_of_nodup]
-      exact List.Pairwise.imp_of_mem ( fun x y hxy => by simpa using ne_of_lt hxy ) ( List.sortedLT_iff_pairwise.mp ( varset'_of_state' prob.init' |>.property ) )
-
-/-- For a unitary initial state the sorted list of true variables has length exactly one. -/
-lemma unitary_init_varset_length {n : ℕ} (prob : STRIPS n) (u : unitary_init prob) :
-    (varset'_of_state' prob.init').val.length = 1 := by
-  rw [← init_ncard_eq_varset_length]
-  have := u; simp only [unitary_init, beq_iff_eq] at this; exact this
-
-/-- Computable extraction of the single initial fact, read directly off the bit vector
-`prob.init'` (its unique true variable). -/
-def get_unitary_init {n : ℕ} (prob : STRIPS n) (u : unitary_init prob) : Fin n :=
-  (varset'_of_state' prob.init').val.head (by
-    have h := unitary_init_varset_length prob u
-    intro hnil; rw [hnil, List.length_nil] at h; exact absurd h (by omega))
-
-def get_unitary_goal{n : ℕ} (prob : STRIPS n) (u : unitary_goal prob) : Fin n :=
-  prob.goal'.val.head (by unfold unitary_goal at u ; grind)
-
-lemma get_unitary_init_is_init {n : ℕ} (prob : STRIPS n) (u : unitary_init prob):
+lemma get_unitary_init_is_init {n : ℕ} (prob : PlanningTask n) (u : unitary_init prob):
     prob.init = {get_unitary_init prob u} := by
-  have h := unitary_init_varset_length prob u
-  obtain ⟨a, ha⟩ := List.length_eq_one_iff.mp h
+  have hlen := unitary_init_varset_length prob u
+  obtain ⟨a, ha⟩ := List.length_eq_one_iff.mp hlen
   have hhead : get_unitary_init prob u = a := by simp [get_unitary_init, ha]
   rw [init_eq_varset_toFinset, hhead, ha]
   simp
-
-lemma get_unitary_goal_is_goal {n : ℕ} (prob : STRIPS n) (u : unitary_goal prob):
-    prob.goal'.val = [get_unitary_goal prob u] := by
-  have hlen : prob.goal'.val.length = 1 := by
+lemma get_unitary_goal_is_goal {n : ℕ} (prob : PlanningTask n) (u : unitary_goal prob):
+    prob.goal'.toList = [get_unitary_goal prob u] := by
+  have hlen : prob.goal'.toList.length = 1 := by
     have := u; simp only [unitary_goal, beq_iff_eq] at this; exact this
   obtain ⟨a, ha⟩ := List.length_eq_one_iff.mp hlen
   simp [get_unitary_goal, ha]
@@ -575,28 +405,28 @@ lemma get_unitary_goal_is_goal {n : ℕ} (prob : STRIPS n) (u : unitary_goal pro
 
 
 /-- the justification graph selects one precondition per action and connects facts using them - and ignoring their deleting effects. We use NatGraph here, as we have search algorithms for them -/
-def justification_graph {n : ℕ} (prob : STRIPS n) (pcf : precondition_choice_function prob) : NatGraph (Fin n) :=
+def justification_graph {n : ℕ} (prob : PlanningTask n) (pcf : precondition_choice_function prob) : NatGraph (Fin n) :=
   -- We quantify over the subtype `{b // b ∈ prob.actions'}` so that the precondition choice
   -- function `pcf` can be applied directly (it needs the membership witness).  Membership is
-  -- phrased through `a.val.add'.val.toFinset`, which is definitionally `t ∈ a.val.add`, so that
+  -- phrased through `a.val.add'.toList.toFinset`, which is definitionally `t ∈ a.val.add`, so that
   -- the relation is decidable.
   let edges : Fin n → Fin n → Prop := fun f t =>
-    ∃ a : {b : Action n // b ∈ prob.actions'}, f = (↑(pcf a) : Fin n) ∧ t ∈ a.val.add'.val.toFinset
+    ∃ a : {b : Action n // b ∈ prob.actions'}, f = (↑(pcf a) : Fin n) ∧ t ∈ a.val.add'.toList.toFinset
 
   let dg : Digraph (Fin n) := Digraph.mk edges
   let dg_dec : DecidableRel dg.Adj := fun f t => inferInstanceAs (Decidable (edges f t))
 
   -- cost of an edge is the cheapest cost of an action that created that edge.  We filter the
-  -- *attached* action list so that `pcf a` (which needs the membership witness) and `a.val.add'`
+  -- *attached* action list so that `pcf a` (which needs the membership witness) and `a.val.add`
   -- are well typed, and we collect the underlying actions afterwards.
   let cost : (u v : Fin n) → dg.Adj u v → ℕ := fun f t adj =>
     let edgeActions : List (Action n) := (prob.actions'.attach.filter (fun a =>
-      decide (f = (↑(pcf a) : Fin n) ∧ t ∈ a.val.add'.val.toFinset))).map (·.val)
+      decide (f = (↑(pcf a) : Fin n) ∧ t ∈ a.val.add'.toList.toFinset))).map (·.val)
     (edgeActions.map (·.cost)).min (by
       obtain ⟨a, hf, ht⟩ := adj
       have ha : a.val ∈ edgeActions := by
         simp only [edgeActions, List.mem_map, List.mem_filter]
-        exact ⟨a, ⟨List.mem_attach _ _, by simp [hf, ht]⟩, rfl⟩
+        exact ⟨a, ⟨List.mem_attach _ _, by simp only [decide_eq_true_eq]; exact ⟨hf, ht⟩⟩, rfl⟩
       simp only [ne_eq, List.map_eq_nil_iff]
       exact List.ne_nil_of_mem ha)
 
@@ -623,85 +453,57 @@ abbrev cut_in_graph {V : Type} {E : Type}  [FinEnum V] (g : WeightedDiGraph V E)
   IsEmpty ((remove_edges g cut).Path s t)
 
 
-def landmark_induced_by_cut {n : ℕ} (prob : STRIPS n) (cut : List (Fin n × Fin n)) (pcf : precondition_choice_function prob) : List (Action n) :=
+def landmark_induced_by_cut {n : ℕ} (prob : PlanningTask n) (cut : List (Fin n × Fin n)) (pcf : precondition_choice_function prob) : List (Action n) :=
     cut.flatMap (fun (f,t) => (prob.actions'.attach.filter (fun a =>
-      decide (f = (↑(pcf a) : Fin n) ∧ t ∈ a.val.add'.val.toFinset)
+      decide (f = (↑(pcf a) : Fin n) ∧ t ∈ a.val.add'.toList.toFinset)
     )).map (·.val) )
 
-
-/-- Core reachability lemma for the cut argument.  Replaying a delete-relaxed path of `prob`,
+/-
+Core reachability lemma for the cut argument.  Replaying a delete-relaxed path of `prob`,
 every fact that is true at the end of the path can be reached, in the *cut* justification graph
 `remove_edges (justification_graph prob pcf) cut`, from any source `src` that already reaches the
 start facts — **provided** none of the path's actions witnesses a cut edge (`Hwit`).
 
 The induction tracks `Hsrc`, the set of currently reachable facts: a delete-relaxed action `a`
 with chosen precondition `pcf a` (true, hence already reachable) adds facts `y ∈ a.add`; the
-justification edge `pcf a → y` survives the cut by `Hwit`, extending the reachability. -/
-private lemma jgraph_reach_of_dr_path {n : ℕ} (prob : STRIPS n)
+justification edge `pcf a → y` survives the cut by `Hwit`, extending the reachability.
+-/
+private lemma jgraph_reach_of_dr_path {n : ℕ} (prob : PlanningTask n)
     (pcf : precondition_choice_function prob) (cut : List (Fin n × Fin n))
     (src : Fin n) :
     ∀ {S T : State n} (p : Path (delete_relaxation prob) S T),
     (∀ (a0 : {b : Action n // b ∈ prob.actions'}),
       delete_relax_action a0.val ∈ p.actionsUsed →
-      ∀ y ∈ a0.val.add'.val.toFinset, ((↑(pcf a0) : Fin n), y) ∉ cut) →
+      ∀ y ∈ a0.val.add'.toList.toFinset, ((↑(pcf a0) : Fin n), y) ∉ cut) →
     (∀ s ∈ S, Nonempty ((remove_edges (justification_graph prob pcf) cut).Walk src s)) →
     ∀ t ∈ T, Nonempty ((remove_edges (justification_graph prob pcf) cut).Walk src t) := by
-  intro S T p
-  induction p with
-  | empty s => intro _ Hsrc t ht; exact Hsrc t ht
-  | cons a s2 ha succ rest ih =>
-    rename_i s1 s3
-    intro Hwit Hsrc t ht
-    obtain ⟨a0, ha0, ha0eq⟩ : ∃ a0, a0 ∈ prob.actions' ∧ delete_relax_action a0 = a := by
-      unfold delete_relaxation STRIPS.actions at ha
-      simp only [List.coe_toFinset, Set.mem_setOf_eq, List.mem_map] at ha
-      exact ha
-    have hdel : a.del = (∅ : Set (Fin n)) := dr_action_del_empty prob ha
-    have hs2 : s2 = s1 ∪ a.add := by
-      have h := succ.2; rw [hdel, Set.diff_empty] at h; exact h
-    have Hsrc2 : ∀ x ∈ s2, Nonempty ((remove_edges (justification_graph prob pcf) cut).Walk src x) := by
-      intro x hx
-      rw [hs2] at hx
-      rcases hx with hxS | hxAdd
-      · exact Hsrc x hxS
-      · set b : {c : Action n // c ∈ prob.actions'} := ⟨a0, ha0⟩ with hb
-        have hp0S : (↑(pcf b) : Fin n) ∈ s1 := by
-          apply succ.1; rw [← ha0eq]; exact (pcf b).2
-        obtain ⟨w⟩ := Hsrc _ hp0S
-        have hxAdd' : x ∈ a0.add'.val.toFinset := by rw [← ha0eq] at hxAdd; exact hxAdd
-        have hcut : ((↑(pcf b) : Fin n), x) ∉ cut := by
-          apply Hwit b _ x hxAdd'
-          show delete_relax_action a0 ∈ a :: rest.actionsUsed
-          rw [ha0eq]; exact List.mem_cons_self
-        have hadj : (remove_edges (justification_graph prob pcf) cut).Adj (↑(pcf b)) x :=
-          ⟨⟨b, rfl, hxAdd'⟩, hcut⟩
-        exact ⟨w.concat hadj⟩
-    have Hwit' : ∀ (a0' : {b : Action n // b ∈ prob.actions'}),
-        delete_relax_action a0'.val ∈ rest.actionsUsed →
-        ∀ y ∈ a0'.val.add'.val.toFinset, ((↑(pcf a0') : Fin n), y) ∉ cut := by
-      intro a0' h y hy
-      apply Hwit a0' _ y hy
-      show delete_relax_action a0'.val ∈ a :: rest.actionsUsed
-      exact List.mem_cons_of_mem _ h
-    exact ih Hwit' Hsrc2 t ht
+      intros S T p hp hsrc t ht;
+      induction' p with a s1 s2 s3 ha succ ih generalizing src;
+      · exact hsrc t ht;
+      · rename_i h₁ h₂;
+        apply h₂ src (fun a0 ha0 => hp a0 (by
+        exact List.mem_cons_of_mem _ ha0)) (fun s hs => by
+          cases ih ; simp_all +decide [ Path.actionsUsed ];
+          cases hs <;> simp_all +decide [ Applicable ];
+          unfold delete_relaxation at succ; simp_all +decide [ PlanningTask.actions ] ;
+          obtain ⟨ a, ha, rfl ⟩ := succ; specialize hp a ha; simp_all +decide [ delete_relax_action ] ;
+          obtain ⟨ p, hp ⟩ := hsrc ( pcf ⟨ a, ha ⟩ ) ( by
+            exact ‹ ( a.pre : Set ( Fin n ) ) ⊆ s2 › ( by simp [ Set.ext_iff ] ) );
+          · exact ⟨ WeightedDiGraph.Walk.cons ( by
+              unfold remove_edges; simp +decide [ justification_graph ] ;
+              exact ⟨ ⟨ a, ⟨ ha, rfl ⟩, by assumption ⟩, hp s ‹_› ⟩ ) ( WeightedDiGraph.Walk.nil ) ⟩;
+          · exact ⟨ WeightedDiGraph.Walk.cons ‹_› ( ‹WeightedDiGraph.Walk _ _›.append ( WeightedDiGraph.Walk.cons ( by
+              exact ⟨ ⟨ ⟨ a, ha ⟩, rfl, by aesop ⟩, by aesop ⟩ ) WeightedDiGraph.Walk.nil ) ) ⟩) ht
 
-/-- An action witnessing a cut edge `(f, t)` (i.e. `f` is its chosen precondition and `t` one of
-its add effects) belongs to the induced landmark. -/
-private lemma mem_landmark_induced {n : ℕ} (prob : STRIPS n) (cut : List (Fin n × Fin n))
+private lemma mem_landmark_induced {n : ℕ} (prob : PlanningTask n) (cut : List (Fin n × Fin n))
     (pcf : precondition_choice_function prob)
     (a0 : {b : Action n // b ∈ prob.actions'}) (f t : Fin n)
-    (hft : (f, t) ∈ cut) (hf : f = (↑(pcf a0) : Fin n)) (ht : t ∈ a0.val.add'.val.toFinset) :
+    (hft : (f, t) ∈ cut) (hf : f = (↑(pcf a0) : Fin n)) (ht : t ∈ a0.val.add'.toList.toFinset) :
     a0.val ∈ landmark_induced_by_cut prob cut pcf := by
-  unfold landmark_induced_by_cut
-  rw [List.mem_flatMap]
-  refine ⟨(f, t), hft, ?_⟩
-  rw [List.mem_map]
-  refine ⟨a0, ?_, rfl⟩
-  rw [List.mem_filter]
-  exact ⟨List.mem_attach _ _, by simp [hf, ht]⟩
+      simp_all +decide [ landmark_induced_by_cut ];
+      exact ⟨ t, hft, a0.2, ht ⟩
 
-/-- Every action of the induced landmark is an action of the problem. -/
-private lemma landmark_subset_actions {n : ℕ} (prob : STRIPS n) (cut : List (Fin n × Fin n))
+private lemma landmark_subset_actions {n : ℕ} (prob : PlanningTask n) (cut : List (Fin n × Fin n))
     (pcf : precondition_choice_function prob) (a : Action n)
     (ha : a ∈ landmark_induced_by_cut prob cut pcf) : a ∈ prob.actions' := by
   unfold landmark_induced_by_cut at ha
@@ -719,72 +521,52 @@ then `b` is in the landmark as well.
 This lemma is no longer used by the admissibility proof (which charges the entire relax-equivalence
 class via `get_all_equiv_delete_relaxed_actions` instead); it is retained for documentation.
 -/
-lemma landmark_induced_closed_under_relax {n : ℕ} (prob : STRIPS n) (cut : List (Fin n × Fin n))
+lemma landmark_induced_closed_under_relax {n : ℕ} (prob : PlanningTask n) (cut : List (Fin n × Fin n))
     (pcf : precondition_choice_function prob) (hinv : relax_invariant_pcf prob pcf)
     {a b : Action n} (ha : a ∈ landmark_induced_by_cut prob cut pcf)
     (hb : b ∈ prob.actions') (hrel : delete_relax_action b = delete_relax_action a) :
     b ∈ landmark_induced_by_cut prob cut pcf := by
-  -- By definition of `landmark_induced_by_cut`, we know that `a` is in the landmark.
-  unfold landmark_induced_by_cut at ha
-  simp +zetaDelta at *
-  obtain ⟨ c, ⟨ ha₁, ha₂ ⟩, ha₃ ⟩ := ha
-  convert mem_landmark_induced prob cut pcf ⟨ b, hb ⟩ ( pcf ⟨ a, ha₁ ⟩ ) c ha₂ _ _ using 1
-  · exact hinv ⟨ b, hb ⟩ ⟨ a, ha₁ ⟩ hrel ▸ rfl
-  · unfold delete_relax_action at hrel
-    simp_all only [Action.mk.injEq, true_and, mem_toFinset]
+  unfold landmark_induced_by_cut at *;
+  simp +zetaDelta at *;
+  obtain ⟨ c, hc₁, hc₂ ⟩ := ha;
+  use c;
+  obtain ⟨ ha₁, ha₂ ⟩ := hc₁;
+  have := hinv ⟨ a, ha₁ ⟩ ⟨ b, hb ⟩ ; simp_all +decide [ delete_relax_action ] ;
 
-/-- a cut in the justification graph implies a (del-rel) landmark. The idea here is that without the cut, we can never make one of the facts on the "right-hand" side of the cut true and thus also never the goal. This stems from the property that the cut separates the unitary init and goal facts. -/
-lemma cuts_in_justification_graph_are_delete_relaxed_landmarks {n : ℕ} (prob : STRIPS n)
+lemma cuts_in_justification_graph_are_delete_relaxed_landmarks {n : ℕ} (prob : PlanningTask n)
     (u_i : unitary_init prob)
     (u_g : unitary_goal prob)
     (pcf : precondition_choice_function prob) (cut : List ((Fin n) × (Fin n))):
     cut_in_graph (justification_graph prob pcf) (get_unitary_init prob u_i) (get_unitary_goal prob u_g) cut →
       is_delete_relaxed_disjunctive_action_landmark_for_state prob (landmark_induced_by_cut prob cut pcf) prob.init' := by
-  intro hcut
-  refine ⟨?_, ?_⟩
-  · -- Every landmark action is a genuine action, hence its relaxation is in the delete relaxation.
-    rw [List.all_eq_true]
-    intro a ha
-    have ha' : a ∈ prob.actions' := landmark_subset_actions prob cut pcf a ha
-    simp only [decide_eq_true_eq]
-    show delete_relax_action a ∈ (delete_relaxation prob).actions
-    unfold delete_relaxation STRIPS.actions
-    simp only [List.coe_toFinset, Set.mem_setOf_eq, List.mem_map]
-    exact ⟨a, ha', rfl⟩
-  · -- Every delete-relaxed plan uses a landmark action.
-    intro plan
-    by_contra hcon
-    push_neg at hcon
-    set i0 := get_unitary_init prob u_i with hi0
-    set g0 := get_unitary_goal prob u_g with hg0def
-    -- No plan action witnesses a cut edge (else it would be a used landmark action).
-    have Hwit : ∀ (a0 : {b : Action n // b ∈ prob.actions'}),
-        delete_relax_action a0.val ∈ plan.path.actionsUsed →
-        ∀ y ∈ a0.val.add'.val.toFinset, ((↑(pcf a0) : Fin n), y) ∉ cut := by
-      intro a0 hused y hy hmemcut
-      have hlm : a0.val ∈ landmark_induced_by_cut prob cut pcf :=
-        mem_landmark_induced prob cut pcf a0 (↑(pcf a0)) y hmemcut rfl hy
-      exact hcon a0.val hlm hused
-    -- The unitary initial fact `i0` reaches itself.
-    have hinit : convertState prob.init' = ({i0} : Set (Fin n)) := get_unitary_init_is_init prob u_i
-    have Hsrc : ∀ s ∈ (convertState prob.init' : State n),
-        Nonempty ((remove_edges (justification_graph prob pcf) cut).Walk i0 s) := by
-      intro s hs
-      rw [hinit, Set.mem_singleton_iff] at hs
-      subst hs
-      exact ⟨WeightedDiGraph.Walk.nil⟩
-    have hreach := jgraph_reach_of_dr_path prob pcf cut i0 plan.path Hwit Hsrc
-    -- The unitary goal fact `g0` is true at the end of the plan.
-    have hg0 : g0 ∈ plan.last := by
-      apply plan.goal
-      show g0 ∈ convertVarSet (delete_relaxation prob).goal'
-      unfold convertVarSet
-      rw [show (delete_relaxation prob).goal' = prob.goal' from rfl, get_unitary_goal_is_goal prob u_g]
-      simp [hg0def]
-    -- Hence `g0` is reachable from `i0` in the cut graph, contradicting the cut.
-    obtain ⟨w⟩ := hreach g0 hg0
-    exact hcut.false ⟨w.bypass, WeightedDiGraph.Walk.bypass_isPath w⟩
-
+        intro hcut
+        constructor;
+        · simp +decide [ PlanningTask.actions, delete_relaxation ];
+          exact fun x hx => ⟨ x, landmark_subset_actions prob cut pcf x hx, rfl ⟩;
+        · contrapose! hcut
+          generalize_proofs at *;
+          obtain ⟨plan, hplan⟩ := hcut
+          have h_reachable : ∀ t ∈ plan.last, Nonempty ((remove_edges (justification_graph prob pcf) cut).Walk (get_unitary_init prob u_i) t) := by
+            apply jgraph_reach_of_dr_path prob pcf cut (get_unitary_init prob u_i) plan.path
+            generalize_proofs at *;
+            · intro a0 ha0 y hy hcut
+              have h_mem : a0.val ∈ landmark_induced_by_cut prob cut pcf := by
+                exact mem_landmark_induced prob cut pcf a0 _ _ hcut rfl hy
+              generalize_proofs at *;
+              exact hplan a0.val h_mem ha0;
+            · have h_reachable : convertState prob.init' = {get_unitary_init prob u_i} := by
+                convert get_unitary_init_is_init prob u_i using 1
+              generalize_proofs at *;
+              simp [h_reachable];
+              exact ⟨ WeightedDiGraph.Walk.nil ⟩
+          generalize_proofs at *;
+          have h_goal_reachable : Nonempty ((remove_edges (justification_graph prob pcf) cut).Walk (get_unitary_init prob u_i) (get_unitary_goal prob u_g)) := by
+            have h_goal_reachable : get_unitary_goal prob u_g ∈ prob.goal'.toList.toFinset := by
+              have := get_unitary_goal_is_goal prob u_g; aesop;
+            generalize_proofs at *;
+            exact h_reachable _ ( plan.goal <| by simpa [PlanningTask.goal'] using h_goal_reachable)
+          generalize_proofs at *;
+          exact ⟨ h_goal_reachable.some.bypass, h_goal_reachable.some.bypass_isPath ⟩
 
 def zero_cost_reachable [FinEnum V] (g : NatGraph V) (v goal : V) : Bool :=
     let ret := NatGraph.astar (g:=g) (fun _ => 0) v goal
@@ -818,15 +600,13 @@ def edges_entering_goal_zone {V : Type} [FinEnum V] (g : NatGraph V) (goal : V) 
     )
   )
 
-
-/-- The constant-zero heuristic is admissible (costs are natural numbers, so `0` underestimates). -/
+/-
+The constant-zero heuristic is admissible (costs are natural numbers, so `0` underestimates).
+-/
 lemma zero_heur_graph_admissible {V : Type} [FinEnum V] (g : NatGraph V) (goal : V) :
     g.admissible (fun _ => 0) goal := by
-  intro v p; exact Nat.zero_le _
+      intro v p; exact zero_le _;
 
-/-
-A zero-cost walk witnesses `zero_cost_reachable`.
--/
 lemma zero_cost_reachable_of_walk {V : Type} [FinEnum V] (g : NatGraph V) {v goal : V}
     (w : g.Walk v goal) (hw : w.cost = 0) : zero_cost_reachable g v goal := by
       have h_path : ∃ p : g.Path v goal, p.cost = 0 := by
@@ -834,7 +614,7 @@ lemma zero_cost_reachable_of_walk {V : Type} [FinEnum V] (g : NatGraph V) {v goa
       obtain ⟨p, hp⟩ : ∃ p : g.Path v goal, p.cost = 0 := h_path
       have h_complete : (NatGraph.astar (g:=g) (fun _ => 0) v goal).isSome := by
         apply NatGraph.astar_is_complete
-        exact ⟨ p, rfl ⟩
+        exact ⟨ p, fun u _ => by simp [NatGraph.hsearch_expandable] ⟩
       have h_optimal : ((NatGraph.astar (g:=g) (fun _ => 0) v goal).get h_complete).cost ≤ p.cost := by
         apply NatGraph.astar_is_optimal
         exact zero_heur_graph_admissible g goal
@@ -873,6 +653,16 @@ lemma mem_edges_entering_goal_zone {V : Type} [FinEnum V] (g : NatGraph V) (goal
     (hu : u ∉ goal_zone g goal) (hv : v ∈ goal_zone g goal) (hadj : g.Adj u v) :
     (u, v) ∈ edges_entering_goal_zone g goal := by
       unfold edges_entering_goal_zone; simp [ List.mem_flatMap, List.mem_filterMap, hv, hu, hadj ]
+
+/-- The source of any edge recorded in `edges_entering_goal_zone` lies outside the goal zone. -/
+lemma edges_entering_goal_zone_source_not_mem {V : Type} [FinEnum V] (g : NatGraph V) (goal : V)
+    {u v : V} (h : (u, v) ∈ edges_entering_goal_zone g goal) : u ∉ goal_zone g goal := by
+  obtain ⟨u2, v2, hx, hu2, -, -⟩ :
+      ∃ u2 v2, (u, v) = (u2, v2) ∧ u2 ∉ goal_zone g goal ∧ v2 ∈ goal_zone g goal ∧ g.Adj u2 v2 := by
+    unfold edges_entering_goal_zone at h
+    simp_all [List.mem_flatMap, List.mem_filterMap]
+  rw [Prod.mk.injEq] at hx
+  rw [hx.1]; exact hu2
 
 /-
 In the cut graph (all edges entering the goal zone removed), any walk that ends inside the
@@ -924,7 +714,7 @@ lemma edges_entering_goal_zone_are_cut_if_init_not_zero_reachable {V : Type} [Fi
 /- The original statement of `goal_zone_landmark_of_justification_graph` (preserved below in a
 comment) lacked any reachability hypothesis:
 
-lemma goal_zone_landmark_of_justification_graph {n : ℕ} (prob : STRIPS n)
+lemma goal_zone_landmark_of_justification_graph {n : ℕ} (prob : PlanningTask n)
     (u_i : unitary_init prob) (u_g : unitary_goal prob)
     (pcf : precondition_choice_function prob):
       is_delete_relaxed_disjunctive_action_landmark_for_state prob (landmark_induced_by_cut prob (edges_entering_goal_zone (justification_graph prob pcf) (get_unitary_goal prob u_g)) pcf) prob.init'
@@ -935,7 +725,7 @@ zone, no edge enters the goal zone from `init`'s side, the induced landmark can 
 (zero cost) delete-relaxed plan exists — so the landmark property fails.  The faithful statement
 adds the hypothesis `¬ zero_cost_reachable …`, exactly the situation in which the edges entering
 the goal zone form a genuine init/goal cut. -/
-lemma goal_zone_landmark_of_justification_graph {n : ℕ} (prob : STRIPS n)
+lemma goal_zone_landmark_of_justification_graph {n : ℕ} (prob : PlanningTask n)
     (u_i : unitary_init prob)
     (u_g : unitary_goal prob)
     (pcf : precondition_choice_function prob)
@@ -1055,32 +845,36 @@ lemma le_graphDist_iff {V : Type} [FinEnum V] (g : NatGraph V) {src f : V} (c : 
 The justification-graph payload of an edge is at most the cost of any action witnessing that
 edge (chosen precondition `f`, add effect containing `t`).
 -/
-lemma justification_graph_payload_le_cost {n : ℕ} (prob : STRIPS n)
+lemma justification_graph_payload_le_cost {n : ℕ} (prob : PlanningTask n)
     (pcf : precondition_choice_function prob) {f t : Fin n}
     (adj : (justification_graph prob pcf).Adj f t)
     (a0 : {b : Action n // b ∈ prob.actions'}) (hf : f = (↑(pcf a0) : Fin n))
-    (ht : t ∈ a0.val.add'.val.toFinset) :
+    (ht : t ∈ a0.val.add'.toList.toFinset) :
     (justification_graph prob pcf).Payload f t adj ≤ a0.val.cost := by
-      convert List.min_le_of_mem _
-      · infer_instance
-      · infer_instance
-      · grind +qlia
+      have h_mem : a0.val ∈ (prob.actions'.attach.filter (fun a => decide (f = (↑(pcf a) : Fin n) ∧ t ∈ a.val.add'.toList.toFinset))).map (·.val) := by
+        grind +splitImp;
+      obtain ⟨l, hl⟩ : ∃ l : List (Action n), l = (prob.actions'.attach.filter (fun a => decide (f = (↑(pcf a) : Fin n) ∧ t ∈ a.val.add'.toList.toFinset))).map (·.val) ∧ a0.val ∈ l := by
+        exact ⟨ _, rfl, h_mem ⟩;
+      obtain ⟨l', hl'⟩ : ∃ l' : List ℕ, l' = l.map (·.cost) ∧ (a0.val.cost : ℕ) ∈ l' := by
+        grind;
+      convert List.min_le_of_mem hl'.2 using 1;
+      unfold justification_graph; aesop;
 
-lemma cost_goal_zone_landmark_of_justification_graph {n : ℕ} (prob : STRIPS n)
+lemma cost_goal_zone_landmark_of_justification_graph {n : ℕ} (prob : PlanningTask n)
     (u_i : unitary_init prob)
     (u_g : unitary_goal prob)
     (pcf : precondition_choice_function prob):
     ¬ zero_cost_reachable (justification_graph prob pcf) (get_unitary_init prob u_i) (get_unitary_goal prob u_g) →
     ∀ a ∈ (landmark_induced_by_cut prob (edges_entering_goal_zone (justification_graph prob pcf) (get_unitary_goal prob u_g)) pcf), a.cost > 0 := by
       intro h a ha
-      obtain ⟨ft, hmem, ha⟩ : ∃ ft, ft ∈ edges_entering_goal_zone (justification_graph prob pcf) (get_unitary_goal prob u_g) ∧ a ∈ (prob.actions'.attach.filter (fun a => decide (ft.1 = (↑(pcf a) : Fin n) ∧ ft.2 ∈ a.val.add'.val.toFinset))).map (·.val) := by
+      obtain ⟨ft, hmem, ha⟩ : ∃ ft, ft ∈ edges_entering_goal_zone (justification_graph prob pcf) (get_unitary_goal prob u_g) ∧ a ∈ (prob.actions'.attach.filter (fun a => decide (ft.1 = (↑(pcf a) : Fin n) ∧ ft.2 ∈ a.val.add'.toList.toFinset))).map (·.val) := by
         exact exists_of_mem_flatMap ha
       rw [ List.mem_map ] at ha
       obtain ⟨a0, ha0, rfl⟩ := ha
       rw [ List.mem_filter ] at ha0
       have hf : ft.1 = (↑(pcf a0) : Fin n) := by
         grind +splitIndPred
-      have ht : ft.2 ∈ a0.val.add'.val.toFinset := by
+      have ht : ft.2 ∈ a0.val.add'.toList.toFinset := by
         grind
       have hpay : (justification_graph prob pcf).Payload ft.1 ft.2 (edges_entering_goal_zone_are_edges (justification_graph prob pcf) (get_unitary_goal prob u_g) ft hmem) ≠ 0 := by
         exact edges_entering_goal_zone_dont_contain_zero_cost ( justification_graph prob pcf ) ( get_unitary_goal prob u_g ) ft hmem
@@ -1089,7 +883,7 @@ lemma cost_goal_zone_landmark_of_justification_graph {n : ℕ} (prob : STRIPS n)
       grind
 
 /-- runs one step of landmark cutting: compute justification graph, extract cut, generate landmark and partition the cost -/
-def lmcut_step {n : ℕ} (prob : STRIPS n)
+def lmcut_step {n : ℕ} (prob : PlanningTask n)
     --(u_i : unitary_init prob)
     (u_g : unitary_goal prob)
     (pcf : precondition_choice_function prob):
@@ -1118,7 +912,7 @@ def lmcut_step {n : ℕ} (prob : STRIPS n)
 
 /- The original statement of `lmcut_step_yields_landmark` lacked any reachability hypothesis:
 
-theorem lmcut_step_yields_landmark {n : ℕ} (prob : STRIPS n)
+theorem lmcut_step_yields_landmark {n : ℕ} (prob : PlanningTask n)
     (u_i : unitary_init prob) (u_g : unitary_goal prob)
     (pcf : precondition_choice_function prob):
     is_delete_relaxed_disjunctive_action_landmark_for_state prob (lmcut_step prob u_g pcf).1 prob.init'
@@ -1128,7 +922,7 @@ zone, this is **false** without a reachability assumption, for the same reason a
 `goal_zone_landmark_of_justification_graph` (a zero-cost path from init to goal yields an empty
 landmark together with an existing delete-relaxed plan).  The faithful statement adds
 `¬ zero_cost_reachable …`. -/
-theorem lmcut_step_yields_landmark {n : ℕ} (prob : STRIPS n)
+theorem lmcut_step_yields_landmark {n : ℕ} (prob : PlanningTask n)
     (u_i : unitary_init prob)
     (u_g : unitary_goal prob)
     (pcf : precondition_choice_function prob)
@@ -1137,37 +931,38 @@ theorem lmcut_step_yields_landmark {n : ℕ} (prob : STRIPS n)
     is_delete_relaxed_disjunctive_action_landmark_for_state prob (lmcut_step prob u_g pcf).1 prob.init' :=
   goal_zone_landmark_of_justification_graph prob u_i u_g pcf i_g_not_zero_reachable
 
-theorem lmcut_step_yields_partitioning {n : ℕ} (prob : STRIPS n)
-    (u_i : unitary_init prob)
+/-
+Every action of the relax-equivalence closure of the cut landmark costs at least `minCost`
+(the minimum cost of a landmark action), because it is delete-relaxation equivalent to some
+landmark action, which shares its cost.
+-/
+lemma lmcut_minCost_le_cost {n : ℕ} (prob : PlanningTask n) (u_g : unitary_goal prob)
+    (pcf : precondition_choice_function prob) {a : Action n}
+    (ha : a ∈ get_all_equiv_delete_relaxed_actions prob (lmcut_step prob u_g pcf).1) :
+    (lmcut_step prob u_g pcf).2.1 ≤ a.cost := by
+  obtain ⟨l, hl, h_eq⟩ : ∃ l ∈ (lmcut_step prob u_g pcf).1, delete_relax_action a = delete_relax_action l := by
+    contrapose! ha; simp_all +decide [ get_all_equiv_delete_relaxed_actions ] ;
+  unfold lmcut_step at *;
+  simp +zetaDelta at *;
+  split_ifs <;> simp_all +decide [ delete_relax_action ];
+  exact List.min_le_of_mem ( List.mem_map.mpr ⟨ l, hl, rfl ⟩ )
+
+theorem lmcut_step_yields_partitioning {n : ℕ} (prob : PlanningTask n)
     (u_g : unitary_goal prob)
     (pcf : precondition_choice_function prob):
     is_valid_cost_partitioning prob 2 (lmcut_step prob u_g pcf).2.2 := by
-      intro a_index
-      unfold lmcut_step
-      by_cases h : prob.actions'[a_index] ∈ get_all_equiv_delete_relaxed_actions prob (landmark_induced_by_cut prob (edges_entering_goal_zone (justification_graph prob pcf) (get_unitary_goal prob u_g)) pcf)
-      · simp [ List.finRange ]
-        split_ifs <;> norm_num
-        rw [ Nat.add_sub_of_le ]
-        have := cost_eq_of_mem_get_all_equiv prob ( landmark_induced_by_cut prob ( edges_entering_goal_zone ( justification_graph prob pcf ) ( get_unitary_goal prob u_g ) ) pcf ) h
-        obtain ⟨ l, hl₁, hl₂ ⟩ := this
-        convert List.min_le_of_mem _
-        · infer_instance
-        · infer_instance
-        · exact List.mem_map.mpr ⟨ l, hl₁, hl₂ ▸ rfl ⟩
-      · simp [ List.finRange ]
-        grind
+  intro a;
+  by_cases ha : prob.actions'[a] ∈ get_all_equiv_delete_relaxed_actions prob (lmcut_step prob u_g pcf).1;
+  · have := lmcut_minCost_le_cost prob u_g pcf ha;
+    unfold lmcut_step at *;
+    simp +decide [ List.finRange, List.map ];
+    grind +extAll;
+  · unfold lmcut_step;
+    simp +decide [ List.finRange ];
+    split_ifs <;> norm_num;
+    contradiction
 
-/-
-**Paper (Theorem 5, condition (a) companion).**  Every edge entering the goal zone — i.e. every
-cut edge — costs at least the cut value `minCost := (lmcut_step prob u_g pcf).2.1`.
-
-In the paper, `cmin := min_{o ∈ L} cost(o)` is the minimum cost of a cut operator, so each cut
-operator (and hence each cut edge, whose payload is the cheapest witnessing action) costs at least
-`cmin`.  Here the actions witnessing the edge `(u, v)` are a sublist of the cut-induced landmark
-`lm`, and `minCost` is the minimum cost over all of `lm`, so the minimum over the witnesses (the
-payload) is at least `minCost`.
--/
-lemma minCost_le_cut_edge_payload {n : ℕ} (prob : STRIPS n)
+lemma minCost_le_cut_edge_payload {n : ℕ} (prob : PlanningTask n)
     (u_g : unitary_goal prob) (pcf : precondition_choice_function prob)
     {u v : Fin n} (adj : (justification_graph prob pcf).Adj u v)
     (hmem : (u, v) ∈ edges_entering_goal_zone (justification_graph prob pcf)
@@ -1179,11 +974,11 @@ lemma minCost_le_cut_edge_payload {n : ℕ} (prob : STRIPS n)
     simp_all only [↓reduceDIte, zero_le]
   · unfold lmcut_step; simp [ h_empty ]
     obtain ⟨a, ha⟩ : ∃ a ∈ (landmark_induced_by_cut prob (edges_entering_goal_zone (justification_graph prob pcf) (get_unitary_goal prob u_g)) pcf), a.cost = (justification_graph prob pcf).Payload u v adj := by
-      have h_edgeActions_subset_lm : (prob.actions'.attach.filter (fun a => decide (u = (↑(pcf a) : Fin n) ∧ v ∈ a.val.add'.val.toFinset))).map (·.val) ⊆ (landmark_induced_by_cut prob (edges_entering_goal_zone (justification_graph prob pcf) (get_unitary_goal prob u_g)) pcf) := by
+      have h_edgeActions_subset_lm : (prob.actions'.attach.filter (fun a => decide (u = (↑(pcf a) : Fin n) ∧ v ∈ a.val.add'.toList.toFinset))).map (·.val) ⊆ (landmark_induced_by_cut prob (edges_entering_goal_zone (justification_graph prob pcf) (get_unitary_goal prob u_g)) pcf) := by
         unfold landmark_induced_by_cut; simp [ List.subset_def ]
         grind
-      have h_payload_in_lm : (justification_graph prob pcf).Payload u v adj ∈ (prob.actions'.attach.filter (fun a => decide (u = (↑(pcf a) : Fin n) ∧ v ∈ a.val.add'.val.toFinset))).map (fun a => a.val.cost) := by
-        have h_payload_in_lm : (justification_graph prob pcf).Payload u v adj = (List.map (fun a => a.val.cost) (prob.actions'.attach.filter (fun a => decide (u = (↑(pcf a) : Fin n) ∧ v ∈ a.val.add'.val.toFinset)))).min (by
+      have h_payload_in_lm : (justification_graph prob pcf).Payload u v adj ∈ (prob.actions'.attach.filter (fun a => decide (u = (↑(pcf a) : Fin n) ∧ v ∈ a.val.add'.toList.toFinset))).map (fun a => a.val.cost) := by
+        have h_payload_in_lm : (justification_graph prob pcf).Payload u v adj = (List.map (fun a => a.val.cost) (prob.actions'.attach.filter (fun a => decide (u = (↑(pcf a) : Fin n) ∧ v ∈ a.val.add'.toList.toFinset)))).min (by
         obtain ⟨ a, ha ⟩ := adj
         exact List.ne_nil_of_mem ( List.mem_map.mpr ⟨ a, List.mem_filter.mpr ⟨ List.mem_attach _ _, by simpa using ha ⟩, rfl ⟩ )) := by
           unfold justification_graph
@@ -1196,7 +991,7 @@ lemma minCost_le_cut_edge_payload {n : ℕ} (prob : STRIPS n)
 The statement `lmcut_step_yields_landmark_with_heuristic_in_partition` (preserved below in a
 comment) is **false** as written:
 
-theorem lmcut_step_yields_landmark_with_heuristic_in_partition {n : ℕ} (prob : STRIPS n)
+theorem lmcut_step_yields_landmark_with_heuristic_in_partition {n : ℕ} (prob : PlanningTask n)
     (u_i : unitary_init prob) (u_g : unitary_goal prob)
     (pcf : precondition_choice_function prob)
     (i_g_reachable : reachable (justification_graph prob pcf) (get_unitary_init prob u_i) (get_unitary_goal prob u_g)) :
@@ -1245,7 +1040,7 @@ landmark action, and `minCost` is the minimum landmark cost), and the partitioni
 (`delete_relaxation_landmarks_are_landmarks`) turns it into a genuine one — the closure contains
 *every* action of `prob` that is delete-relaxation equivalent to a landmark action, so whichever
 action a real plan actually uses is captured. -/
-lemma lmcut_closure_is_genuine {n : ℕ} (prob : STRIPS n)
+lemma lmcut_closure_is_genuine {n : ℕ} (prob : PlanningTask n)
     (u_i : unitary_init prob) (u_g : unitary_goal prob)
     (pcf : precondition_choice_function prob)
     (i_g_not_zero_reachable : ¬ zero_cost_reachable (justification_graph prob pcf)
@@ -1256,7 +1051,7 @@ lemma lmcut_closure_is_genuine {n : ℕ} (prob : STRIPS n)
   · exact lmcut_step_yields_landmark prob u_i u_g pcf i_g_not_zero_reachable
   · rw [List.all_eq_true]
     intro a ha
-    simpa [STRIPS.actions] using landmark_subset_actions prob _ pcf a ha
+    simpa [PlanningTask.actions] using landmark_subset_actions prob _ pcf a ha
 
 /-
 Transfer a plan of a cost-partitioned problem to a plan of the original problem, recording for
@@ -1264,30 +1059,41 @@ each action used in the recovered plan its index in `prob.actions'` and the matc
 action in the partitioned plan.  This works because `partition_STRIPS` only relabels costs, leaving
 applicability and successor states unchanged.
 -/
-lemma path_partition_to_orig {n P : ℕ} (prob : STRIPS n) (partitioning : cost_partitioning prob P)
+lemma path_partition_to_orig {n P : ℕ} (prob : PlanningTask n) (partitioning : cost_partitioning prob P)
     (p : Fin P) {s1 s2 : State n} (path' : Path (partition_STRIPS prob partitioning p) s1 s2) :
     ∃ path : Path prob s1 s2,
       ∀ a0 ∈ path.actionsUsed, ∃ (i : Fin prob.actions'.length),
         prob.actions'[i] = a0 ∧
         Action.mk a0.name a0.pre' a0.add' a0.del' (partitioning p i) ∈ path'.actionsUsed := by
-  induction' path' with a s2 ha succ π ih
-  · exact ⟨ Path.empty a, by simp [ Path.actionsUsed ] ⟩
-  · rename_i h₁ h₂ h₃
-    obtain ⟨ i, hi ⟩ := List.mem_iff_getElem.mp ( show s2 ∈ (partition_STRIPS prob partitioning p).actions' from by simpa [ STRIPS.actions ] using ih )
-    unfold partition_STRIPS at hi; simp_all [ List.getElem_mapFinIdx ]
-    obtain ⟨ h, rfl ⟩ := hi
-    use Path.cons (prob.actions'[i]) succ (by
-    exact List.mem_toFinset.mpr ( List.getElem_mem _ )) h₁ h₃.choose
-    intro a0 ha0; cases' List.mem_cons.mp ha0 with ha0 ha0 <;> simp_all [ Path.actionsUsed ]
-    · exact ⟨ ⟨ i, h ⟩, rfl, Or.inl rfl ⟩
-    · exact h₃.choose_spec a0 ha0 |> fun ⟨ i, hi ⟩ => ⟨ i, hi.1, Or.inr hi.2 ⟩
+          by_contra! h;
+          -- By definition of ` adapting the plan from the partitioned problem to the original problem, we need to show that the adapted plan is indeed a plan for the original problem. We will do this by induction on the length of the path.
+          induction' path' with path'_rest a' ha' succ' ih;
+          · exact absurd ( h ( Path.empty _ ) ) ( by simp +decide [ Path.actionsUsed ] );
+          · rename_i h₁ h₂ h₃ h₄;
+            obtain ⟨a0, ha0⟩ : ∃ a0 : Action n, ∃ i : Fin prob.actions'.length, prob.actions'[i] = a0 ∧ a' = ⟨a0.name, a0.pre', a0.add', a0.del', partitioning p i⟩ := by
+              simp_all +decide [ PlanningTask.actions, partition_STRIPS ];
+              obtain ⟨ i, hi ⟩ := List.mem_iff_getElem.mp h₁;
+              obtain ⟨ hi₁, hi₂ ⟩ := hi;
+              have h_mem : a' ∈ (prob.actions'.mapFinIdx (fun i a i_lt => Action.mk a.name a.pre' a.add' a.del' (partitioning p ⟨i, i_lt⟩))) := by
+                exact hi₂ ▸ List.mem_dedup.mp ( List.getElem_mem _ ) |> fun h => by simpa [ partition_STRIPS ] using h;
+              obtain ⟨ i, hi ⟩ := List.mem_mapFinIdx.mp h_mem;
+              exact ⟨ ⟨ i, hi.choose ⟩, hi.choose_spec.symm ⟩;
+            obtain ⟨path_rest, hpath_rest⟩ : ∃ path_rest : Path prob succ' ih, ∀ a0 ∈ path_rest.actionsUsed, ∃ i : Fin prob.actions'.length, prob.actions'[i] = a0 ∧ Action.mk a0.name a0.pre' a0.add' a0.del' (partitioning p i) ∈ h₃.actionsUsed := by
+              exact not_forall_not.mp fun h => h₄ <| by simpa using h;
+            generalize_proofs at *;
+            specialize h ( Path.cons a0 succ' ( by
+              unfold PlanningTask.actions; aesop; ) ( by
+              unfold Successor at *; aesop; ) path_rest )
+            generalize_proofs at *;
+            simp_all +decide [ Path.actionsUsed ];
+            grind
 
 /-
 A genuine disjunctive action landmark of `prob` transfers, via cost adaptation, to a genuine
 disjunctive action landmark of any cost-partitioned problem, provided the partition assigns equal
 costs to equal actions.
 -/
-lemma genuine_landmark_partition_transfer {n P : ℕ} (prob : STRIPS n)
+lemma genuine_landmark_partition_transfer {n P : ℕ} (prob : PlanningTask n)
     (partitioning : cost_partitioning prob P) (p : Fin P) (lm : List (Action n))
     (hlm : ∀ a ∈ lm, a ∈ prob.actions')
     (hpart : ∀ (i j : Fin prob.actions'.length), prob.actions'[i] = prob.actions'[j] →
@@ -1296,7 +1102,7 @@ lemma genuine_landmark_partition_transfer {n P : ℕ} (prob : STRIPS n)
     is_disjunctive_action_landmark_for_state (partition_STRIPS prob partitioning p)
       (lm.map (adapt_cost_of_action_to_partition prob partitioning p)) prob.init' := by
   refine' ⟨ _, _ ⟩
-  · simp [ List.all_eq_true, STRIPS.actions ]
+  · simp [ List.all_eq_true, PlanningTask.actions ]
     exact fun x hx => adapt_cost_of_action_to_partition_mem prob partitioning p x (hlm x hx)
   · intro plan
     obtain ⟨path, hpath⟩ := path_partition_to_orig prob partitioning p plan.path
@@ -1316,7 +1122,7 @@ lemma genuine_landmark_partition_transfer {n P : ℕ} (prob : STRIPS n)
       grind
     · exact hi'
 
-theorem lmcut_step_yields_non_zero_heuristic {n : ℕ} (prob : STRIPS n)
+theorem lmcut_step_yields_non_zero_heuristic {n : ℕ} (prob : PlanningTask n)
     (u_i : unitary_init prob)
     (u_g : unitary_goal prob)
     (pcf : precondition_choice_function prob)
@@ -1333,7 +1139,7 @@ theorem lmcut_step_yields_non_zero_heuristic {n : ℕ} (prob : STRIPS n)
             rw [ mem_goal_zone_iff ]
             simp_all only [Bool.false_eq_true, not_false_eq_true]
           exact List.exists_mem_of_ne_nil _ ( edges_entering_goal_zone_nonempty _ _ w ( goal_mem_goal_zone _ _ ) h_nonempty )
-        obtain ⟨a0, ha0⟩ : ∃ a0 : {b : Action n // b ∈ prob.actions'}, ft.1 = (↑(pcf a0) : Fin n) ∧ ft.2 ∈ a0.val.add'.val.toFinset := by
+        obtain ⟨a0, ha0⟩ : ∃ a0 : {b : Action n // b ∈ prob.actions'}, ft.1 = (↑(pcf a0) : Fin n) ∧ ft.2 ∈ a0.val.add'.toList.toFinset := by
           have := edges_entering_goal_zone_are_edges (justification_graph prob pcf) (get_unitary_goal prob u_g) ft hft
           unfold justification_graph at this
           simp_all only [mem_toFinset, Subtype.exists, exists_and_right]
@@ -1346,7 +1152,7 @@ theorem lmcut_step_yields_non_zero_heuristic {n : ℕ} (prob : STRIPS n)
 /-
 A positive step value forces a nonempty landmark.
 -/
-private lemma lmcut_step_landmark_ne_nil {n : ℕ} (prob : STRIPS n)
+private lemma lmcut_step_landmark_ne_nil {n : ℕ} (prob : PlanningTask n)
     (u_g : unitary_goal prob) (pcf : precondition_choice_function prob)
     (hpos : 0 < (lmcut_step prob u_g pcf).2.1) : (lmcut_step prob u_g pcf).1 ≠ [] := by
   contrapose! hpos; unfold lmcut_step at *; simp_all
@@ -1355,7 +1161,7 @@ private lemma lmcut_step_landmark_ne_nil {n : ℕ} (prob : STRIPS n)
 The step value `minCost` is a lower bound on the cost of every action of the cut-induced
 landmark (it is, by definition, the minimum of their costs).
 -/
-private lemma lmcut_step_value_le_cost_of_mem {n : ℕ} (prob : STRIPS n) (u_g : unitary_goal prob)
+private lemma lmcut_step_value_le_cost_of_mem {n : ℕ} (prob : PlanningTask n) (u_g : unitary_goal prob)
     (pcf : precondition_choice_function prob) {a : Action n}
     (ha : a ∈ (lmcut_step prob u_g pcf).1) : (lmcut_step prob u_g pcf).2.1 ≤ a.cost := by
   unfold lmcut_step at *; simp at *
@@ -1378,7 +1184,7 @@ private lemma list_min_const (l : List ℕ) (c : ℕ) (h : l ≠ []) (hc : ∀ x
 The partition-`0` cost of `lmcut_step` depends only on the action (not on its index): equal
 actions get equal costs.
 -/
-private lemma lmcut_part0_action_invariant {n : ℕ} (prob : STRIPS n) (u_g : unitary_goal prob)
+private lemma lmcut_part0_action_invariant {n : ℕ} (prob : PlanningTask n) (u_g : unitary_goal prob)
     (pcf : precondition_choice_function prob) (i j : Fin prob.actions'.length)
     (hij : prob.actions'[i] = prob.actions'[j]) :
     (lmcut_step prob u_g pcf).2.2 ⟨0, by omega⟩ i
@@ -1391,7 +1197,7 @@ Every action of the relax-equivalence closure of the `lmcut_step` landmark, afte
 to partition `0`, has cost equal to the step's value `minCost` (partition `0` charges `minCost`
 exactly to the closure actions).
 -/
-private lemma lmcut_adapt_cost_eq {n : ℕ} (prob : STRIPS n) (u_g : unitary_goal prob)
+private lemma lmcut_adapt_cost_eq {n : ℕ} (prob : PlanningTask n) (u_g : unitary_goal prob)
     (pcf : precondition_choice_function prob) (a : Action n)
     (ha : a ∈ get_all_equiv_delete_relaxed_actions prob (lmcut_step prob u_g pcf).1) :
     (adapt_cost_of_action_to_partition prob (lmcut_step prob u_g pcf).2.2 ⟨0, by omega⟩ a).cost
@@ -1406,7 +1212,7 @@ the landmark is the step's landmark with its action costs adapted to partition `
 `adapt_cost_of_action_to_partition`).  Adapting the costs makes the landmark actions genuine actions
 of the partitioned problem and gives them all cost `minCost`; relax invariance of the pcf makes the
 landmark a genuine (non-relaxed) landmark, so the heuristic evaluates to `minCost`. -/
-theorem lmcut_step_yields_landmark_with_heuristic_in_partition {n : ℕ} (prob : STRIPS n)
+theorem lmcut_step_yields_landmark_with_heuristic_in_partition {n : ℕ} (prob : PlanningTask n)
     (u_i : unitary_init prob) (u_g : unitary_goal prob)
     (pcf : precondition_choice_function prob)
     (i_g_reachable : reachable (justification_graph prob pcf)
@@ -1441,14 +1247,17 @@ theorem lmcut_step_yields_landmark_with_heuristic_in_partition {n : ℕ} (prob :
   have hlm'_ne : (get_all_equiv_delete_relaxed_actions prob (lmcut_step prob u_g pcf).1).map
       (adapt_cost_of_action_to_partition prob (lmcut_step prob u_g pcf).2.2 ⟨0, by omega⟩) ≠ [] := by
     simpa using hclo_ne
+  have key : (((get_all_equiv_delete_relaxed_actions prob (lmcut_step prob u_g pcf).1).map
+        (adapt_cost_of_action_to_partition prob (lmcut_step prob u_g pcf).2.2 ⟨0, by omega⟩)).map
+        (fun a => a.cost)).min (by simpa using hlm'_ne) = (lmcut_step prob u_g pcf).2.1 := by
+    apply list_min_const
+    intro x hx
+    obtain ⟨y, hy, rfl⟩ := List.mem_map.mp hx
+    obtain ⟨a, ha, rfl⟩ := List.mem_map.mp hy
+    exact lmcut_adapt_cost_eq prob u_g pcf a ha
   unfold elementary_landmark_heuristic
   rw [if_pos hgen, dif_neg hlm'_ne]
-  symm
-  apply list_min_const
-  intro x hx
-  obtain ⟨y, hy, rfl⟩ := List.mem_map.mp hx
-  obtain ⟨a, ha, rfl⟩ := List.mem_map.mp hy
-  exact lmcut_adapt_cost_eq prob u_g pcf a ha
+  exact (congrArg (fun x : ℕ => (x : ℕ∞)) key).symm
 
 /-
 The total action cost of `subprob = partition_STRIPS prob (lmcut_step …).2.2 1` is strictly
@@ -1457,7 +1266,7 @@ action (there is at least one, since `minCost > 0` forces a nonempty landmark) h
 partition `1` reduced by `minCost`, while no action's cost increases. This is the measure that
 makes `lmcut_inner` terminate.
 -/
-lemma lmcut_step_subprob_sum_lt {n : ℕ} (prob : STRIPS n) (u_g : unitary_goal prob)
+lemma lmcut_step_subprob_sum_lt {n : ℕ} (prob : PlanningTask n) (u_g : unitary_goal prob)
     (pcf : precondition_choice_function prob) (hpos : (lmcut_step prob u_g pcf).2.1 > 0) :
     ((partition_STRIPS prob (lmcut_step prob u_g pcf).2.2 ⟨1, by omega⟩).actions'.map
         (fun a => a.cost)).sum < (prob.actions'.map (fun a => a.cost)).sum := by
@@ -1482,19 +1291,20 @@ lemma lmcut_step_subprob_sum_lt {n : ℕ} (prob : STRIPS n) (u_g : unitary_goal 
           · convert partition_STRIPS_cost_sum prob ( lmcut_step prob u_g pcf ).2.2 ⟨ 1, by omega ⟩ using 1
           · convert actions_cost_sum_eq prob
 
-def lmcut_inner {n : ℕ} (prob : STRIPS n)
+def lmcut_inner {n : ℕ} (prob : PlanningTask n)
     (u_i : unitary_init prob)
     (u_g : unitary_goal prob)
     (hp : has_preconditions prob)
-    (pcf : Π p : STRIPS n, has_preconditions p → precondition_choice_function p):
-      List (List (Action n)) × ℕ × Σ p : ℕ, (cost_partitioning prob p) :=
+    (pcf : Π p : PlanningTask n, has_preconditions p → precondition_choice_function p):
+      List (List (Action n)) × ℕ∞ × Σ p : ℕ, (cost_partitioning prob p) :=
 
     let jg := justification_graph prob (pcf prob hp)
     let i := (get_unitary_init prob u_i)
     let goal := (get_unitary_goal prob u_g)
 
-    -- return no partitioning (`cost_partitioning prob 0` is the empty family)
-    if ¬ reachable jg i goal then ([[]], (2 ^ n) * max_action_cost prob , ⟨0, fun p => p.elim0⟩)
+    -- return no partitioning (`cost_partitioning prob 0` is the empty family); the problem is
+    -- unsolvable, so the heuristic value is `⊤` (infinity)
+    if ¬ reachable jg i goal then ([[]], ⊤ , ⟨0, fun p => p.elim0⟩)
     -- return no partitioning
     else if zero_cost_reachable jg i goal then ([], 0, ⟨0, fun p => p.elim0⟩)
     else
@@ -1505,7 +1315,7 @@ def lmcut_inner {n : ℕ} (prob : STRIPS n)
        (partition_STRIPS_has_preconditions prob r.2.2 ⟨1, by omega⟩ hp) pcf
 
      let lms : List (List (Action n)):= r.1 :: subret.1
-     let hval : ℕ := r.2.1 + subret.2.1
+     let hval : ℕ∞ := (r.2.1 : ℕ∞) + subret.2.1
      -- combine: partition `0` is the landmark partition computed by this step (`r.2.2 0`),
      -- the remaining partitions are the sub-partitioning found recursively for `subprob`
      -- (whose action list has the same length as `prob`'s, hence the `Fin.cast`).
@@ -1559,95 +1369,86 @@ lemma reachable_of_walk {V : Type} [FinEnum V] (g : NatGraph V) {v goal : V}
     (w : g.Walk v goal) : reachable g v goal := by
   have hcomplete : (NatGraph.astar (g := g) (fun _ => 0) v goal).isSome := by
     apply NatGraph.astar_is_complete
-    exact ⟨⟨w.bypass, WeightedDiGraph.Walk.bypass_isPath w⟩, rfl⟩
+    exact ⟨⟨w.bypass, WeightedDiGraph.Walk.bypass_isPath w⟩, fun u _ => by simp [NatGraph.hsearch_expandable]⟩
   unfold reachable
   cases h : NatGraph.astar (g := g) (fun _ => 0) v goal with
   | none => rw [h] at hcomplete; simp at hcomplete
   | some p => rfl
 
-/-- If the unitary goal is not reachable from the unitary initial fact in the justification graph,
+/-
+If the unitary goal is not reachable from the unitary initial fact in the justification graph,
 then the problem has no plan at all.  A real plan relaxes (via `relax_path`) to a delete-relaxed
 path reaching the goal fact, and replaying that path in the justification graph
 (`jgraph_reach_of_dr_path`, with the empty cut) witnesses reachability of the goal fact from the
-initial fact — contradicting the assumption. -/
-lemma lmcut_no_plan_of_not_reachable {n : ℕ} (prob : STRIPS n) (u_i : unitary_init prob)
+initial fact — contradicting the assumption.
+-/
+lemma lmcut_no_plan_of_not_reachable {n : ℕ} (prob : PlanningTask n) (u_i : unitary_init prob)
     (u_g : unitary_goal prob) (pcf : precondition_choice_function prob)
     (h : ¬ reachable (justification_graph prob pcf)
       (get_unitary_init prob u_i) (get_unitary_goal prob u_g)) :
     IsEmpty (Plan prob prob.init) := by
-  constructor
-  intro plan
+  refine ⟨fun plan => ?_⟩
   apply h
-  set i0 := get_unitary_init prob u_i with hi0
-  set g0 := get_unitary_goal prob u_g with hg0
-  obtain ⟨t2, ht2, q, hq⟩ := relax_path prob plan.path (le_refl prob.init)
-  have Hwit : ∀ (a0 : {b : Action n // b ∈ prob.actions'}),
-      delete_relax_action a0.val ∈ q.actionsUsed →
-      ∀ y ∈ a0.val.add'.val.toFinset, ((↑(pcf a0) : Fin n), y) ∉ ([] : List (Fin n × Fin n)) := by
-    intro a0 _ y _; simp
-  have hinit : convertState prob.init' = ({i0} : Set (Fin n)) := get_unitary_init_is_init prob u_i
-  have Hsrc : ∀ s ∈ (prob.init : State n),
-      Nonempty ((remove_edges (justification_graph prob pcf) []).Walk i0 s) := by
+  -- Relax the real plan to a delete-relaxed path reaching a goal-satisfying state.
+  obtain ⟨t2, ht2, q, _hq⟩ := relax_path prob plan.path (subset_refl prob.init)
+  -- The unitary initial fact reaches itself (empty walk); the empty cut removes nothing.
+  have hsrc : ∀ s ∈ prob.init,
+      Nonempty ((remove_edges (justification_graph prob pcf) []).Walk
+        (get_unitary_init prob u_i) s) := by
     intro s hs
-    rw [show (prob.init : State n) = convertState prob.init' from rfl, hinit,
-      Set.mem_singleton_iff] at hs
-    subst hs; exact ⟨WeightedDiGraph.Walk.nil⟩
-  have hreach := jgraph_reach_of_dr_path prob pcf [] i0 q Hwit Hsrc
-  have hg0last : g0 ∈ plan.last := by
+    rw [get_unitary_init_is_init prob u_i, Set.mem_singleton_iff] at hs
+    subst hs
+    exact ⟨WeightedDiGraph.Walk.nil⟩
+  -- The unitary goal fact is true at the end of the relaxed path.
+  have hgoal_mem : get_unitary_goal prob u_g ∈ t2 := by
+    apply ht2
     apply plan.goal
-    show g0 ∈ convertVarSet prob.goal'
-    unfold convertVarSet
-    rw [get_unitary_goal_is_goal prob u_g]
-    simp [hg0]
-  obtain ⟨w⟩ := hreach g0 (ht2 hg0last)
-  exact reachable_of_walk _ (walk_of_remove_edges_walk _ _ w)
+    rw [mem_convertVarSet]
+    have hg := get_unitary_goal_is_goal prob u_g
+    rw [VarSet'.toList] at hg
+    rw [hg]
+    exact List.mem_singleton.mpr rfl
+  -- Replaying the relaxed path in the (empty-cut) justification graph reaches the goal fact.
+  obtain ⟨w⟩ := jgraph_reach_of_dr_path prob pcf [] (get_unitary_init prob u_i) q
+    (by intro a0 _ y _; simp) hsrc (get_unitary_goal prob u_g) hgoal_mem
+  exact reachable_of_walk _ (walk_of_remove_edges_walk _ [] w)
 
-/-- Replay a path of `prob` in a cost-partitioned problem `partition_STRIPS prob partitioning p`.
-Since partitioning only relabels action costs (applicability and successors are unchanged), the same
-sequence of cost-adapted actions is a valid path, and its used actions are exactly the original ones
-adapted to the partition. -/
-lemma path_transfer_to_partition {n P : ℕ} (prob : STRIPS n)
+lemma path_transfer_to_partition {n P : ℕ} (prob : PlanningTask n)
     (partitioning : cost_partitioning prob P) (p : Fin P)
     {s1 s2 : State n} (path : Path prob s1 s2) :
     ∃ path' : Path (partition_STRIPS prob partitioning p) s1 s2,
       path'.actionsUsed
         = path.actionsUsed.map (adapt_cost_of_action_to_partition prob partitioning p) := by
-  induction path with
-  | empty s => exact ⟨Path.empty s, rfl⟩
-  | cons a m ha succ π ih =>
-    obtain ⟨π', hπ'⟩ := ih
-    have ha' : a ∈ prob.actions' := by simpa [STRIPS.actions] using ha
-    obtain ⟨_, hpre, hadd, hdel⟩ := adapt_cost_of_action_to_partition_fields prob partitioning p a
-    have hmem : adapt_cost_of_action_to_partition prob partitioning p a
-        ∈ (partition_STRIPS prob partitioning p).actions := by
-      simpa [STRIPS.actions] using adapt_cost_of_action_to_partition_mem prob partitioning p a ha'
-    have hpre' : (adapt_cost_of_action_to_partition prob partitioning p a).pre = a.pre := by
-      unfold Action.pre; rw [hpre]
-    have hadd' : (adapt_cost_of_action_to_partition prob partitioning p a).add = a.add := by
-      unfold Action.add; rw [hadd]
-    have hdel' : (adapt_cost_of_action_to_partition prob partitioning p a).del = a.del := by
-      unfold Action.del; rw [hdel]
-    refine ⟨Path.cons (adapt_cost_of_action_to_partition prob partitioning p a) m hmem ?_ π', ?_⟩
-    · unfold Successor Applicable
-      rw [hpre', hadd', hdel']
-      exact succ
-    · simp [Path.actionsUsed, hπ']
+          induction' path with s1 s2 path ih;
+          · exact ⟨ Path.empty _, rfl ⟩;
+          · rename_i h₁ h₂ h₃;
+            obtain ⟨ path', hpath' ⟩ := h₃;
+            use Path.cons (adapt_cost_of_action_to_partition prob partitioning p s2) ih (by
+            -- Since s2 is in the original actions, and the adapted action is just s2 with the cost adjusted, it should be in the partitioned actions as well.
+            simp [adapt_cost_of_action_to_partition, partition_STRIPS];
+            split_ifs <;> simp_all +decide [ PlanningTask.actions ];
+            · grind;
+            · exact absurd ‹_› ( not_le_of_gt ( List.idxOf_lt_length_iff.mpr ‹_› ) )) (by
+            unfold adapt_cost_of_action_to_partition; simp_all +decide [PlanningTask.actions];
+            split_ifs <;> simp_all +decide [ Successor ];
+            exact ⟨ h₁.1, rfl ⟩) path'
+            generalize_proofs at *;
+            simp +decide [ Path.actionsUsed, hpath' ]
 
-/-- A plan of `prob` (for the initial state) replays in any partition; its cost there is the sum of
-the partition's costs of the actions it uses. -/
-lemma plan_transfer_to_partition {n P : ℕ} (prob : STRIPS n)
+lemma plan_transfer_to_partition {n P : ℕ} (prob : PlanningTask n)
     (partitioning : cost_partitioning prob P) (p : Fin P)
     (plan : Plan prob prob.init) :
     ∃ plan' : Plan (partition_STRIPS prob partitioning p)
         (partition_STRIPS prob partitioning p).init,
       plan'.path.cost = (plan.path.actionsUsed.map
         (fun a => (adapt_cost_of_action_to_partition prob partitioning p a).cost)).sum := by
-  obtain ⟨path', hpath'⟩ := path_transfer_to_partition prob partitioning p plan.path
-  refine ⟨⟨plan.last, path', plan.goal⟩, ?_⟩
-  rw [path_cost_eq_sum_actionsUsed, hpath', List.map_map]
-  rfl
+          obtain ⟨path', hpath'⟩ := path_transfer_to_partition prob partitioning p plan.path
+          use ⟨plan.last, path', by
+            exact fun x hx => plan.goal <| by simpa using hx;⟩
+          generalize_proofs at *;
+          rw [ path_cost_eq_sum_actionsUsed, hpath', List.map_map ];
+          rfl
 
-/-- Pointwise-bounded sums of two cost functions over a list. -/
 lemma list_sum_map_add_le {α : Type*} (L : List α) (f g h : α → ℕ)
     (hle : ∀ a ∈ L, f a + g a ≤ h a) :
     (L.map f).sum + (L.map g).sum ≤ (L.map h).sum := by
@@ -1663,9 +1464,9 @@ lemma list_sum_map_add_le {α : Type*} (L : List α) (f g h : α → ℕ)
       _ ≤ h a + (t.map h).sum := Nat.add_le_add hat ht
 
 /-- The value returned by `lmcut_inner` in the zero-cost-reachable branch is `0`. -/
-lemma lmcut_inner_value_zero {n : ℕ} (prob : STRIPS n) (u_i : unitary_init prob)
+lemma lmcut_inner_value_zero {n : ℕ} (prob : PlanningTask n) (u_i : unitary_init prob)
     (u_g : unitary_goal prob) (hp : has_preconditions prob)
-    (pcf : Π p : STRIPS n, has_preconditions p → precondition_choice_function p)
+    (pcf : Π p : PlanningTask n, has_preconditions p → precondition_choice_function p)
     (hr : reachable (justification_graph prob (pcf prob hp))
       (get_unitary_init prob u_i) (get_unitary_goal prob u_g))
     (hz : zero_cost_reachable (justification_graph prob (pcf prob hp))
@@ -1676,9 +1477,9 @@ lemma lmcut_inner_value_zero {n : ℕ} (prob : STRIPS n) (u_i : unitary_init pro
 
 /-- The value returned by `lmcut_inner` in the recursive branch: the step value plus the value of
 the recursive call on the subproblem. -/
-lemma lmcut_inner_value_step {n : ℕ} (prob : STRIPS n) (u_i : unitary_init prob)
+lemma lmcut_inner_value_step {n : ℕ} (prob : PlanningTask n) (u_i : unitary_init prob)
     (u_g : unitary_goal prob) (hp : has_preconditions prob)
-    (pcf : Π p : STRIPS n, has_preconditions p → precondition_choice_function p)
+    (pcf : Π p : PlanningTask n, has_preconditions p → precondition_choice_function p)
     (hr : reachable (justification_graph prob (pcf prob hp))
       (get_unitary_init prob u_i) (get_unitary_goal prob u_g))
     (hz : ¬ zero_cost_reachable (justification_graph prob (pcf prob hp))
@@ -1692,85 +1493,57 @@ lemma lmcut_inner_value_step {n : ℕ} (prob : STRIPS n) (u_i : unitary_init pro
   rw [lmcut_inner]
   simp [hr, hz]
 
-/-- Strong-induction skeleton for `lmcut_inner_admissible_for_init`. -/
+/-
+Pointwise validity of the two-part `lmcut_step` partitioning after cost adaptation: for every
+action of `prob`, its partition-`0` and partition-`1` adapted costs sum to at most its real cost.
+-/
+private lemma lmcut_adapt_cost_sum_le {n : ℕ} (prob : PlanningTask n) (u_g : unitary_goal prob)
+    (pcf : precondition_choice_function prob) {a : Action n} (ha : a ∈ prob.actions') :
+    (adapt_cost_of_action_to_partition prob (lmcut_step prob u_g pcf).2.2 ⟨0, by omega⟩ a).cost
+      + (adapt_cost_of_action_to_partition prob (lmcut_step prob u_g pcf).2.2 ⟨1, by omega⟩ a).cost
+      ≤ a.cost := by
+        have := lmcut_step_yields_partitioning prob u_g pcf ⟨ List.idxOf a prob.actions', List.idxOf_lt_length_of_mem ha ⟩ ; simp_all +decide [ List.finRange ] ;
+        grind +suggestions
+
+/-
+Strong-induction skeleton for `lmcut_inner_admissible_for_init`.
+-/
 lemma lmcut_inner_admissible_aux {n : ℕ}
-    (pcf : Π p : STRIPS n, has_preconditions p → precondition_choice_function p) (M : ℕ) :
-    ∀ (prob : STRIPS n) (u_i : unitary_init prob) (u_g : unitary_goal prob)
+    (pcf : Π p : PlanningTask n, has_preconditions p → precondition_choice_function p) (M : ℕ) :
+    ∀ (prob : PlanningTask n) (u_i : unitary_init prob) (u_g : unitary_goal prob)
       (hp : has_preconditions prob),
       (prob.actions'.map (fun a => a.cost)).sum = M →
       ∀ plan : Plan prob prob.init, plan.path.cost ≥ (lmcut_inner prob u_i u_g hp pcf).2.1 := by
-  induction M using Nat.strong_induction_on with
-  | _ M IH =>
-    intro prob u_i u_g hp hM plan
-    by_cases hr : reachable (justification_graph prob (pcf prob hp))
-        (get_unitary_init prob u_i) (get_unitary_goal prob u_g)
-    · by_cases hz : zero_cost_reachable (justification_graph prob (pcf prob hp))
-          (get_unitary_init prob u_i) (get_unitary_goal prob u_g)
-      · rw [lmcut_inner_value_zero prob u_i u_g hp pcf hr hz]; exact Nat.zero_le _
-      · -- recursive step: charge the plan through both partitions of `lmcut_step`
-        set r := lmcut_step prob u_g (pcf prob hp) with hr_def
-        set subprob := partition_STRIPS prob r.2.2 ⟨1, by omega⟩ with hsub_def
-        rw [lmcut_inner_value_step prob u_i u_g hp pcf hr hz]
-        -- replay the plan in partition 0 and partition 1
-        obtain ⟨plan0, hplan0⟩ := plan_transfer_to_partition prob r.2.2 ⟨0, by omega⟩ plan
-        obtain ⟨plan1, hplan1⟩ := plan_transfer_to_partition prob r.2.2 ⟨1, by omega⟩ plan
-        -- partition 0: the step value is the elementary landmark heuristic, which is admissible
-        have hstep := lmcut_step_yields_landmark_with_heuristic_in_partition prob u_i u_g (pcf prob hp)
-          hr hz
-        have h0 : r.2.1 ≤ plan0.path.cost := by
-          have hadm := elementary_landmark_heuristic_is_admissible
-            (partition_STRIPS prob r.2.2 ⟨0, by omega⟩)
-            ((get_all_equiv_delete_relaxed_actions prob r.1).map
-              (adapt_cost_of_action_to_partition prob r.2.2 ⟨0, by omega⟩)) prob.init' plan0
-          rw [hstep]; exact hadm
-        -- partition 1: induction hypothesis on the strictly smaller subproblem
-        have hpos : 0 < r.2.1 := lmcut_step_yields_non_zero_heuristic prob u_i u_g (pcf prob hp) hr hz
-        have hsub_lt : (subprob.actions'.map (fun a => a.cost)).sum < M := by
-          rw [← hM]; exact lmcut_step_subprob_sum_lt prob u_g (pcf prob hp) hpos
-        have h1 : (lmcut_inner subprob u_i u_g
-            (partition_STRIPS_has_preconditions prob r.2.2 ⟨1, by omega⟩ hp) pcf).2.1
-            ≤ plan1.path.cost :=
-          IH _ hsub_lt subprob u_i u_g _ rfl plan1
-        -- validity of the partitioning gives the cost split
-        have hvalid := lmcut_step_yields_partitioning prob u_i u_g (pcf prob hp)
-        have e2 : ∀ f : Fin 2 → ℕ, ((List.finRange 2).map f).sum = f 0 + f 1 := by
-          intro f
-          simp only [show List.finRange 2 = [0, 1] from rfl, List.map_cons, List.map_nil,
-            List.sum_cons, List.sum_nil, add_zero]
-        have hsplit : plan0.path.cost + plan1.path.cost ≤ plan.path.cost := by
-          rw [hplan0, hplan1, path_cost_eq_sum_actionsUsed]
-          apply list_sum_map_add_le
-          intro a ha
-          have hamem : a ∈ prob.actions' := by
-            simpa [STRIPS.actions] using mem_actions_of_mem_actionsUsed plan.path ha
-          have hidx : prob.actions'.idxOf a < prob.actions'.length :=
-            List.idxOf_lt_length_of_mem hamem
-          have hget : prob.actions'[(⟨prob.actions'.idxOf a, hidx⟩ : Fin prob.actions'.length)] = a :=
-            List.getElem_idxOf hidx
-          rw [adapt_cost_of_action_to_partition_cost prob r.2.2 ⟨0, by omega⟩ a hamem,
-              adapt_cost_of_action_to_partition_cost prob r.2.2 ⟨1, by omega⟩ a hamem]
-          have hv := hvalid ⟨prob.actions'.idxOf a, hidx⟩
-          rw [e2, hget] at hv
-          exact hv
-        exact le_trans (Nat.add_le_add h0 h1) hsplit
-    · exact ((lmcut_no_plan_of_not_reachable prob u_i u_g (pcf prob hp) hr).false plan).elim
+        induction' M using Nat.strong_induction_on with M ih;
+        -- Start the proof by introducing `prob, u_i, u_g, hp, hM, plan` and opening the `lmcut_inner` definition using its termination measure.
+        -- This will expose the three cases for `hr: reachable ... goal`, which can be handled with ` lmcut_no_plan_of_not_reachable` and `lmcut_inner_value_zero`/` isotone`.
+        intro prob u_i u_g hp hM plan
+        rw [lmcut_inner]
+        -- Now we can `simp` to unfold the `if` and work with reachable and zero-cost reachability conditions.;
+        split_ifs;
+        · exact Nat.cast_nonneg _;
+        · obtain ⟨plan0, hplan0⟩ := plan_transfer_to_partition prob (lmcut_step prob u_g (pcf prob hp)).2.2 ⟨0, by omega⟩ plan
+          obtain ⟨plan1, hplan1⟩ := plan_transfer_to_partition prob (lmcut_step prob u_g (pcf prob hp)).2.2 ⟨1, by omega⟩ plan;
+          -- By `elementary_landmark_heuristic_is_admissible`, we have `(r.2.1 : ℕ∞) ≤ (plan0.path.cost : ℕ∞)`.
+          have hplan0_cost : (lmcut_step prob u_g (pcf prob hp)).2.1 ≤ (plan0.path.cost : ℕ∞) := by
+            have := lmcut_step_yields_landmark_with_heuristic_in_partition prob u_i u_g (pcf prob hp) ‹_› ‹_›;
+            rw [this];
+            apply elementary_landmark_heuristic_is_admissible;
+          have hplan1_cost : (lmcut_inner (partition_STRIPS prob (lmcut_step prob u_g (pcf prob hp)).2.2 ⟨1, by omega⟩) u_i u_g (partition_STRIPS_has_preconditions prob (lmcut_step prob u_g (pcf prob hp)).2.2 ⟨1, by omega⟩ hp) pcf).2.1 ≤ (plan1.path.cost : ℕ∞) := by
+            apply ih;
+            exact lmcut_step_subprob_sum_lt prob u_g ( pcf prob hp ) ( lmcut_step_yields_non_zero_heuristic prob u_i u_g ( pcf prob hp ) ‹_› ‹_› ) |> lt_of_lt_of_le <| hM.le;
+            rfl;
+          have hplan_cost : (plan.path.actionsUsed.map (fun a => a.cost)).sum ≥ (plan0.path.cost : ℕ) + (plan1.path.cost : ℕ) := by
+            rw [hplan0, hplan1];
+            apply list_sum_map_add_le;
+            exact fun a ha => lmcut_adapt_cost_sum_le prob u_g ( pcf prob hp ) ( mem_actions_of_mem_actionsUsed _ ha |> List.mem_toFinset.mp );
+          exact le_trans ( add_le_add hplan0_cost hplan1_cost ) ( mod_cast hplan_cost.trans ( mod_cast path_cost_eq_sum_actionsUsed plan.path ▸ le_rfl ) );
+        · exact False.elim <| lmcut_no_plan_of_not_reachable prob u_i u_g ( pcf prob hp ) ‹_› |>.false plan
 
-/-- lmcut essentially returns a cost partioning over elementary landmark heuristics. Cost
-partitioning preserves admissibility and elementary landmark heuristics are admissible, so
-admissibility for init follows. Note that the `lmcut_inner` version does not yet take the actual
-state into account, it computes an estimate only for init.
-
-No invariant on the precondition-choice function is required.  Each step charges its value `minCost`
-on the *relax-equivalence closure* of the cut-induced landmark, which is a *genuine* disjunctive
-action landmark of the (partitioned) problem for **any** pcf (`lmcut_closure_is_genuine`,
-`lmcut_step_yields_landmark_with_heuristic_in_partition`).  Hence the one-step cost-partitioning
-decomposition `plan.cost = ∑ part1 + ∑ part0 ≥ subvalue + minCost` goes through by strong induction on
-the total action cost, with the unreachable base case discharged because the problem then has no
-plan (`lmcut_no_plan_of_not_reachable`). -/
-lemma lmcut_inner_admissible_for_init {n : ℕ} (prob : STRIPS n)
+lemma lmcut_inner_admissible_for_init {n : ℕ} (prob : PlanningTask n)
     (u_i : unitary_init prob)
     (u_g : unitary_goal prob)
     (hp : has_preconditions prob)
-    (pcf : Π p : STRIPS n, has_preconditions p → precondition_choice_function p):
+    (pcf : Π p : PlanningTask n, has_preconditions p → precondition_choice_function p):
       ∀ plan : Plan prob prob.init, plan.path.cost ≥ (lmcut_inner prob u_i u_g hp pcf).2.1 :=
   lmcut_inner_admissible_aux pcf _ prob u_i u_g hp rfl

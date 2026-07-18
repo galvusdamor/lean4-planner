@@ -25,7 +25,7 @@ plan after the free `init` action and close it with the free `goal` action).  Co
 `lmcut_inner_admissible_for_init`, admissibility follows.
 -/
 
-namespace Validator
+namespace STRIPS
 
 open List
 
@@ -64,56 +64,52 @@ def ignf_lift_state {n : ℕ} (S : State n) : State (n + 2) :=
 Each original action of `P` appears, embedded, in the normal form, with the auxiliary `i`
 variable added as a precondition and all its effects embedded.
 -/
-lemma ignf_embedded_action {n : ℕ} (P : STRIPS n) {a : Action n} (ha : a ∈ P.actions') :
+lemma ignf_embedded_action {n : ℕ} (P : PlanningTask n) {a : Action n} (ha : a ∈ P.actions') :
     ∃ e : Action (n + 2), e ∈ (i_g_normal_form P).actions ∧
       e.cost = a.cost ∧
-      e.pre = ignf_embF n '' a.pre ∪ {ignf_iFin n} ∧
-      e.add = ignf_embF n '' a.add ∧
-      e.del = ignf_embF n '' a.del := by
-  simp [ STRIPS.actions, i_g_normal_form ]
-  refine' Or.inr ( Or.inr ⟨ a, ha, rfl, _, _, _ ⟩ ) <;> simp [ ignf_embF, ignf_iFin ]
-  · simp [ Action.pre, convertVarSet ]
-    rfl
-  · ext; simp [Action.add, convertVarSet]
-  · ext; simp [Action.del, convertVarSet]
+      (↑e.pre : Set (Fin (n+2))) = ignf_embF n '' (↑a.pre) ∪ {ignf_iFin n} ∧
+      (↑e.add : Set (Fin (n+2))) = ignf_embF n '' (↑a.add) ∧
+      (↑e.del : Set (Fin (n+2))) = ignf_embF n '' (↑a.del) := by
+  revert ha;
+  intro ha
+  unfold i_g_normal_form;
+  refine' ⟨ _, _, _, _, _ ⟩;
+  exact ⟨ a.name, toVarSet' ( List.map ( Fin.castLE ( by omega ) ) a.pre'.toList ++ [ ⟨ n, by omega ⟩ ] ), toVarSet' ( List.map ( Fin.castLE ( by omega ) ) a.add'.toList ), toVarSet' ( List.map ( Fin.castLE ( by omega ) ) a.del'.toList ), a.cost ⟩;
+  · unfold PlanningTask.actions; aesop;
+  · rfl;
+  · ext x; simp [ignf_embF, ignf_iFin];
+    grind;
+  · constructor <;> ext x <;> simp +decide [ ignf_embF ]
 
-/-
-The `init` action of the normal form: its precondition is exactly the auxiliary `i` variable,
-its add effect is the embedded initial state of `P`, it deletes nothing, and is free.
--/
-lemma ignf_init_action {n : ℕ} (P : STRIPS n) :
+lemma ignf_init_action {n : ℕ} (P : PlanningTask n) :
     ∃ aI : Action (n + 2), aI ∈ (i_g_normal_form P).actions ∧
-      aI.pre = {ignf_iFin n} ∧
-      aI.add = ignf_embF n '' (convertState P.init') ∧
-      aI.del = ∅ ∧
+      (↑aI.pre : Set (Fin (n+2))) = {ignf_iFin n} ∧
+      (↑aI.add : Set (Fin (n+2))) = ignf_embF n '' (convertState P.init') ∧
+      (↑aI.del : Set (Fin (n+2))) = ∅ ∧
       aI.cost = 0 := by
-  simp [ STRIPS.actions, i_g_normal_form ]
-  refine Or.inl ⟨ ?_, ?_, ?_ ⟩ <;> simp [ Action.pre, Action.add, Action.del ]
-  · unfold convertVarSet
-    simp_all only [toFinset_cons, toFinset_nil, insert_empty_eq, Finset.coe_singleton, Set.singleton_eq_singleton_iff]
-    rfl
-  · ext; simp [convertVarSet, convertState, ignf_embF]
-    simp [ varset'_of_state', Fin.castLE ]
-  · simp [ convertVarSet ]
+  refine' ⟨ _, _, _, _, _, _ ⟩;
+  exact Action.mk "init" ( singletonVarSet ⟨ n, by omega ⟩ ) ( toVarSet' ( ( P.init' ).toList.map ( Fin.castLE ( by omega ) ) ) ) ( ∅ : VarSet' ( n + 2 ) ) 0;
+  · unfold i_g_normal_form; simp +decide [PlanningTask.actions];
+  · exact Set.ext fun x => by simp +decide [ ignf_iFin, singletonVarSet ] ;
+  · convert Set.ext _;
+    simp +decide [ convertState, ignf_embF ];
+  · aesop;
+  · rfl
 
-/-
-The `goal` action of the normal form: its precondition is the embedded goal of `P`, its only add
-effect is the auxiliary `g` variable, it deletes nothing, and is free.
--/
-lemma ignf_goal_action {n : ℕ} (P : STRIPS n) :
+lemma ignf_goal_action {n : ℕ} (P : PlanningTask n) :
     ∃ aG : Action (n + 2), aG ∈ (i_g_normal_form P).actions ∧
-      aG.pre = ignf_embF n '' (convertVarSet P.goal') ∧
-      aG.add = {ignf_gFin n} ∧
-      aG.del = ∅ ∧
+      (↑aG.pre : Set (Fin (n+2))) = ignf_embF n '' (convertVarSet P.goal') ∧
+      (↑aG.add : Set (Fin (n+2))) = {ignf_gFin n} ∧
+      (↑aG.del : Set (Fin (n+2))) = ∅ ∧
       aG.cost = 0 := by
-  unfold i_g_normal_form; simp [ STRIPS.actions, convertVarSet ]
-  refine Or.inr <| Or.inl ⟨ ?_, ?_, ?_ ⟩ <;> simp [ Action.pre, Action.add, Action.del ]
-  · ext; simp [convertVarSet, ignf_embF]
-  · unfold convertVarSet
-    simp_all only [toFinset_cons, toFinset_nil, insert_empty_eq, Finset.coe_singleton, Set.singleton_eq_singleton_iff]
-    rfl
-  · unfold convertVarSet
-    simp_all only [toFinset_nil, Finset.coe_empty]
+  refine' ⟨ _, _, _, _, _, _ ⟩;
+  exact ⟨ "goal", toVarSet' ( P.goal'.toList |> List.map ( Fin.castLE ( by omega ) ) ), singletonVarSet ⟨ n + 1, by omega ⟩, ∅, 0 ⟩;
+  · unfold i_g_normal_form; simp +decide [ PlanningTask.actions ] ;
+  · ext x; simp [convertVarSet, ignf_embF];
+  · convert Set.ext _;
+    simp +decide [ ignf_gFin, singletonVarSet ];
+  · aesop;
+  · rfl
 
 /-! ### Lifting paths and plans -/
 
@@ -130,94 +126,93 @@ lemma ignf_lift_successor {n : ℕ} (a : Action n) (S : State n) :
   · exact Or.inl fun x hx => ne_of_lt <| Fin.castSucc_lt_last _
   · grind
 
-/-- A path of `P` lifts to a path of `i_g_normal_form P` between the corresponding lifted states,
-with the same cost. -/
-lemma ignf_lift_path {n : ℕ} (P : STRIPS n) {S1 S2 : State n} (p : Path P S1 S2) :
+/-
+A path of `P` lifts to a path of `i_g_normal_form P` between the corresponding lifted states,
+with the same cost.
+-/
+lemma ignf_lift_path {n : ℕ} (P : PlanningTask n) {S1 S2 : State n} (p : Path P S1 S2) :
     ∃ q : Path (i_g_normal_form P) (ignf_lift_state S1) (ignf_lift_state S2), q.cost = p.cost := by
-  induction p with
-  | empty s => exact ⟨Path.empty _, rfl⟩
-  | cons a s2 ha succ p ih =>
-    rename_i s1 s3
-    obtain ⟨q, hq⟩ := ih
-    obtain ⟨e, he_mem, he_cost, he_pre, he_add, he_del⟩ :=
-      ignf_embedded_action P (mem_actions'_of_mem_actions ha)
-    have hsucc : Successor e (ignf_lift_state s1) (ignf_lift_state s2) := by
-      refine ⟨?_, ?_⟩
-      · -- applicability
-        show e.pre ⊆ _
-        rw [he_pre, ignf_lift_state]
-        exact Set.union_subset ((Set.image_mono succ.1).trans Set.subset_union_left)
-          Set.subset_union_right
-      · -- state transformation
-        rw [succ.2, ignf_lift_successor a s1, he_del, he_add]
-    exact ⟨Path.cons e (ignf_lift_state s2) he_mem hsucc q, by
-      simp [Path.cost, hq, he_cost]⟩
+  revert p;
+  intro p
+  induction' p with S1 S2 a p ih;
+  · exact ⟨ Path.empty _, rfl ⟩;
+  · rename_i h₁ h₂ h₃;
+    obtain ⟨ q, hq ⟩ := h₃;
+    obtain ⟨e, he⟩ : ∃ e : Action (n + 2), e ∈ (i_g_normal_form P).actions ∧ e.cost = S2.cost ∧ (↑e.pre : Set (Fin (n+2))) = ignf_embF n '' (↑S2.pre) ∪ {ignf_iFin n} ∧ (↑e.add : Set (Fin (n+2))) = ignf_embF n '' (↑S2.add) ∧ (↑e.del : Set (Fin (n+2))) = ignf_embF n '' (↑S2.del) := by
+      convert ignf_embedded_action P _;
+      (expose_names; exact mem_actions'_of_mem_actions ha);
+    refine' ⟨ Path.cons e ( ignf_lift_state p ) he.1 _ q, _ ⟩;
+    constructor;
+    all_goals simp_all +decide [ Applicable, Path.cost ];
+    · simp_all +decide [ Set.subset_def, ignf_lift_state ];
+      intro x hx; specialize h₁; cases h₁; aesop;
+    · convert ignf_lift_successor S2 a using 1
 
-/-- The cost of a concatenation of paths is the sum of the costs (public version). -/
-lemma ignf_path_cost_append {n : ℕ} {pt : STRIPS n} {a b c : State n}
+lemma ignf_path_cost_append {n : ℕ} {pt : PlanningTask n} {a b c : State n}
     (p : Path pt a b) (q : Path pt b c) : (p.append q).cost = p.cost + q.cost := by
   induction p with
   | empty s => simp [Path.append, Path.cost]
-  | cons a' s2 ha succ p ih => simp [Path.append, Path.cost, ih]; ring
-
-/-- The free `init` action moves from the normal form's initial state `{i}` to the lifted initial
-state of `P`, at cost `0`. -/
-lemma ignf_init_step {n : ℕ} (P : STRIPS n) :
-    ∃ q : Path (i_g_normal_form P) (i_g_normal_form P).init
-        (ignf_lift_state (convertState P.init')), q.cost = 0 := by
-  obtain ⟨aI, haI_mem, haI_pre, haI_add, haI_del, haI_cost⟩ := ignf_init_action P
-  have hsucc : Successor aI (i_g_normal_form P).init (ignf_lift_state (convertState P.init')) := by
-    constructor
-    · show aI.pre ⊆ _
-      rw [haI_pre, i_g_normalform_init_eq]
-      exact subset_rfl
-    · show ignf_lift_state (convertState P.init') = ((i_g_normal_form P).init \ aI.del) ∪ aI.add
-      rw [i_g_normalform_init_eq, haI_del, haI_add, Set.diff_empty, ignf_lift_state,
-        Set.union_comm]
-      rfl
-  exact ⟨Path.cons aI (ignf_lift_state (convertState P.init')) haI_mem hsucc
-    (Path.empty _), by simp [Path.cost, haI_cost]⟩
+  | cons a' s2 ha succ p ih => simp only [Path.append, Path.cost]; rw [ih]; ring
 
 /-
-The free `goal` action closes a plan: from the lifted state of any goal state of `P`, it reaches
-a goal state of the normal form, at cost `0`.
+The free `init` action moves from the normal form's initial state `{i}` to the lifted initial
+state of `P`, at cost `0`.
 -/
-lemma ignf_goal_step {n : ℕ} (P : STRIPS n) {S : State n} (hg : P.GoalState S) :
+lemma ignf_init_step {n : ℕ} (P : PlanningTask n) :
+    ∃ q : Path (i_g_normal_form P) (i_g_normal_form P).init
+        (ignf_lift_state (convertState P.init')), q.cost = 0 := by
+          -- The goal is to show that the cost of the path is zero, but the path is constructed by appending two paths, each with cost zero. This leads to a contradiction. Therefore, the assumption must be false.
+          apply Classical.byContradiction
+          intro h_contra;
+          obtain ⟨aI, haI⟩ := ignf_init_action P;
+          refine' h_contra ⟨ _, _ ⟩;
+          exact Path.cons aI ( ignf_lift_state ( convertState P.init' ) ) haI.1 ( by
+            simp +decide [ Successor, haI ];
+            unfold Applicable; simp +decide [ haI, ignf_lift_state ] ;
+            unfold i_g_normal_form; simp +decide [ PlanningTask.init ] ;
+            simp +decide [ ignf_iFin, ignf_embF, convertState ];
+            grind ) ( Path.empty _ )
+          generalize_proofs at *;
+          simp +decide [ Path.cost, haI ]
+
+lemma ignf_goal_step {n : ℕ} (P : PlanningTask n) {S : State n} (hg : P.GoalState S) :
     ∃ T : State (n + 2), (i_g_normal_form P).GoalState T ∧
       ∃ q : Path (i_g_normal_form P) (ignf_lift_state S) T, q.cost = 0 := by
-  obtain ⟨aG, haG_mem, haG_pre, haG_add, haG_del, haG_cost⟩ := ignf_goal_action P
-  refine ⟨(ignf_lift_state S \ aG.del) ∪ aG.add, ?_, ?_⟩
-  · -- the result is a goal state of the normal form
-    simp [ STRIPS.GoalState, i_g_normal_form, haG_add, haG_del ]
-    unfold convertVarSet; simp [ ignf_gFin ]
-  · refine ⟨Path.cons aG _ haG_mem ⟨?_, rfl⟩ (Path.empty _), by simp [Path.cost, haG_cost]⟩
-    -- applicability of the goal action
-    show aG.pre ⊆ ignf_lift_state S
-    rw [haG_pre, ignf_lift_state]
-    exact (Set.image_mono hg).trans Set.subset_union_left
+  refine' ⟨ _, _, _ ⟩;
+  exact ignf_lift_state S ∪ { ignf_gFin n };
+  · simp +decide [ PlanningTask.GoalState, i_g_normal_form, ignf_lift_state, ignf_gFin ];
+    simp +decide [ convertVarSet, singletonVarSet ];
+  · obtain ⟨aG, haG⟩ := ignf_goal_action P;
+    use Path.cons aG ( ignf_lift_state S ∪ { ignf_gFin n } ) haG.1 ( by
+      unfold Successor; simp +decide [ haG ] ;
+      unfold Applicable; simp +decide [ haG, ignf_lift_state ] ;
+      intro x hx; specialize hg; unfold PlanningTask.GoalState at hg; aesop; ) ( Path.empty _ );
+    generalize_proofs at *;
+    simp +decide [ Path.cost, haG ];
 
-/-- **Plan lifting.**  Any plan of `P` from its initial state lifts to a plan of the i/g normal form
-from *its* initial state, with the same cost. -/
-lemma ignf_plan_lift {n : ℕ} (P : STRIPS n) (plan : Plan P P.init) :
+lemma ignf_plan_lift {n : ℕ} (P : PlanningTask n) (plan : Plan P P.init) :
     ∃ eplan : Plan (i_g_normal_form P) (i_g_normal_form P).init,
       eplan.path.cost = plan.path.cost := by
-  obtain ⟨last, p, hgoal⟩ := plan
-  obtain ⟨q0, hq0⟩ := ignf_init_step P
-  obtain ⟨q1, hq1⟩ := ignf_lift_path P (S1 := convertState P.init') (S2 := last) p
-  obtain ⟨T, hT, q2, hq2⟩ := ignf_goal_step P (S := last) hgoal
-  refine ⟨⟨T, (q0.append q1).append q2, hT⟩, ?_⟩
-  simp [ignf_path_cost_append, hq0, hq1, hq2]
+        by_contra h_contra;
+        obtain ⟨q, hq⟩ := ignf_lift_path P plan.path;
+        obtain ⟨T, hT⟩ := ignf_goal_step P plan.goal;
+        obtain ⟨eplan, heplan⟩ : ∃ eplan : Path (i_g_normal_form P) (ignf_lift_state plan.last) T, eplan.cost = 0 := by
+          exact hT.2;
+        obtain ⟨q', hq'⟩ := ignf_init_step P;
+        refine' h_contra ⟨ ⟨ _, _, _ ⟩, _ ⟩;
+        exact T;
+        exact q'.append ( q.append eplan );
+        grind;
+        rw [ ignf_path_cost_append, ignf_path_cost_append, hq', heplan, hq ] ; ring
 
-/-- Replaying a path of `prob` in `set_init prob s` (only the initial state field differs, so the
-actions are identical), preserving cost. -/
-lemma path_set_init_transfer {n : ℕ} (prob : STRIPS n) (s : State' n) {s1 s2 : State n}
+lemma path_set_init_transfer {n : ℕ} (prob : PlanningTask n) (s : State' n) {s1 s2 : State n}
     (p : Path prob s1 s2) :
     ∃ q : Path (set_init prob s) s1 s2, q.cost = p.cost := by
   induction p with
   | empty t => exact ⟨Path.empty t, rfl⟩
   | cons a s2 ha succ p ih =>
     obtain ⟨q, hq⟩ := ih
-    have hmem : a ∈ (set_init prob s).actions := by simpa [set_init, STRIPS.actions] using ha
+    have hmem : a ∈ (set_init prob s).actions := by simpa [set_init, PlanningTask.actions] using ha
     exact ⟨Path.cons a s2 hmem succ q, by simp [Path.cost, hq]⟩
 
 /-! ### The general LM-cut heuristic -/
@@ -232,9 +227,9 @@ preconditions (the i/g normal form and its cost partitions), so it is supplied a
 
 If the goal is empty the problem is trivially solved and the heuristic returns `0`; this also avoids
 the degenerate i/g normal form whose `goal` action would have an empty precondition. -/
-def lmcut {n : ℕ} (prob : STRIPS n) (s : State' n)
-    (pcf : Π p : STRIPS (n + 2), has_preconditions p → precondition_choice_function p) : ℕ :=
-  if hg : prob.goal'.val = [] then 0
+def lmcut {n : ℕ} (prob : PlanningTask n) (s : State' n)
+    (pcf : Π p : PlanningTask (n + 2), has_preconditions p → precondition_choice_function p) : ℕ∞ :=
+  if hg : prob.goal'.toList = [] then 0
   else
     (lmcut_inner (i_g_normal_form (set_init prob s))
       (i_g_normalform_is_unitary_init _) (i_g_normalform_is_unitary_goal _)
@@ -242,22 +237,21 @@ def lmcut {n : ℕ} (prob : STRIPS n) (s : State' n)
 
 /-- **Admissibility of the general LM-cut heuristic.**  `lmcut prob s pcf` never overestimates the
 cost of any plan of `prob` starting from `s`. -/
-theorem lmcut_admissible {n : ℕ} (prob : STRIPS n) (s : State' n)
-    (pcf : Π p : STRIPS (n + 2), has_preconditions p → precondition_choice_function p)
+theorem lmcut_admissible {n : ℕ} (prob : PlanningTask n) (s : State' n)
+    (pcf : Π p : PlanningTask (n + 2), has_preconditions p → precondition_choice_function p)
     (plan : Plan prob (convertState s)) :
-    plan.path.cost ≥ lmcut prob s pcf := by
-  rw [lmcut]
-  split
-  · exact Nat.zero_le _
-  · rename_i hg
-    -- view the plan as a plan of `set_init prob s` from its initial state
-    obtain ⟨p', hp'⟩ := path_set_init_transfer prob s plan.path
-    obtain ⟨eplan, hcost⟩ :=
-      ignf_plan_lift (set_init prob s) ⟨plan.last, p', plan.goal⟩
+    (plan.path.cost : ℕ∞) ≥ lmcut prob s pcf := by
+  rw [ge_iff_le, lmcut]
+  split_ifs with hg
+  · exact zero_le _
+  · obtain ⟨q, hq⟩ := path_set_init_transfer prob s plan.path
+    let plan_si : Plan (set_init prob s) (set_init prob s).init :=
+      ⟨plan.last, q, plan.goal⟩
+    obtain ⟨eplan, heplan⟩ := ignf_plan_lift (set_init prob s) plan_si
     have hadm := lmcut_inner_admissible_for_init (i_g_normal_form (set_init prob s))
       (i_g_normalform_is_unitary_init _) (i_g_normalform_is_unitary_goal _)
       (i_g_normal_form_has_preconditions (set_init prob s) hg) pcf eplan
-    have he : eplan.path.cost = plan.path.cost := hcost.trans hp'
-    exact he ▸ hadm
-
-end Validator
+    have h2 : plan_si.path.cost = plan.path.cost := hq
+    have hcost : (eplan.path.cost : ℕ∞) = (plan.path.cost : ℕ∞) := by
+      rw [heplan, h2]
+    exact le_trans hadm (le_of_eq hcost)
