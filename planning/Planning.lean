@@ -1,146 +1,224 @@
-import Mathlib.Logic.Lemmas
+import Mathlib
 
 import SearchAlgorithms.NatGraph
-import Validator.PlanningTask.Basic
+import Strips.Basic
 
-namespace Validator
+namespace STRIPS
+/-! ### Runtime layer for the public `strips` dependency
 
-instance {n : ℕ} : FinEnum (BitVec n) :=
-  FinEnum.ofList (List.range (2^n)) (by
-    intro x
-    simp
-    use BitVec.toNat x
-    grind)
+The public `strips` library (https://github.com/AmosNico/lean4-strips) represents finite
+sets of variables abstractly by `VarSet n = Set (Fin n)` (with the concrete, run-time
+representation `VarSet' n` being a sorted, duplicate-free list), and states abstractly by
+`State n = Set (Fin n)` (with the run-time representation `State' n = BitVec n`).
 
-def varset'_of_state' {n : ℕ} (s : State' n) : VarSet' n :=
-  let l : List (Fin n) := (List.finRange n).filter (fun i => s[i])
-  have l_s : l.SortedLT := by
-    apply List.sortedLT_iff_pairwise.mpr
-    unfold l
-    apply List.Pairwise.filter
-    apply List.pairwise_lt_finRange
-  ⟨l, l_s⟩
+The planning development needs a computable, run-time layer built on these concrete
+representations.  All run-time definitions here are *primed*: they operate on `VarSet'`
+(for sets of variables, e.g. action preconditions `a.pre'` and goals `pt.goal'`) and on
+`State'` (bit-vectors) for states.  The unprimed, abstract `Set`-based definitions from
+`Strips` (`convertVarSet`, `convertState`, `Successor`, `PlanningTask.GoalState`, ...) are
+used for the mathematical results, and are connected to the run-time layer by the bridging
+lemmas below. -/
 
-def state'_of_varset' {n : ℕ} (v : VarSet' n) : State' n :=
-  let l : List Bool := (List.finRange n).map (fun i => i ∈ v.1)
-  have l_l : l.length = n := by unfold l; grind
-  l_l ▸ BitVec.ofBoolListLE l
-
+/-- `getElem` of a `BitVec` obtained from a boolean list. -/
+theorem BitVec.getElem_ofBoolListLE {i : Nat} {bs : List Bool} (h : i < bs.length) :
+    (BitVec.ofBoolListLE bs)[i] = bs[i] := by
+  rw [← BitVec.getLsbD_eq_getElem, BitVec.getLsbD_ofBoolListLE]
+  simp only [List.getD_eq_getElem?_getD]
+  rw [List.getElem?_eq_getElem h]
+  simp
 
 private lemma getElem_eq_rec_BitVec' {m n : ℕ} (h : m = n) (bv : BitVec m) (i : ℕ)
     (hi : i < n) :
     (show BitVec n from h ▸ bv)[i] = bv[i]'(by omega) := by
   subst h; rfl
 
-theorem BitVec.getElem_ofBoolListLE {i : Nat} {bs : List Bool} (h : i < bs.length) :
-  (BitVec.ofBoolListLE bs)[i] = bs[i] := by
-  rw [← BitVec.getLsbD_eq_getElem, BitVec.getLsbD_ofBoolListLE]
-  simp only [List.getD_eq_getElem?_getD]
-  rw [List.getElem?_eq_getElem h]
+instance instFinEnumBitVec {n : ℕ} : FinEnum (BitVec n) :=
+  FinEnum.ofList (List.range (2^n)) (by
+    intro x
+    simp
+    use BitVec.toNat x
+    grind)
+
+/-- Build a `VarSet'` (a sorted, duplicate-free list) from an arbitrary list of variables. -/
+def toVarSet' {n : ℕ} (l : List (Fin n)) : VarSet' n :=
+  ⟨l.toFinset.sort (· ≤ ·), Finset.sortedLT_sort l.toFinset⟩
+
+@[simp] lemma mem_toVarSet' {n : ℕ} {l : List (Fin n)} {i : Fin n} :
+    i ∈ (toVarSet' l).val ↔ i ∈ l := by
+  simp [toVarSet']
+
+instance instEmptyVarSet' {n : ℕ} : EmptyCollection (VarSet' n) :=
+  ⟨⟨[], by unfold List.SortedLT; intro a; exact a.elim0⟩⟩
+
+@[simp] lemma val_emptyVarSet' {n : ℕ} : (∅ : VarSet' n).val = [] := rfl
+@[simp] lemma mem_emptyVarSet' {n : ℕ} {i : Fin n} : i ∈ (∅ : VarSet' n).val ↔ False := by simp
+@[simp] lemma convertVarSet_empty {n : ℕ} :
+    convertVarSet (∅ : VarSet' n) = (∅ : Set (Fin n)) := by ext i; simp [convertVarSet]
+
+/-- The elements of a `VarSet'` as a list. -/
+def VarSet'.toList {n : ℕ} (V : VarSet' n) : List (Fin n) := V.val
+
+@[simp] lemma VarSet'.mem_toList {n : ℕ} {V : VarSet' n} {i : Fin n} :
+    i ∈ V.toList ↔ i ∈ V.val := Iff.rfl
+
+/-- A variable is in the abstract `VarSet` of a `VarSet'` iff it is in its list. -/
+@[simp] lemma mem_convertVarSet {n : ℕ} {V : VarSet' n} {i : Fin n} :
+    i ∈ convertVarSet V ↔ i ∈ V.val := by simp [convertVarSet]
+
+/-- A variable is in the abstract `State` of a `State'` iff its bit is set. -/
+@[simp] lemma mem_convertState {n : ℕ} {s : State' n} {i : Fin n} :
+    i ∈ convertState s ↔ s[i.val] := Iff.rfl
+
+/-- Membership in an action's abstract precondition set. -/
+@[simp] lemma Action.mem_pre {n : ℕ} {a : Action n} {i : Fin n} :
+    i ∈ a.pre ↔ i ∈ a.pre'.val := by simp [Action.pre]
+@[simp] lemma Action.mem_add {n : ℕ} {a : Action n} {i : Fin n} :
+    i ∈ a.add ↔ i ∈ a.add'.val := by simp [Action.add]
+@[simp] lemma Action.mem_del {n : ℕ} {a : Action n} {i : Fin n} :
+    i ∈ a.del ↔ i ∈ a.del'.val := by simp [Action.del]
+
+lemma VarSet'.toList_nodup {n : ℕ} (V : VarSet' n) : V.toList.Nodup := by
+  have := V.2
+  unfold List.SortedLT at this
+  rw [List.nodup_iff_injective_getElem]
+  intro a b hab
+  simpa using this.injective (by simpa using hab)
+
+/-- The coercion of a `VarSet'`'s element list to a `Finset` equals its abstract set. -/
+lemma VarSet'.coe_toList_toFinset {n : ℕ} (V : VarSet' n) :
+    (↑V.toList.toFinset : Set (Fin n)) = convertVarSet V := by
+  ext i; simp [VarSet'.toList]
+
+/-- A `VarSet'` with a known member has a nonempty element list. -/
+lemma VarSet'.toList_ne_nil_of_mem {n : ℕ} {V : VarSet' n} {i : Fin n} (h : i ∈ V.val) :
+    V.toList ≠ [] := by
+  intro he; rw [VarSet'.toList] at he; rw [he] at h; exact List.not_mem_nil h
+
+/-- The number of elements of the abstract set of a `VarSet'` equals its list length. -/
+lemma VarSet'.ncard_convertVarSet_eq_toList_length {n : ℕ} (V : VarSet' n) :
+    (convertVarSet V).ncard = V.toList.length := by
+  rw [← V.coe_toList_toFinset, Set.ncard_coe_finset,
+    List.toFinset_card_of_nodup V.toList_nodup]
+
+/-- The singleton variable set `{f}` as a `VarSet'`. -/
+def singletonVarSet {n : ℕ} (f : Fin n) : VarSet' n := toVarSet' [f]
+
+@[simp] lemma mem_singletonVarSet {n : ℕ} {f i : Fin n} :
+    i ∈ (singletonVarSet f).val ↔ i = f := by simp [singletonVarSet]
+
+/-- The bit-vector obtained from a boolean predicate on `Fin n`. -/
+def bvOfPred {n} (P : Fin n → Bool) : BitVec n :=
+  (BitVec.ofBoolListLE ((List.finRange n).map P)).cast (by simp)
+
+@[simp] lemma getElem_bvOfPred {n} (P : Fin n → Bool) (i : Fin n) :
+    (bvOfPred P)[i.val] = P i := by
+  unfold bvOfPred
+  rw [BitVec.getElem_cast, BitVec.getElem_ofBoolListLE (by simp [i.isLt])]
   simp
 
+/-- The run-time (bit-vector) representation of a `VarSet'`. -/
+def VarSet'.toBitVec {n} (V : VarSet' n) : BitVec n := bvOfPred (fun i => decide (i ∈ V.val))
 
-/-- `state'_of_varset'` at index `i` checks membership in the var-set list. -/
-lemma state'_of_varset'_getElem {n : ℕ} (v : VarSet' n) (i : Fin n) :
-    (state'_of_varset' v)[i.val] = decide (i ∈ v.val) := by
-  unfold state'_of_varset'
-  rw [getElem_eq_rec_BitVec']
-  rw [BitVec.getElem_ofBoolListLE]
-  simp
+@[simp] lemma VarSet'.getElem_toBitVec {n} (V : VarSet' n) (i : Fin n) :
+    (V.toBitVec)[i.val] = decide (i ∈ V.val) := by simp [VarSet'.toBitVec]
+
+@[simp] lemma VarSet'.getElem_toBitVec' {n} (V : VarSet' n) (i : ℕ) (hi : i < n) :
+    (V.toBitVec)[i]'hi = decide (⟨i, hi⟩ ∈ V.val) := VarSet'.getElem_toBitVec V ⟨i, hi⟩
+
+/-- Convert a `VarSet'` to a run-time state (bit-vector). -/
+def state'_of_varset' {n : ℕ} (V : VarSet' n) : State' n := V.toBitVec
+
+/-- Build the `VarSet'` of variables that are true in a run-time state. -/
+def varset'_of_state' {n : ℕ} (s : State' n) : VarSet' n :=
+  toVarSet' ((List.finRange n).filter (fun i => s[i.val]))
+
+/-- The list of variables that are true in a run-time state. -/
+def State'.toList {n : ℕ} (s : State' n) : List (Fin n) := (varset'_of_state' s).val
+
+@[simp] lemma State'.mem_toList {n : ℕ} {s : State' n} {i : Fin n} :
+    i ∈ s.toList ↔ s[i.val] := by simp [State'.toList, varset'_of_state']
+
+lemma State'.toList_nodup {n : ℕ} (s : State' n) : s.toList.Nodup :=
+  (varset'_of_state' s).toList_nodup
+
+/-- The coercion of the list of true variables of a state to a `Finset` equals its abstract set. -/
+lemma State'.coe_toList_toFinset {n : ℕ} (s : State' n) :
+    (↑s.toList.toFinset : Set (Fin n)) = convertState s := by
+  ext i; simp
+
+/-- The number of true variables of a state equals the length of its list of true variables. -/
+lemma State'.ncard_convertState_eq_toList_length {n : ℕ} (s : State' n) :
+    (convertState s).ncard = s.toList.length := by
+  rw [← State'.coe_toList_toFinset, Set.ncard_coe_finset,
+    List.toFinset_card_of_nodup s.toList_nodup]
+
+/-- `state'_of_varset'` at index `i` checks membership in the var-set. -/
+@[simp] lemma state'_of_varset'_getElem {n : ℕ} (v : VarSet' n) (i : Fin n) :
+    (state'_of_varset' v)[i.val] = decide (i ∈ v.val) := by simp [state'_of_varset']
 
 /-- A variable is in `varset'_of_state'` iff it is true in the state. -/
-lemma varset'_of_state'_mem {n : ℕ} (s : State' n) (i : Fin n) :
-    i ∈ (varset'_of_state' s).val ↔ s[i.val] = true := by
-  unfold varset'_of_state'
-  simp [List.mem_filter]
+@[simp] lemma varset'_of_state'_mem {n : ℕ} (s : State' n) (i : Fin n) :
+    i ∈ (varset'_of_state' s).val ↔ s[i.val] = true := by simp [varset'_of_state']
 
-
-
+/-- A run-time state satisfies a set of conditions if all of them are true. -/
 def satisfies' {n : ℕ} (cond : VarSet' n) (state : State' n) : Bool :=
-  cond.val.all (fun x => state[x])
+  decide (∀ i ∈ cond.val, state[i.val])
 
 def applicable' {n : ℕ} (a : Action n) (state : State' n) : Bool :=
   satisfies' a.pre' state
 
-def is_successor' {n : ℕ} (a : Action n) (f t : State' n) : Bool :=
-  (List.finRange n).all (fun x =>
-    if a.add'.val.contains x then
-      t[x]
-    else if a.del'.val.contains x then
-      ¬ t[x]
-    else
-      t[x] = f[x]
-  )
+@[simp] lemma satisfies'_iff {n : ℕ} (cond : VarSet' n) (state : State' n) :
+    satisfies' cond state = true ↔ ∀ i ∈ cond.val, state[i.val] := by simp [satisfies']
+
+lemma applicable'_iff {n : ℕ} (a : Action n) (state : State' n) :
+    applicable' a state = true ↔ ∀ i ∈ a.pre'.val, state[i.val] := by simp [applicable']
 
 def successor' {n : ℕ} (a : Action n) (f : State' n) : State' n :=
-  BitVec.cast (by simp) (BitVec.ofBoolListLE ((List.finRange n).map (fun x =>
-    if a.add'.val.contains x then
-      True
-    else if a.del'.val.contains x then
-      False
-    else
-      f[x])))
+  (f &&& ~~~a.del'.toBitVec) ||| a.add'.toBitVec
 
--- an action can regress through a state if it does not delete anything that is true in the successor state
-def regressable' {n : ℕ} (a : Action n) (s : State' n) : Bool :=
-  a.del'.val.all (fun x => !s[x] ∨ (state'_of_varset' a.add')[x])
+def is_successor' {n : ℕ} (a : Action n) (f t : State' n) : Bool :=
+  decide (t = successor' a f)
 
 -- regress a through s. Note that this returns the minimally necessary state for the regression to be possible
 def regress' {n : ℕ} (a : Action n) (s : State' n) : State' n :=
-  BitVec.cast (by simp) (BitVec.ofBoolListLE ((List.finRange n).map (fun x =>
-    if a.pre'.val.contains x then
-      True
-    else if a.add'.val.contains x then
-      False -- after regression the state feature can be false
-    else
-      s[x])))
+  (s &&& ~~~a.add'.toBitVec) ||| a.pre'.toBitVec
 
+-- an action can regress through a state if it does not delete anything that is true in the successor state
+def regressable' {n : ℕ} (a : Action n) (s : State' n) : Bool :=
+  decide (∀ i ∈ a.del'.val, (¬ s[i.val] ∨ (state'_of_varset' a.add')[i.val]))
 
 lemma successor'_is_successor' {n : ℕ} (a : Action n) (f : State' n) :
     is_successor' a f (successor' a f) := by
-  unfold is_successor' successor'
-  simp
-  intro x
-  split_ifs <;> try (simp_all [BitVec.getElem_ofBoolListLE])
+  simp [is_successor']
 
 
 lemma is_successor'_eq_successor' {n : ℕ} (a : Action n) (f t : State' n)
     (h : is_successor' a f t = true) : t = successor' a f := by
-  unfold is_successor' at h
-  unfold successor'
-  ext i
-  simp [BitVec.getElem_ofBoolListLE] at *
-  specialize h ⟨i, by omega⟩
-  split_ifs at h ⊢ <;> simp_all
+  simpa [is_successor'] using h
 
 lemma successor_regressable {n : ℕ} (a : Action n) (f : State' n):
     applicable' a f → regressable' a (successor' a f) := by
-      unfold regressable';
-      unfold successor';
-      simp_all [ BitVec.getElem_ofBoolListLE ];
-      intro appli x x_in_del
-      rw [state'_of_varset'_getElem]
-      simp
-      tauto
+  unfold regressable'
+  simp +decide [ BitVec.getElem_or, BitVec.getElem_and, BitVec.getElem_not, successor' ]
+  grind +suggestions
 /-
 f and (regress' a (successor' a f)) can differ in facts added and delete by a
 -/
 lemma successor_regress {n : ℕ} (a : Action n) (f : State' n) :
     applicable' a f → successor' a (regress' a (successor' a f)) = successor' a f := by
-      intro ha
-      ext x;
-      erw [ BitVec.getElem_ofBoolListLE ];
-      rw [ List.getElem_map, List.getElem_finRange ];
-      erw [ BitVec.getElem_ofBoolListLE ] ; simp [ List.getElem_finRange ] ;
-      all_goals simp_all [ successor' ];
-      erw [ BitVec.getElem_ofBoolListLE ] ; simp [ List.getElem_finRange ] ;
-      unfold applicable' at ha; simp_all [ satisfies' ] ;
-      grind
+  intro h
+  ext i hi
+  have h_pre : ∀ j ∈ a.pre'.val, f[j.val] := (applicable'_iff a f).mp h
+  simp only [successor', regress', BitVec.getElem_or, BitVec.getElem_and, BitVec.getElem_not,
+    VarSet'.getElem_toBitVec']
+  by_cases hf : f[i]'hi <;> simp_all +decide
+  · grind
+  · intro hp; have := h_pre ⟨i, hi⟩ (by simpa using hp); simp_all
 
-abbrev is_successor_state {n : ℕ} (prob : STRIPS n) (f t : State' n) :=
+abbrev is_successor_state {n : ℕ} (prob : PlanningTask n) (f t : State' n) :=
     prob.actions'.any (fun a => applicable' a f ∧ is_successor' a f t)
 
-def cost_of {n : ℕ} (prob : STRIPS n) (f t : State' n) (is_succ : is_successor_state prob f t): ℕ :=
+def cost_of {n : ℕ} (prob : PlanningTask n) (f t : State' n) (is_succ : is_successor_state prob f t): ℕ :=
     let applicableActs := prob.actions'.filter (fun a => applicable' a f ∧ is_successor' a f t)
     let costs : List ℕ := applicableActs.map (fun x => x.cost)
     costs.min (by unfold costs applicableActs ; simp_all)
@@ -181,7 +259,7 @@ lemma min_map {α β : Type u} [LinearOrder β] (l : List α) (f : α → β) (h
       apply head_ne_min
 
 
-def min_cost_action {n : ℕ} (prob : STRIPS n) (f t : State' n) (is_succ : is_successor_state prob f t): Action n :=
+def min_cost_action {n : ℕ} (prob : PlanningTask n) (f t : State' n) (is_succ : is_successor_state prob f t): Action n :=
     let applicableActs := prob.actions'.filter (fun a => applicable' a f ∧ is_successor' a f t)
     -- TODO ideally use List.minOn in newer mathlib version
     let costs : List ℕ := applicableActs.map (fun x => x.cost)
@@ -194,14 +272,14 @@ def min_cost_action {n : ℕ} (prob : STRIPS n) (f t : State' n) (is_succ : is_s
 
     opt_act.get is_act
 
-lemma min_cost_action_in_prob {n : ℕ} (prob : STRIPS n) (f t : State' n) (is_succ : is_successor_state prob f t):
+lemma min_cost_action_in_prob {n : ℕ} (prob : PlanningTask n) (f t : State' n) (is_succ : is_successor_state prob f t):
     min_cost_action prob f t is_succ ∈ prob.actions' := by
     unfold min_cost_action
     simp
     apply List.get_find?_mem
 
 
-def trans_of_STRIPS {n : ℕ} (prob : STRIPS n) : NatGraph (State' n) :=
+def trans_of_STRIPS {n : ℕ} (prob : PlanningTask n) : NatGraph (State' n) :=
   let edges : State' n → State' n → Prop := fun f t => is_successor_state prob f t
 
   let dg : Digraph (State' n) := Digraph.mk edges
@@ -211,64 +289,45 @@ def trans_of_STRIPS {n : ℕ} (prob : STRIPS n) : NatGraph (State' n) :=
 
   WeightedDiGraph.mk dg cost dg_dec
 
-def trans_of_STRIPS_goals {n : ℕ} (prob : STRIPS n) : List (State' n) :=
+def trans_of_STRIPS_goals {n : ℕ} (prob : PlanningTask n) : List (State' n) :=
   (List.finRange (2^n)).filter (fun s => satisfies' prob.goal' s)
 
-lemma is_successor_state_of_trans_STRIPS_adj {n : ℕ} (prob : STRIPS n) (s s' : State' n) (adj : (trans_of_STRIPS prob).Adj s s') :
+lemma is_successor_state_of_trans_STRIPS_adj {n : ℕ} (prob : PlanningTask n) (s s' : State' n) (adj : (trans_of_STRIPS prob).Adj s s') :
     is_successor_state prob s s' := by
   unfold is_successor_state
   unfold trans_of_STRIPS at adj
   simp_all
 
-lemma min_cost_action_creates_successor {n : ℕ} (prob : STRIPS n) (s s' : State' n) (adj : (trans_of_STRIPS prob).Adj s s') :
+lemma min_cost_action_creates_successor {n : ℕ} (prob : PlanningTask n) (s s' : State' n) (adj : (trans_of_STRIPS prob).Adj s s') :
   Successor (min_cost_action prob s s' (is_successor_state_of_trans_STRIPS_adj prob s s' adj)) (convertState s) (convertState s') := by
-  unfold Successor
-  set a := min_cost_action prob s s' (is_successor_state_of_trans_STRIPS_adj prob s s' adj)
-  constructor
-  · unfold Applicable
-    intro x x_in_find
-    unfold convertState
-    unfold Action.pre convertVarSet at x_in_find
-    simp_all
-    have appli_a : applicable' a s := by
-      unfold a
-      unfold min_cost_action
+  have hmem : (min_cost_action prob s s'
+      (is_successor_state_of_trans_STRIPS_adj prob s s' adj)) ∈
+      prob.actions'.filter (fun a => applicable' a s ∧ is_successor' a s s') := by
+    unfold min_cost_action
+    apply List.get_find?_mem
+  have hp := List.of_mem_filter hmem
+  simp only [decide_eq_true_eq] at hp
+  have h_app : applicable' (min_cost_action prob s s'
+      (is_successor_state_of_trans_STRIPS_adj prob s s' adj)) s = true := hp.1
+  have h_is : is_successor' (min_cost_action prob s s'
+      (is_successor_state_of_trans_STRIPS_adj prob s s' adj)) s s' = true := hp.2
+  have h_succ : s' = successor' (min_cost_action prob s s'
+      (is_successor_state_of_trans_STRIPS_adj prob s s' adj)) s :=
+    is_successor'_eq_successor' _ _ _ h_is
+  unfold convertState; simp only [Successor]
+  refine ⟨?_, ?_⟩
+  · unfold applicable' satisfies' at h_app
+    simp only [decide_eq_true_eq] at h_app
+    intro i hi
+    exact h_app i (Action.mem_pre.mp hi)
+  · convert congr_arg (fun x : State' n => { i : Fin n | x[i.val] = true }) h_succ using 1 <;>
+      ext i <;>
+      simp only [Set.mem_union, Set.mem_diff, Set.mem_setOf_eq, Action.mem_del, Action.mem_add,
+        successor', BitVec.getElem_or, BitVec.getElem_and, BitVec.getElem_not,
+        VarSet'.getElem_toBitVec', Fin.getElem_fin] <;>
       grind
-    unfold applicable' satisfies' at appli_a
-    apply List.all_eq_true.mp at appli_a
-    exact appli_a x x_in_find
-  · unfold convertState
-    simp
-    apply Set.ext
-    intro x
-    simp
-    have is_succ_a : is_successor' a s s' := by
-      unfold a
-      unfold min_cost_action
-      grind
-    unfold is_successor' at is_succ_a
-    simp at is_succ_a
-    specialize is_succ_a x
-    split at is_succ_a
-    · expose_names
-      unfold Action.add
-      unfold convertVarSet
-      simp
-      tauto
-    · split at is_succ_a
-      · expose_names
-        simp_all
-        unfold Action.add Action.del
-        unfold convertVarSet
-        simp
-        tauto
-      · rw [is_succ_a]
-        unfold Action.add Action.del
-        unfold convertVarSet
-        simp
-        tauto
 
-def walk_to_strips_path {n : ℕ} (prob : STRIPS n) {start goal : State' n} (walk : WeightedDiGraph.Walk (G:= trans_of_STRIPS prob) start goal) (is_goal : satisfies' prob.goal' goal):
+def walk_to_strips_path {n : ℕ} (prob : PlanningTask n) {start goal : State' n} (walk : WeightedDiGraph.Walk (G:= trans_of_STRIPS prob) start goal) (is_goal : satisfies' prob.goal' goal):
     Path prob (convertState start) (convertState goal):=
   match eq : walk with
   | .nil => Path.empty (convertState start)
@@ -280,7 +339,7 @@ def walk_to_strips_path {n : ℕ} (prob : STRIPS n) {start goal : State' n} (wal
     let a : Action n := min_cost_action prob start w is_succ
     apply Path.cons (a := a) (s2 := convertState w)
     · unfold a
-      unfold STRIPS.actions
+      unfold PlanningTask.actions
       simp
       apply min_cost_action_in_prob
     · apply min_cost_action_creates_successor
@@ -323,62 +382,29 @@ lemma state_has_bitvec {n : ℕ} (s : State n) [DecidablePred s.Mem] : ∃ s' : 
     exact x_in
 
 
-lemma adj_of_successor {n : ℕ} {a : Action n} (prob : STRIPS n) {s s' : State' n} (succ : Successor a (convertState s) (convertState s')) (ha : a ∈ prob.actions):
+lemma adj_of_successor {n : ℕ} {a : Action n} (prob : PlanningTask n) {s s' : State' n} (succ : Successor a (convertState s) (convertState s')) (ha : a ∈ prob.actions):
   (trans_of_STRIPS prob).Adj s s' := by
-  unfold Successor convertState Applicable Action.pre Action.add Action.del convertVarSet at succ
-  unfold trans_of_STRIPS
-  simp_all
-  use a
-  constructor
-  · unfold STRIPS.actions at ha
-    simp at ha
-    exact ha
-  · constructor
-    · unfold applicable' satisfies'
-      simp
-      intro x x_in_pre
-      grind
-    · unfold is_successor'
-      simp
-      intro x
-      obtain ⟨_,eff⟩ := succ
-      apply Set.ext_iff.mp at eff
-      specialize eff x
-      grind
+  -- Since `a` is applicable and `succ` is a successor, we have `a ∈ prob.actions'` and `s' = successor' a s`.
+  have h_app : applicable' a s := by
+    unfold applicable';
+    unfold satisfies';
+    cases succ ; aesop
+  have h_succ : s' = successor' a s := by
+    obtain ⟨ _, h_succ ⟩ := succ;
+    simp_all +decide [ Set.ext_iff, convertState ];
+    ext i; simp_all +decide [ successor' ] ;
+    specialize h_succ ⟨ i, by assumption ⟩ ; simp_all +decide [ Action.mem_del, Action.mem_add,
+      mem_convertState, VarSet'.getElem_toBitVec' ] ;
+    grind;
+  unfold trans_of_STRIPS; simp_all +decide [ PlanningTask.actions ] ;
+  exact ⟨ a, ha, h_app, by unfold is_successor'; simp +decide [ h_succ ] ⟩
 
 
 noncomputable def successor_dec {n : ℕ} (a : Action n) (s s' : State n) (succ : Successor a s s'):
-  DecidablePred (Set.Mem s') := by
-  unfold DecidablePred
-  intro i
-  obtain ⟨ _, foo ⟩ := succ
-  rw [foo]
-  by_cases i_in_add : i ∈ a.add
-  · apply isTrue
-    apply Set.mem_union_right
-    exact i_in_add
-  · have union := (Set.mem_union (x:=i) (a:=s \ a.del) (b:=a.add)).mp
-    by_cases i_in_del : i ∈ a.del
-    · apply isFalse
-      by_contra
-      specialize union this
-      grind
-    · by_cases i_in_s : i ∈ s
-      · apply isTrue
-        apply Set.mem_union_left
-        apply Set.mem_diff_of_mem
-        · exact i_in_s
-        · exact i_in_del
-      · apply isFalse
-        by_contra
-        specialize union this
-        cases union
-        · expose_names
-          apply (Set.mem_diff (x:=i)).mp at h
-          simp_all
-        · contradiction
+  DecidablePred (Set.Mem s') :=
+  fun i => Classical.propDecidable _
 
-noncomputable def strips_path_to_walk {n : ℕ} (prob : STRIPS n) {start goal : State' n} (path : Path prob (convertState start) (convertState goal)):
+noncomputable def strips_path_to_walk {n : ℕ} (prob : PlanningTask n) {start goal : State' n} (path : Path prob (convertState start) (convertState goal)):
     WeightedDiGraph.Walk (G:= trans_of_STRIPS prob) start goal
   := by
     generalize hs : convertState start = s at path
@@ -411,11 +437,11 @@ decreasing_by
     rw [e]
     conv =>
       right
-      unfold Validator.Path.length
+      unfold STRIPS.Path.length
     simp
   grind
 
-noncomputable def last_dec {n : ℕ} (prob : STRIPS n) (s : State' n) (last : State n) (path : Path prob (convertState s) last) :
+noncomputable def last_dec {n : ℕ} (prob : PlanningTask n) (s : State' n) (last : State n) (path : Path prob (convertState s) last) :
     DecidablePred (Set.Mem last) := by
   cases path
   · intro x
@@ -440,7 +466,7 @@ decreasing_by
     rw [e]
     conv =>
       right
-      unfold Validator.Path.length
+      unfold STRIPS.Path.length
     simp
   grind
 
@@ -449,14 +475,14 @@ decreasing_by
 namespace Path
 
 /-- The length of a path. -/
-def cost {n} {pt : STRIPS n} {s s'} : Path pt s s' → ℕ
+def cost {n} {pt : PlanningTask n} {s s'} : Path pt s s' → ℕ
 | Path.empty _ => 0
 | Path.cons a _ _ _ π => π.cost + a.cost
 
 /-
 The cost of a snoc path equals the prefix cost plus the appended action cost.
 -/
-lemma cost_snoc {n} {pt : STRIPS n} {a : Action n} {s1 s2 s3 : State n}
+lemma cost_snoc {n} {pt : PlanningTask n} {a : Action n} {s1 s2 s3 : State n}
     {ha : a ∈ pt.actions} {path : Path pt s1 s2} {succ : Successor a s2 s3} :
     (Path.snoc a s2 ha path succ).cost = path.cost + a.cost := by
       unfold snoc;
@@ -480,7 +506,7 @@ PROBLEM
 PROVIDED SOLUTION
 Unfold both `min_cost_action` and `cost_of`. They share the same `applicableActs` and `costs` definitions. `min_cost_action` finds an action via `find?` whose cost equals `costs.min`, and `cost_of` returns `costs.min`. So `min_cost_action.cost = costs.min = cost_of`. The key is that `find?` returns an element satisfying `·.cost = minCost` and `.get` extracts it, so `.cost = minCost`.
 -/
-lemma min_cost_action_cost_eq_cost_of {n : ℕ} (prob : STRIPS n) (f t : State' n)
+lemma min_cost_action_cost_eq_cost_of {n : ℕ} (prob : PlanningTask n) (f t : State' n)
     (is_succ : is_successor_state prob f t) :
     (min_cost_action prob f t is_succ).cost = cost_of prob f t is_succ := by
   unfold cost_of min_cost_action at *;
@@ -493,19 +519,11 @@ The edge cost in `trans_of_STRIPS` equals `cost_of`.
 PROVIDED SOLUTION
 Unfold `NatGraph.edgeCost` to get `G.Payload f t adj`. Unfold `trans_of_STRIPS` - the Payload is defined as `cost_of prob f t (some_proof)`. By `WeightedDiGraph.Payload_irr`, the proof doesn't matter, so this equals `cost_of prob f t (is_successor_state_of_trans_STRIPS_adj prob f t adj)`.
 -/
-lemma trans_of_STRIPS_edgeCost {n : ℕ} (prob : STRIPS n) (f t : State' n)
+lemma trans_of_STRIPS_edgeCost {n : ℕ} (prob : PlanningTask n) (f t : State' n)
     (adj : (trans_of_STRIPS prob).Adj f t) :
     NatGraph.edgeCost adj = cost_of prob f t (is_successor_state_of_trans_STRIPS_adj prob f t adj) := by
-  convert rfl
-
-/-
-PROBLEM
-`cost_of` is at most the cost of any specific applicable action producing the transition.
-
-PROVIDED SOLUTION
-Unfold `cost_of`. The result is `costs.min h` where `costs = applicableActs.map (·.cost)` and `applicableActs = prob.actions'.filter (fun a => applicable' a f ∧ is_successor' a f t)`. Since `a ∈ prob.actions'` and `applicable' a f = true` and `is_successor' a f t = true`, we have `a ∈ applicableActs`. Therefore `a.cost ∈ costs`. And `List.min` is ≤ every element in the list. Use `List.min_le_of_mem` or similar.
--/
-lemma cost_of_le_action_cost {n : ℕ} (prob : STRIPS n) (f t : State' n) (a : Action n)
+  rfl
+lemma cost_of_le_action_cost {n : ℕ} (prob : PlanningTask n) (f t : State' n) (a : Action n)
     (is_succ : is_successor_state prob f t)
     (a_in_prob : a ∈ prob.actions')
     (a_applicable : applicable' a f = true) (a_produces : is_successor' a f t = true) :
@@ -524,7 +542,7 @@ By induction on walk.
 - nil case: both costs are 0 (Path.empty has cost 0, Walk.nil has cost 0).
 - cons case: walk = cons adj walk'. walk_to_strips_path produces Path.cons (min_cost_action ...) ... (walk_to_strips_path walk'). STRIPS cost = (walk_to_strips_path walk').cost + (min_cost_action ...).cost. By IH, (walk_to_strips_path walk').cost = walk'.cost. And (min_cost_action ...).cost = cost_of ... = edgeCost adj (by min_cost_action_cost_eq_cost_of and trans_of_STRIPS_edgeCost). Walk.cost of cons = edgeCost adj + walk'.cost. So STRIPS cost = walk'.cost + edgeCost adj = edgeCost adj + walk'.cost = walk.cost.
 -/
-lemma walk_to_strips_path_cost_eq {n : ℕ} (prob : STRIPS n) {start goal : State' n}
+lemma walk_to_strips_path_cost_eq {n : ℕ} (prob : PlanningTask n) {start goal : State' n}
     (walk : WeightedDiGraph.Walk (G := trans_of_STRIPS prob) start goal)
     (is_goal : satisfies' prob.goal' goal) :
     (walk_to_strips_path prob walk is_goal).cost = walk.cost := by
@@ -560,49 +578,39 @@ Key: need to handle the DecidablePred for s2, use state_has_bitvec and Classical
 
 Need to handle termination carefully - use path.length as the termination measure, similar to strips_path_to_walk.
 
-STRIPS.actions is defined as List.toFinset prob.actions'. So a ∈ prob.actions means a ∈ prob.actions'.toFinset, which implies a ∈ prob.actions'. Unfold STRIPS.actions and use List.mem_toFinset.
+PlanningTask.actions is defined as List.toFinset prob.actions'. So a ∈ prob.actions means a ∈ prob.actions'.toFinset, which implies a ∈ prob.actions'. Unfold PlanningTask.actions and use List.mem_toFinset.
 -/
-lemma mem_actions'_of_mem_actions {n : ℕ} {prob : STRIPS n} {a : Action n}
+lemma mem_actions'_of_mem_actions {n : ℕ} {prob : PlanningTask n} {a : Action n}
     (ha : a ∈ prob.actions) : a ∈ prob.actions' := by
   exact List.mem_dedup.mp ha
 
 /-
-PROBLEM
 If `Successor a (convertState s) (convertState t)` with `a ∈ prob.actions`,
     then `applicable' a s` and `is_successor' a s t`.
 
-PROVIDED SOLUTION
-Successor a (convertState s) (convertState t) gives us Applicable (convertState s) a, i.e., a.pre ⊆ convertState s. Unfold applicable' and satisfies'. We need a.pre'.val.all (fun x => s[x]) = true. By List.all_eq_true, this means for all x ∈ a.pre'.val, s[x] = true. Since a.pre ⊆ convertState s and a.pre = convertVarSet a.pre' = a.pre'.val.toFinset, for any x ∈ a.pre'.val, x ∈ a.pre'.val.toFinset = a.pre ⊆ convertState s = {i | s[i]}, so s[x] = true. This is the same logic as in the first part of adj_of_successor (unfold applicable' satisfies', then use the Applicable hypothesis via List.all_eq_true and simp/grind).
 -/
 lemma successor_implies_applicable {n : ℕ}
     {a : Action n} {s t : State' n}
     (succ : Successor a (convertState s) (convertState t)) :
     applicable' a s = true := by
-  unfold applicable' satisfies' at *
-  simp
-  intro x hx
-  have h_pre : x ∈ a.pre := by
-    convert Finset.mem_coe.mpr ( Finset.mem_coe.mpr ( List.mem_toFinset.mpr hx ) ) using 1
-  have h_s : s[x] := by
-    exact Set.mem_setOf.mp ( succ.1 h_pre ) |> fun h => by simpa using h;
-  exact h_s
+  obtain ⟨h_pre, h_succ⟩ := succ;
+  rw [applicable'_iff]; intro i hi; exact h_pre (Action.mem_pre.mpr hi)
 
 lemma successor_implies_is_successor {n : ℕ}
     {a : Action n} {s t : State' n}
     (succ : Successor a (convertState s) (convertState t)) :
     is_successor' a s t = true := by
-  unfold Successor convertState Applicable Action.pre Action.add Action.del convertVarSet at succ
-  unfold is_successor'
-  simp
-  intro x
-  obtain ⟨_,eff⟩ := succ
-  apply Set.ext_iff.mp at eff
-  specialize eff x
-  simp only [Set.mem_setOf_eq, Set.mem_diff, Set.mem_union, Finset.mem_coe, List.mem_toFinset] at eff
-  split_ifs with h1 h2 <;> simp_all
+  obtain ⟨h_pre, h_succ⟩ := succ;
+  -- Since `convertState` is injective, we can conclude that `t = successor' a s`.
+  have h_eq : t = successor' a s := by
+    ext i; simp [convertState, successor'] at *; (
+    replace h_succ := Set.ext_iff.mp h_succ ⟨ i, by assumption ⟩ ; simp_all +decide [ Fin.ext_iff,
+      Action.mem_del, Action.mem_add, mem_convertState, VarSet'.getElem_toBitVec' ] ;
+    grind)
+  simp [h_eq, is_successor']
 
 
-private lemma strips_path_has_cheaper_walk_aux {n : ℕ} (prob : STRIPS n) (k : ℕ)
+private lemma strips_path_has_cheaper_walk_aux {n : ℕ} (prob : PlanningTask n) (k : ℕ)
     {start goal : State' n}
     (path : Path prob (convertState start) (convertState goal))
     (hlen : path.length ≤ k) :
@@ -647,38 +655,45 @@ private lemma strips_path_has_cheaper_walk_aux {n : ℕ} (prob : STRIPS n) (k : 
           ≤ a.cost + path'.cost := Nat.add_le_add edge_le hw'
         _ = path'.cost + a.cost := Nat.add_comm _ _
 
-lemma strips_path_has_cheaper_walk {n : ℕ} (prob : STRIPS n) {start goal : State' n}
+lemma strips_path_has_cheaper_walk {n : ℕ} (prob : PlanningTask n) {start goal : State' n}
     (path : Path prob (convertState start) (convertState goal)) :
     ∃ w : WeightedDiGraph.Walk (G := trans_of_STRIPS prob) start goal, w.cost ≤ path.cost :=
   strips_path_has_cheaper_walk_aux prob path.length path (le_refl _)
 
 
 
-lemma satisfies'_implies_GoalState {n : ℕ} (prob : STRIPS n) (goal : State' n)
+lemma satisfies'_implies_GoalState {n : ℕ} (prob : PlanningTask n) (goal : State' n)
     (h : satisfies' prob.goal' goal = true) :
     prob.GoalState (convertState goal) := by
-  unfold STRIPS.GoalState convertVarSet convertState satisfies' at *
-  simp_all [List.all_eq_true, Set.subset_def]
+  -- Unfold `satisfies'` and `convertState`, then simplify using the definition of `GoalState` in ` PlanningTask`.
+  simp [satisfies', convertState, PlanningTask.GoalState] at h ⊢
+  intro i hi
+  simpa using h i (mem_convertVarSet.mp hi)
 
-lemma GoalState_implies_satisfies' {n : ℕ} (prob : STRIPS n) (goal : State' n)
+lemma GoalState_implies_satisfies' {n : ℕ} (prob : PlanningTask n) (goal : State' n)
     (h : prob.GoalState (convertState goal)) :
     satisfies' prob.goal' goal = true := by
-  unfold STRIPS.GoalState convertVarSet convertState satisfies' at *
-  simp_all [List.all_eq_true, Set.subset_def]
+  -- Let's unfold `satisfies'` and the `convertState` membership characterization, then
+  -- use the ` PlanningTask.GoalState` hypothesis `h` (subset inclusion) to discharge the goal.
+  simp [satisfies', PlanningTask.GoalState, convertState] at h ⊢;
+  -- By definition of subset, if i is in the goal set, then goal[i] must be true.
+  intros i hi
+  apply h
+  exact mem_convertVarSet.mpr hi
 
-lemma mem_trans_of_STRIPS_goals_iff {n : ℕ} (prob : STRIPS n) (goal : State' n) :
+lemma mem_trans_of_STRIPS_goals_iff {n : ℕ} (prob : PlanningTask n) (goal : State' n) :
     goal ∈ trans_of_STRIPS_goals prob ↔ satisfies' prob.goal' goal = true := by
   unfold trans_of_STRIPS_goals
   simp
   exact fun _ => ⟨goal.toFin, rfl⟩
 
-lemma Path.cost_eq_of_cast {n : ℕ} {pt : STRIPS n} {s s1 s2 : State n}
+lemma Path.cost_eq_of_cast {n : ℕ} {pt : PlanningTask n} {s s1 s2 : State n}
     (h : s1 = s2) (p : Path pt s s2) :
     (show Path pt s s1 from h ▸ p).cost = p.cost := by
   subst h; rfl
 
 
-def max_action_cost {n : ℕ} (prob : STRIPS n) : ℕ := if empty : prob.actions'.length = 0 then 1 else
+def max_action_cost {n : ℕ} (prob : PlanningTask n) : ℕ := if empty : prob.actions'.length = 0 then 1 else
   (prob.actions'.map (·.cost)).max (by rw [ne_eq] ; rw [List.map_eq_nil_iff] ; rw [←List.length_eq_zero_iff];  exact empty)
 
 
@@ -688,7 +703,7 @@ First, rewrite the edge cost using trans_of_STRIPS_edgeCost to get cost_of prob 
 
 Rewrite edgeCost using trans_of_STRIPS_edgeCost. Then we have cost_of prob f t is_succ ≤ max_action_cost prob. Unfold cost_of and max_action_cost. The cost_of is List.min of applicable action costs. List.min is a member of the list (List.min_mem). Each applicable action is in prob.actions', so its cost is in the cost map of prob.actions'. By List.le_max_of_mem, each such cost ≤ List.max of all action costs. The max_action_cost uses if-then-else: if actions' empty then 1 else List.max. Since adj implies there's at least one applicable action, actions' is non-empty, so the if goes to else branch. Use split on the if, in the empty case derive contradiction from adj, in the non-empty case use List.min_le_of_mem and List.le_max_of_mem with transitivity.
 -/
-private lemma edge_cost_le_max_action_cost {n : ℕ} (prob : STRIPS n)
+private lemma edge_cost_le_max_action_cost {n : ℕ} (prob : PlanningTask n)
     {f t : State' n} (adj : (trans_of_STRIPS prob).Adj f t) :
     NatGraph.edgeCost adj ≤ max_action_cost prob := by
       -- Since cost_of returns the minimum cost of applicable actions and max_action_cost is the maximum cost of any action, we have cost_of prob f t ... ≤ max_action_cost prob.
@@ -737,7 +752,7 @@ private lemma fintype_card_state'_le (n : ℕ) : Fintype.card (State' n) ≤ 2^n
     }
   rw [h, Fintype.card_fin]
 
-lemma all_paths_shorter_than {n : ℕ} (prob : STRIPS n):
+lemma all_paths_shorter_than {n : ℕ} (prob : PlanningTask n):
     ∀ goal ∈ trans_of_STRIPS_goals prob, ∀ path : WeightedDiGraph.Path (G:= (trans_of_STRIPS prob)) prob.init' goal, path.cost ≤ (2^n) * (max_action_cost prob) := by
   intro goal _ path
   have h_cost := walk_cost_le_length_mul_bound path.val (max_action_cost prob)
@@ -762,16 +777,10 @@ lemma successor_goal_implies_regressable {n : ℕ} (a : Action n)
     (hsucc : Successor a s goal)
     (hgoal : convertVarSet g ⊆ goal) :
     regressable' a (state'_of_varset' g) = true := by
-      simp_all [ regressable' ];
-      intro x hx; specialize hgoal; simp [ convertVarSet, Set.subset_def ] at hgoal
-      contrapose! hgoal; simp [ state'_of_varset'_getElem ] at hgoal
-      use x;
-      exact ⟨ hgoal.1, fun hx' => by
-        have h_mem : ∀ (l : List (Fin n)), x ∈ l → x ∈ l.toFinset := by
-          intro l a_1
-          simp_all only [List.mem_toFinset]
-        exact h_mem _ hx, fun hx' => hgoal.2 <| by
-        exact List.mem_dedup.mp hx' ⟩
+  obtain ⟨h_pre, h_succ⟩ := hsucc;
+  simp +decide [ regressable', h_succ ];
+  intro i hi; have := hgoal; simp_all +decide [ Set.subset_def, state'_of_varset'_getElem ] ;
+  exact Classical.or_iff_not_imp_left.2 fun h => by simpa [ hi ] using hgoal i ( by simpa [ convertVarSet ] using h ) ;
 
 /-
 If action a produces a goal state from s_prev, and a is regressable through g,
@@ -782,23 +791,13 @@ lemma predecessor_satisfies_regressed_goal {n : ℕ} (a : Action n)
     (hsucc : Successor a s_prev goal)
     (hgoal : convertVarSet g ⊆ goal) :
     convertVarSet (varset'_of_state' (regress' a (state'_of_varset' g))) ⊆ s_prev := by
-      unfold Successor at hsucc; unfold convertVarSet;
-      intro x hx; simp_all [ Set.subset_def ] ;
-      unfold varset'_of_state' at hx; unfold regress' at hx; simp_all [ List.finRange ] ;
-      rw [ BitVec.getElem_ofBoolListLE ] at hx ; simp_all [ List.getElem_ofFn ] ;
-      cases hx <;> simp_all [ convertVarSet ];
-      · convert hsucc.1 x _;
-        exact ( show x ∈ convertVarSet a.pre' from by simp [ convertVarSet, * ] );
-      · cases hgoal x ( by
-          rw [ state'_of_varset'_getElem ] at * ; simp_all only [decide_eq_true_eq] ) <;> simp_all [ state'_of_varset'_getElem ];
-        rename_i h₁ h₂;
-        cases h₁.1 (by
-          exact List.mem_dedup.mp h₂
-        )
+  intro i hi; have := hsucc.1; simp_all +decide [ Successor, Set.subset_def ] ; (
+  by_cases hi' : i ∈ a.pre <;> simp_all +decide [ regress', convertVarSet, varset'_of_state' ];
+  grind +suggestions)
 
 /-- Any graph path in the STRIPS transition graph has cost ≤ 2^n * max_action_cost,
     regardless of its start and end states. -/
-lemma graph_path_cost_le_bound {n : ℕ} (prob : STRIPS n) (s g : State' n)
+lemma graph_path_cost_le_bound {n : ℕ} (prob : PlanningTask n) (s g : State' n)
     (path : WeightedDiGraph.Path (G := trans_of_STRIPS prob) s g) :
     path.cost ≤ 2 ^ n * max_action_cost prob := by
   have h_cost := walk_cost_le_length_mul_bound path.val (max_action_cost prob)

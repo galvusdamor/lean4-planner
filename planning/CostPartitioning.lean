@@ -1,29 +1,29 @@
 import planning.Heuristics
 import Mathlib.Algebra.BigOperators.Fin
 
-namespace Validator
+namespace STRIPS
 
 -- P is the number of partitions
 -- the partining assigns in each partition to each action a cost
-abbrev cost_partitioning {n : ℕ} (prob : STRIPS n) (P : ℕ) := (p : Fin P) → (a : Fin prob.actions'.length) → ℕ
+abbrev cost_partitioning {n : ℕ} (prob : PlanningTask n) (P : ℕ) := (p : Fin P) → (a : Fin prob.actions'.length) → ℕ
 
-def is_valid_cost_partitioning {n : ℕ} (prob : STRIPS n) (P : ℕ) (partitioning : cost_partitioning prob P) :=
+def is_valid_cost_partitioning {n : ℕ} (prob : PlanningTask n) (P : ℕ) (partitioning : cost_partitioning prob P) :=
   ∀ a : Fin prob.actions'.length, ((List.finRange P).map (fun p => partitioning p a)).sum ≤ prob.actions'[a].cost
 
-def partition_STRIPS {n P : ℕ} (prob : STRIPS n) (partitioning : cost_partitioning prob P) (p : Fin P) : STRIPS n :=
-  let actions : Actions' n := prob.actions'.mapFinIdx (fun i a i_lt =>
+def partition_STRIPS {n P : ℕ} (prob : PlanningTask n) (partitioning : cost_partitioning prob P) (p : Fin P) : PlanningTask n :=
+  let actions : List (Action n) := prob.actions'.mapFinIdx (fun i a i_lt =>
     Action.mk a.name a.pre' a.add' a.del' (partitioning p ⟨i,i_lt⟩) )
-  STRIPS.mk prob.varNames actions prob.init' prob.goal'
+  PlanningTask.mk prob.varNames actions prob.init' prob.goal'
 
 /-- Partitioning only relabels action costs, so the action list keeps its length. -/
-lemma partition_STRIPS_actions_length {n P : ℕ} (prob : STRIPS n)
+lemma partition_STRIPS_actions_length {n P : ℕ} (prob : PlanningTask n)
     (partitioning : cost_partitioning prob P) (p : Fin P) :
     (partition_STRIPS prob partitioning p).actions'.length = prob.actions'.length := by
   unfold partition_STRIPS; simp [List.length_mapFinIdx]
 
 /-- The cost of the `i`-th action of `partition_STRIPS prob partitioning p` is exactly the cost the
 partitioning assigns to that index. -/
-lemma partition_STRIPS_getElem_cost {n P : ℕ} (prob : STRIPS n)
+lemma partition_STRIPS_getElem_cost {n P : ℕ} (prob : PlanningTask n)
     (partitioning : cost_partitioning prob P) (p : Fin P) (i : ℕ)
     (hi : i < (partition_STRIPS prob partitioning p).actions'.length)
     (hi' : i < prob.actions'.length) :
@@ -33,26 +33,26 @@ lemma partition_STRIPS_getElem_cost {n P : ℕ} (prob : STRIPS n)
 
 /-- Partitioning only relabels action costs, so the `i`-th action keeps its preconditions, add- and
 delete-effects and name. -/
-lemma partition_STRIPS_getElem_fields {n P : ℕ} (prob : STRIPS n)
+lemma partition_STRIPS_getElem_fields {n P : ℕ} (prob : PlanningTask n)
     (partitioning : cost_partitioning prob P) (p : Fin P) (i : ℕ)
     (hi : i < (partition_STRIPS prob partitioning p).actions'.length)
     (hi' : i < prob.actions'.length) :
-    (partition_STRIPS prob partitioning p).actions'[i].pre' = prob.actions'[i].pre'
-    ∧ (partition_STRIPS prob partitioning p).actions'[i].add' = prob.actions'[i].add'
-    ∧ (partition_STRIPS prob partitioning p).actions'[i].del' = prob.actions'[i].del'
+    (partition_STRIPS prob partitioning p).actions'[i].pre = prob.actions'[i].pre
+    ∧ (partition_STRIPS prob partitioning p).actions'[i].add = prob.actions'[i].add
+    ∧ (partition_STRIPS prob partitioning p).actions'[i].del = prob.actions'[i].del
     ∧ (partition_STRIPS prob partitioning p).actions'[i].name = prob.actions'[i].name := by
   unfold partition_STRIPS
-  simp [List.getElem_mapFinIdx]
+  simp [List.getElem_mapFinIdx, Action.pre, Action.add, Action.del]
 
 /-- Partitioning leaves the initial state and goal unchanged (only action costs are relabelled). -/
-lemma partition_STRIPS_init_goal {n P : ℕ} (prob : STRIPS n)
+lemma partition_STRIPS_init_goal {n P : ℕ} (prob : PlanningTask n)
     (partitioning : cost_partitioning prob P) (p : Fin P) :
     (partition_STRIPS prob partitioning p).init' = prob.init'
     ∧ (partition_STRIPS prob partitioning p).goal' = prob.goal' := by
   unfold partition_STRIPS; exact ⟨rfl, rfl⟩
 
 /-- The total cost of the actions of partition `p` is the sum of the partition's assigned costs. -/
-lemma partition_STRIPS_cost_sum {n P : ℕ} (prob : STRIPS n)
+lemma partition_STRIPS_cost_sum {n P : ℕ} (prob : PlanningTask n)
     (partitioning : cost_partitioning prob P) (p : Fin P) :
     ((partition_STRIPS prob partitioning p).actions'.map (fun a => a.cost)).sum
       = ∑ i : Fin prob.actions'.length, partitioning p i := by
@@ -60,10 +60,10 @@ lemma partition_STRIPS_cost_sum {n P : ℕ} (prob : STRIPS n)
   simp only [List.mapFinIdx_eq_ofFn, List.map_ofFn, List.sum_ofFn, Function.comp, Fin.eta]
 
 /-- The total cost of a problem's actions as a sum over action indices. -/
-lemma actions_cost_sum_eq {n : ℕ} (prob : STRIPS n) :
+lemma actions_cost_sum_eq {n : ℕ} (prob : PlanningTask n) :
     (prob.actions'.map (fun a => a.cost)).sum
       = ∑ i : Fin prob.actions'.length, prob.actions'[i].cost := by
-  conv_lhs => rw [← List.ofFn_getElem prob.actions']
+  conv_lhs => rw [← List.ofFn_getElem (l := prob.actions')]
   rw [List.map_ofFn, List.sum_ofFn]
   rfl
 
@@ -72,7 +72,7 @@ lemma actions_cost_sum_eq {n : ℕ} (prob : STRIPS n) :
 does not occur in `prob.actions'` is returned unchanged.  This is exactly the cost that
 `partition_STRIPS prob partitioning p` gives to the action, so adapting a landmark's actions makes
 them genuine actions of the partitioned problem. -/
-def adapt_cost_of_action_to_partition {n P : ℕ} (prob : STRIPS n)
+def adapt_cost_of_action_to_partition {n P : ℕ} (prob : PlanningTask n)
     (partitioning : cost_partitioning prob P) (p : Fin P) (a : Action n) : Action n :=
   if h : prob.actions'.idxOf a < prob.actions'.length then
     Action.mk a.name a.pre' a.add' a.del' (partitioning p ⟨prob.actions'.idxOf a, h⟩)
@@ -80,16 +80,16 @@ def adapt_cost_of_action_to_partition {n P : ℕ} (prob : STRIPS n)
 
 /-- Adapting an action of `prob` to a partition keeps its name, preconditions, add- and
 delete-effects; only the cost changes. -/
-lemma adapt_cost_of_action_to_partition_fields {n P : ℕ} (prob : STRIPS n)
+lemma adapt_cost_of_action_to_partition_fields {n P : ℕ} (prob : PlanningTask n)
     (partitioning : cost_partitioning prob P) (p : Fin P) (a : Action n) :
     (adapt_cost_of_action_to_partition prob partitioning p a).name = a.name ∧
-    (adapt_cost_of_action_to_partition prob partitioning p a).pre' = a.pre' ∧
-    (adapt_cost_of_action_to_partition prob partitioning p a).add' = a.add' ∧
-    (adapt_cost_of_action_to_partition prob partitioning p a).del' = a.del' := by
-  unfold adapt_cost_of_action_to_partition; split <;> simp
+    (adapt_cost_of_action_to_partition prob partitioning p a).pre = a.pre ∧
+    (adapt_cost_of_action_to_partition prob partitioning p a).add = a.add ∧
+    (adapt_cost_of_action_to_partition prob partitioning p a).del = a.del := by
+  unfold adapt_cost_of_action_to_partition; split <;> simp [Action.pre, Action.add, Action.del]
 
 /-- The cost assigned to an adapted action of `prob` is the partition value at its index. -/
-lemma adapt_cost_of_action_to_partition_cost {n P : ℕ} (prob : STRIPS n)
+lemma adapt_cost_of_action_to_partition_cost {n P : ℕ} (prob : PlanningTask n)
     (partitioning : cost_partitioning prob P) (p : Fin P) (a : Action n)
     (ha : a ∈ prob.actions') :
     (adapt_cost_of_action_to_partition prob partitioning p a).cost
@@ -99,7 +99,7 @@ lemma adapt_cost_of_action_to_partition_cost {n P : ℕ} (prob : STRIPS n)
 
 /-- An adapted action of `prob` is the action that `partition_STRIPS prob partitioning p` puts at
 the (first) index of `a`, hence it is a genuine action of the partitioned problem. -/
-lemma adapt_cost_of_action_to_partition_mem {n P : ℕ} (prob : STRIPS n)
+lemma adapt_cost_of_action_to_partition_mem {n P : ℕ} (prob : PlanningTask n)
     (partitioning : cost_partitioning prob P) (p : Fin P) (a : Action n)
     (ha : a ∈ prob.actions') :
     adapt_cost_of_action_to_partition prob partitioning p a
@@ -116,22 +116,22 @@ lemma adapt_cost_of_action_to_partition_mem {n P : ℕ} (prob : STRIPS n)
   simp only [hget]
 
 
-def partition_heuristics {n P : ℕ} (prob : STRIPS n) (partitioning : cost_partitioning prob P)
-  (heurs : Fin P → STRIPS n → State' n → ℕ)
-  (s : State' n) : ℕ :=
+def partition_heuristics {n P : ℕ} (prob : PlanningTask n) (partitioning : cost_partitioning prob P)
+  (heurs : Fin P → PlanningTask n → State' n → ℕ∞)
+  (s : State' n) : ℕ∞ :=
   ∑ p : Fin P, heurs p (partition_STRIPS prob partitioning p) s
 
 open WeightedDiGraph
 
 /-! ### Partitioning preserves graph structure -/
 
-private lemma partition_goals_eq {n P : ℕ} (prob : STRIPS n)
+private lemma partition_goals_eq {n P : ℕ} (prob : PlanningTask n)
     (partitioning : cost_partitioning prob P) (p : Fin P) :
     trans_of_STRIPS_goals (partition_STRIPS prob partitioning p) =
     trans_of_STRIPS_goals prob := by
   unfold trans_of_STRIPS_goals partition_STRIPS; rfl
 
-private lemma partition_adj_of_adj {n P : ℕ} (prob : STRIPS n)
+private lemma partition_adj_of_adj {n P : ℕ} (prob : PlanningTask n)
     (partitioning : cost_partitioning prob P) (p : Fin P)
     {f t : State' n} (adj : (trans_of_STRIPS prob).Adj f t) :
     (trans_of_STRIPS (partition_STRIPS prob partitioning p)).Adj f t := by
@@ -143,7 +143,7 @@ private lemma partition_adj_of_adj {n P : ℕ} (prob : STRIPS n)
 
 /-! ### Walk transfer between original and partitioned graphs -/
 
-private def transfer_walk {n P : ℕ} (prob : STRIPS n)
+private def transfer_walk {n P : ℕ} (prob : PlanningTask n)
     (partitioning : cost_partitioning prob P) (p : Fin P)
     {f t : State' n} :
     Walk (G := trans_of_STRIPS prob) f t →
@@ -153,7 +153,7 @@ private def transfer_walk {n P : ℕ} (prob : STRIPS n)
     Walk.cons (partition_adj_of_adj prob partitioning p adj)
       (transfer_walk prob partitioning p rest)
 
-private lemma transfer_walk_support {n P : ℕ} (prob : STRIPS n)
+private lemma transfer_walk_support {n P : ℕ} (prob : PlanningTask n)
     (partitioning : cost_partitioning prob P) (p : Fin P)
     {f t : State' n} (w : Walk (G := trans_of_STRIPS prob) f t) :
     (transfer_walk prob partitioning p w).support = w.support := by
@@ -161,7 +161,7 @@ private lemma transfer_walk_support {n P : ℕ} (prob : STRIPS n)
   | nil => rfl
   | cons _ _ ih => simp [transfer_walk, Walk.support, ih]
 
-private def transfer_path {n P : ℕ} (prob : STRIPS n)
+private def transfer_path {n P : ℕ} (prob : PlanningTask n)
     (partitioning : cost_partitioning prob P) (p : Fin P)
     {f t : State' n} (path : (trans_of_STRIPS prob).Path f t) :
     (trans_of_STRIPS (partition_STRIPS prob partitioning p)).Path f t :=
@@ -170,9 +170,11 @@ private def transfer_path {n P : ℕ} (prob : STRIPS n)
 
 /-! ### Edge cost relationships -/
 
-/-- The cost of a transferred edge in partition p is at most `partitioning p i`
-    for any action index i that achieves the transition. -/
-private lemma partition_edge_cost_le_action {n P : ℕ} (prob : STRIPS n)
+/-
+The cost of a transferred edge in partition p is at most `partitioning p i`
+    for any action index i that achieves the transition.
+-/
+private lemma partition_edge_cost_le_action {n P : ℕ} (prob : PlanningTask n)
     (partitioning : cost_partitioning prob P) (p : Fin P)
     {f t : State' n} (adj : (trans_of_STRIPS prob).Adj f t)
     (i : Fin prob.actions'.length)
@@ -180,30 +182,19 @@ private lemma partition_edge_cost_le_action {n P : ℕ} (prob : STRIPS n)
     (a_succ : is_successor' (prob.actions'[i.val]) f t = true) :
     NatGraph.edgeCost (partition_adj_of_adj prob partitioning p adj) ≤
     partitioning p i := by
-  convert cost_of_le_action_cost (partition_STRIPS prob partitioning p) f t
-    (prob.actions'[i] |> fun a =>
-      Action.mk a.name a.pre' a.add' a.del' (partitioning p i))
-    _ _ _ _ using 1
-  · unfold partition_STRIPS; 
-    simp_all only [List.any_eq_true, List.mem_mapFinIdx, Bool.decide_and, Bool.decide_eq_true, Bool.and_eq_true,
-      ↓existsAndEq, true_and]
-    apply Exists.intro
-    · apply Exists.intro
-      · apply And.intro
-        on_goal 2 => { exact a_succ }
-        · simp_all only [Fin.eta]
-          exact a_app
-      · simp_all only [Fin.is_lt]
-  · unfold partition_STRIPS
-    simp_all only [Fin.getElem_fin, List.mem_mapFinIdx, Action.mk.injEq]
-    grind
-  · exact a_app
-  · exact a_succ
+      have h_adj_trans : (trans_of_STRIPS (partition_STRIPS prob partitioning p)).Adj f t := by
+        exact partition_adj_of_adj prob partitioning p adj;
+      have h_adj_trans_cost : NatGraph.edgeCost h_adj_trans = cost_of (partition_STRIPS prob partitioning p) f t (is_successor_state_of_trans_STRIPS_adj (partition_STRIPS prob partitioning p) f t h_adj_trans) := by
+        convert trans_of_STRIPS_edgeCost ( partition_STRIPS prob partitioning p ) f t h_adj_trans using 1;
+      convert h_adj_trans_cost.le.trans ( cost_of_le_action_cost ( partition_STRIPS prob partitioning p ) f t _ _ _ _ _ ) using 1;
+      rotate_left;
+      exact ⟨ prob.actions'[i].name, prob.actions'[i].pre', prob.actions'[i].add', prob.actions'[i].del', partitioning p i ⟩;
+      · unfold partition_STRIPS; aesop;
+      · convert a_app using 1;
+      · convert a_succ using 1;
+      · rfl
 
-/-- For any edge, the sum over all partitions of edge costs is bounded by the original
-    edge cost. This is the key inequality that makes cost partitioning work: the valid
-    partitioning constraint ensures action costs distribute across partitions. -/
-private lemma partition_edge_cost_sum_le {n P : ℕ} (prob : STRIPS n)
+private lemma partition_edge_cost_sum_le {n P : ℕ} (prob : PlanningTask n)
     (partitioning : cost_partitioning prob P)
     (valid : is_valid_cost_partitioning prob P partitioning)
     {f t : State' n} (adj : (trans_of_STRIPS prob).Adj f t) :
@@ -239,7 +230,7 @@ private lemma partition_edge_cost_sum_le {n P : ℕ} (prob : STRIPS n)
 
 /-- The sum of walk costs across all partitions is bounded by the original walk cost.
     Proved by induction on the walk, using `partition_edge_cost_sum_le` at each step. -/
-private lemma partition_walk_cost_sum_le {n P : ℕ} (prob : STRIPS n)
+private lemma partition_walk_cost_sum_le {n P : ℕ} (prob : PlanningTask n)
     (partitioning : cost_partitioning prob P)
     (valid : is_valid_cost_partitioning prob P partitioning)
     {f t : State' n} (w : Walk (G := trans_of_STRIPS prob) f t) :
@@ -260,9 +251,9 @@ private lemma partition_walk_cost_sum_le {n P : ℕ} (prob : STRIPS n)
 /-- The sum of admissible heuristics under a valid cost partitioning is itself admissible.
     Each heuristic underestimates the path cost in its partition, and the valid partitioning
     ensures that the sum of partition costs does not exceed the original path cost. -/
-lemma partition_heuristics_admissible {n P : ℕ} (prob : STRIPS n)
+lemma partition_heuristics_admissible {n P : ℕ} (prob : PlanningTask n)
     (partitioning : cost_partitioning prob P)
-    (heurs : Fin P → STRIPS n → State' n → ℕ)
+    (heurs : Fin P → PlanningTask n → State' n → ℕ∞)
     (valid : is_valid_cost_partitioning prob P partitioning)
     (all_admissible : ∀ p : Fin P,
       heur_admissible' (partition_STRIPS prob partitioning p)
@@ -273,12 +264,14 @@ lemma partition_heuristics_admissible {n P : ℕ} (prob : STRIPS n)
   -- Each heuristic is ≤ the path cost in its partition
   have h_each : ∀ p : Fin P,
       heurs p (partition_STRIPS prob partitioning p) v ≤
-      (transfer_path prob partitioning p path).cost :=
+      ((transfer_path prob partitioning p path).cost : ℕ∞) :=
     fun p => all_admissible p v goal
       ((partition_goals_eq prob partitioning p) ▸ goal_in_goals)
       (transfer_path prob partitioning p path)
   -- Sum of heuristics ≤ sum of partition path costs ≤ original path cost
   calc ∑ p, heurs p (partition_STRIPS prob partitioning p) v
-      ≤ ∑ p, (transfer_path prob partitioning p path).cost :=
+      ≤ ∑ p, ((transfer_path prob partitioning p path).cost : ℕ∞) :=
         Finset.sum_le_sum (fun p _ => h_each p)
-    _ ≤ path.cost := partition_walk_cost_sum_le prob partitioning valid path.val
+    _ = ((∑ p, (transfer_path prob partitioning p path).cost : ℕ) : ℕ∞) := by push_cast; rfl
+    _ ≤ (path.cost : ℕ∞) := by
+        exact_mod_cast partition_walk_cost_sum_le prob partitioning valid path.val
