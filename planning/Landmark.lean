@@ -9,24 +9,24 @@ instance PlanningTask.actions.decidableMem {n : ℕ} (prob : PlanningTask n) (a 
     Decidable (a ∈ prob.actions) :=
   Finset.decidableMem a prob.actions'.toFinset
 
-def Path.actionsUsed {n : ℕ} {pt : PlanningTask n} {s s' : State n} : Path pt s s' → List (Action n)
-  | Path.empty _ => []
-  | Path.cons a _ _ _ p => a :: p.actionsUsed
+def PlanningTask.Path.actionsUsed {n : ℕ} {pt : PlanningTask n} {s s' : State n} : PlanningTask.Path pt s s' → List (Action n)
+  | PlanningTask.Path.empty _ => []
+  | PlanningTask.Path.cons a _ _ _ p => a :: p.actionsUsed
 
-instance Path.instMembership {n : ℕ} {pt : PlanningTask n} {s s' : State n} :
-    Membership (Action n) (Path pt s s') where
+instance PlanningTask.Path.instMembership {n : ℕ} {pt : PlanningTask n} {s s' : State n} :
+    Membership (Action n) (PlanningTask.Path pt s s') where
   mem p a := a ∈ p.actionsUsed
 
 -- should mean to test whether the action a is one of the action in the plan
 instance PlanningTask.plan.action.membership {n : ℕ} (prob : PlanningTask n) (s : State n) :
-    Membership (Action n) (Plan prob s) where
-  mem plan a := @Membership.mem _ _ Path.instMembership plan.path a
+    Membership (Action n) (PlanningTask.Plan prob s) where
+  mem plan a := @Membership.mem _ _ PlanningTask.Path.instMembership plan.path a
 
 
 def is_disjunctive_action_landmark_for_state {n : ℕ} (prob : PlanningTask n) (lm : List (Action n))
-    (s : State' n) : Prop :=
+    (s : BitVec n) : Prop :=
   lm.all (fun a => decide (a ∈ prob.actions)) ∧
-    (∀ plan : Plan prob (convertState s), ∃ a ∈ lm, a ∈ plan)
+    (∀ plan : PlanningTask.Plan prob (convertState s), ∃ a ∈ lm, a ∈ plan)
 
 
 -- remove all actions mentioned in lm
@@ -34,16 +34,21 @@ def remove_actions {n : ℕ} (prob : PlanningTask n) (lm : List (Action n)) : Pl
   let actions : List (Action n) := prob.actions'.filter (fun a' => a' ∉ lm)
   PlanningTask.mk prob.varNames actions prob.init' prob.goal'
 
-def set_init {n : ℕ} (prob : PlanningTask n) (s : State' n) : PlanningTask n :=
-  PlanningTask.mk prob.varNames prob.actions' s prob.goal'
+def set_init {n : ℕ} (prob : PlanningTask n) (s : BitVec n) : PlanningTask n :=
+  PlanningTask.mk prob.varNames prob.actions' (varset'_of_state' s) prob.goal'
+
+@[simp] lemma set_init_init {n : ℕ} (prob : PlanningTask n) (s : BitVec n) :
+    (set_init prob s).init = convertState s := by
+  ext i
+  simp [set_init, PlanningTask.init, convertState, varset'_of_state', VarSet.mem_iff]
 
 
 -- alternative characterisation of landmarks: if you remove the action, the problem must now be
 -- unsolvable
 def action_set_removal_implies_unsolvable_for_state {n : ℕ} (prob : PlanningTask n)
-    (lm : List (Action n)) (s : State' n) : Prop :=
+    (lm : List (Action n)) (s : BitVec n) : Prop :=
   lm.all (fun a => decide (a ∈ prob.actions)) ∧
-    (Unsolvable (set_init (remove_actions prob lm) s))
+    (PlanningTask.Unsolvable (set_init (remove_actions prob lm) s))
 
 private lemma mem_remove_actions_of_not_mem_lm {n : ℕ} (prob : PlanningTask n) (lm : List (Action n))
     (a : Action n) (ha : a ∈ prob.actions') (ha_lm : a ∉ lm) :
@@ -59,63 +64,65 @@ private lemma mem_of_mem_remove_actions {n : ℕ} (prob : PlanningTask n) (lm : 
     Bool.not_eq_eq_eq_not, Bool.not_true, decide_eq_false_iff_not, not_false_eq_true]
 
 private lemma path_remove_to_path_orig {n : ℕ} (prob : PlanningTask n) (lm : List (Action n))
-    (s : State' n) {s1 s2 : State n}
-    (p : Path (set_init (remove_actions prob lm) s) s1 s2) :
-    ∃ p' : Path prob s1 s2, p'.actionsUsed.Sublist p.actionsUsed ∧
+    (s : BitVec n) {s1 s2 : State n}
+    (p : PlanningTask.Path (set_init (remove_actions prob lm) s) s1 s2) :
+    ∃ p' : PlanningTask.Path prob s1 s2, p'.actionsUsed.Sublist p.actionsUsed ∧
       (∀ a, a ∈ p'.actionsUsed → a ∉ lm) ∧ p'.cost = p.cost := by
   induction' p with a s1 s2 ha p' hp'
-  · exact ⟨Path.empty a, by tauto⟩
+  · exact ⟨PlanningTask.Path.empty a, by tauto⟩
   · rename_i h₁ h₂ h₃
     obtain ⟨p'', hp'', hp'''⟩ := h₃
-    use Path.cons s1 ha (show s1 ∈ prob.actions from by
+    use PlanningTask.Path.cons s1 ha (show s1 ∈ prob.actions from by
       simp_all [set_init, remove_actions]
       simp_all [PlanningTask.actions]) h₁ p''
-    simp_all [Path.actionsUsed, Path.cost]
+    simp_all [PlanningTask.Path.actionsUsed, PlanningTask.Path.cost]
     unfold set_init at hp'; simp_all [remove_actions]
     unfold PlanningTask.actions at hp'
     simp_all only [List.toFinset_filter, Bool.not_eq_eq_eq_not, Bool.not_true,
       decide_eq_false_iff_not, Finset.coe_filter, List.mem_toFinset, Set.mem_setOf_eq, not_false_eq_true]
 
 private lemma plan_remove_to_plan_orig {n : ℕ} (prob : PlanningTask n) (lm : List (Action n))
-    (s : State' n)
-    (plan : Plan (set_init (remove_actions prob lm) s) (convertState s)) :
-    ∃ plan' : Plan prob (convertState s), ∀ a, a ∈ plan'.path.actionsUsed → a ∉ lm := by
+    (s : BitVec n)
+    (plan : PlanningTask.Plan (set_init (remove_actions prob lm) s) (convertState s)) :
+    ∃ plan' : PlanningTask.Plan prob (convertState s), ∀ a, a ∈ plan'.path.actionsUsed → a ∉ lm := by
   cases' path_remove_to_path_orig prob lm s plan.path with p' hp'
   cases' plan with last p goal
   exact ⟨⟨last, p', goal⟩, hp'.2.1⟩
 
 private lemma path_orig_to_path_remove {n : ℕ} (prob : PlanningTask n) (lm : List (Action n))
-    (s : State' n) {s1 s2 : State n}
-    (p : Path prob s1 s2) (h : ∀ a, a ∈ p.actionsUsed → a ∉ lm) :
-    ∃ p' : Path (set_init (remove_actions prob lm) s) s1 s2, p'.cost = p.cost := by
-  induction p <;> simp_all [Path.cost]
-  · exact ⟨Path.empty _, rfl⟩
+    (s : BitVec n) {s1 s2 : State n}
+    (p : PlanningTask.Path prob s1 s2) (h : ∀ a, a ∈ p.actionsUsed → a ∉ lm) :
+    ∃ p' : PlanningTask.Path (set_init (remove_actions prob lm) s) s1 s2, p'.cost = p.cost := by
+  induction p <;> simp_all [PlanningTask.Path.cost]
+  · exact ⟨PlanningTask.Path.empty _, rfl⟩
   · rename_i a s1 s2 ha succ π ih
     obtain ⟨p', hp'⟩ := ih (fun a ha => h a <| List.mem_cons_of_mem _ ha)
-    refine' ⟨Path.cons _ _ _ _ p', _⟩
+    refine' ⟨PlanningTask.Path.cons _ _ _ _ p', _⟩
     exact ‹Action n›
     all_goals simp_all [set_init, remove_actions]
-    all_goals norm_num [Path.actionsUsed, Path.cost] at *
+    all_goals norm_num [PlanningTask.Path.actionsUsed, PlanningTask.Path.cost] at *
     · simp_all [PlanningTask.actions]
     · exact And.imp_right (fun a_2 => rfl) succ
     · exact hp'
 
 private lemma plan_orig_to_plan_remove {n : ℕ} (prob : PlanningTask n) (lm : List (Action n))
-    (s : State' n)
-    (plan : Plan prob (convertState s)) (h : ∀ a, a ∈ plan.path.actionsUsed → a ∉ lm) :
-    Nonempty (Plan (set_init (remove_actions prob lm) s) (convertState s)) := by
+    (s : BitVec n)
+    (plan : PlanningTask.Plan prob (convertState s)) (h : ∀ a, a ∈ plan.path.actionsUsed → a ∉ lm) :
+    Nonempty (PlanningTask.Plan (set_init (remove_actions prob lm) s) (convertState s)) := by
   obtain ⟨p', hp'⟩ := path_orig_to_path_remove prob lm s plan.path h
   exact ⟨⟨_, p', plan.goal⟩⟩
 
 lemma disjunctive_action_landmarks_iff_unsolvability {n : ℕ} (prob : PlanningTask n)
-    (lm : List (Action n)) (s : State' n) :
+    (lm : List (Action n)) (s : BitVec n) :
     is_disjunctive_action_landmark_for_state prob lm s ↔
       action_set_removal_implies_unsolvable_for_state prob lm s := by
   constructor <;> intro h
   · refine ⟨h.1, ?_⟩
     contrapose! h
     obtain ⟨plan⟩ := h
-    obtain ⟨plan', hplan'⟩ := plan_remove_to_plan_orig prob lm s plan
+    let plan' : PlanningTask.Plan (set_init (remove_actions prob lm) s) (convertState s) :=
+      (set_init_init (remove_actions prob lm) s).symm ▸ plan
+    obtain ⟨plan', hplan'⟩ := plan_remove_to_plan_orig prob lm s plan'
     unfold is_disjunctive_action_landmark_for_state
     simp_all only [List.all_eq_true, decide_eq_true_eq, not_and, not_forall, not_exists]
     intro a
@@ -130,21 +137,23 @@ lemma disjunctive_action_landmarks_iff_unsolvability {n : ℕ} (prob : PlanningT
     intro plan
     contrapose! h
     simp [action_set_removal_implies_unsolvable_for_state]
-    exact fun _ => plan_orig_to_plan_remove prob lm s plan fun a ha => by
-      apply Aesop.BuiltinRules.not_intro
-      intro a_1
-      apply h
-      on_goal 2 => exact ha
-      · simp_all only
+    exact fun _ => by
+      have hp := plan_orig_to_plan_remove prob lm s plan fun a ha => by
+        apply Aesop.BuiltinRules.not_intro
+        intro a_1
+        apply h
+        on_goal 2 => exact ha
+        · simp_all only
+      exact (set_init_init (remove_actions prob lm) s) ▸ hp
 
 instance PlanningTask.unsolvability.decidable {n : ℕ} (prob : PlanningTask n) :
-    Decidable (Unsolvable prob) := by
+    Decidable (PlanningTask.Unsolvable prob) := by
   cases h : planner prob (fun _ => 0) with
   | none => exact isTrue (planner_complete prob (fun _ => 0) (zero_heur_admissible' _) h)
   | some plan => exact isFalse (fun ⟨f⟩ => f plan)
 
 instance PlanningTask.landmark.decidable {n : ℕ} (prob : PlanningTask n) (lm : List (Action n))
-    (s : State' n) :
+    (s : BitVec n) :
     Decidable (is_disjunctive_action_landmark_for_state prob lm s) := by
   rw [disjunctive_action_landmarks_iff_unsolvability]
   unfold action_set_removal_implies_unsolvable_for_state
@@ -152,15 +161,15 @@ instance PlanningTask.landmark.decidable {n : ℕ} (prob : PlanningTask n) (lm :
 
 -- delete relaxation landmark
 def is_delete_relaxed_disjunctive_action_landmark_for_state {n : ℕ} (prob : PlanningTask n)
-    (lm : List (Action n)) (s : State' n) : Prop :=
+    (lm : List (Action n)) (s : BitVec n) : Prop :=
   lm.all (fun a => decide ((delete_relax_action a) ∈ (delete_relaxation prob).actions)) ∧
-    (∀ plan : Plan (delete_relaxation prob) (convertState s), ∃ a ∈ lm, (delete_relax_action a) ∈ plan)
+    (∀ plan : PlanningTask.Plan (delete_relaxation prob) (convertState s), ∃ a ∈ lm, (delete_relax_action a) ∈ plan)
 
 
 /-- A disjunctive action landmark of the delete relaxation is exactly a set of actions whose
 removal makes the delete relaxation unsolvable. -/
 lemma disjunctive_action_landmarks_of_delete_relax_iff_unsolvability_of_delete_relax {n : ℕ} (prob : PlanningTask n)
-    (lm : List (Action n)) (s : State' n) :
+    (lm : List (Action n)) (s : BitVec n) :
     is_disjunctive_action_landmark_for_state (delete_relaxation prob) lm s ↔
       action_set_removal_implies_unsolvable_for_state (delete_relaxation prob) lm s :=
   disjunctive_action_landmarks_iff_unsolvability (delete_relaxation prob) lm s
@@ -169,7 +178,7 @@ lemma disjunctive_action_landmarks_of_delete_relax_iff_unsolvability_of_delete_r
 delete relaxation makes the problem unsolvable. Note that we project the actions to their delete
 relaxed versions in the condition. -/
 lemma delete_relaxed_disjunctive_action_landmarks_iff_unsolvability_of_delete_relax {n : ℕ} (prob : PlanningTask n)
-    (lm : List (Action n)) (s : State' n) :
+    (lm : List (Action n)) (s : BitVec n) :
     is_delete_relaxed_disjunctive_action_landmark_for_state prob lm s ↔
       action_set_removal_implies_unsolvable_for_state (delete_relaxation prob)
       (lm.map (fun a => delete_relax_action a)) s := by
@@ -182,19 +191,19 @@ can be replayed in the delete relaxation using the delete-relaxed versions of th
 reaching a state that is again at least as large.  Delete relaxation only ever adds variables, so
 larger starting states keep all actions applicable and keep the reached states larger.
 -/
-lemma relax_path {n : ℕ} (prob : PlanningTask n) {s1 s2 : State n} (p : Path prob s1 s2)
+lemma relax_path {n : ℕ} (prob : PlanningTask n) {s1 s2 : State n} (p : PlanningTask.Path prob s1 s2)
     {t1 : State n} (hsub : s1 ⊆ t1) :
     ∃ (t2 : State n), s2 ⊆ t2 ∧
-      ∃ (q : Path (delete_relaxation prob) t1 t2),
+      ∃ (q : PlanningTask.Path (delete_relaxation prob) t1 t2),
         q.actionsUsed = p.actionsUsed.map delete_relax_action := by
   -- We'll use induction on the path `p` to construct the desired path `q`.
   induction' p with a s1 s2 ha succ π ih generalizing t1;
-  · exact ⟨ t1, hsub, Path.empty t1, rfl ⟩;
+  · exact ⟨ t1, hsub, PlanningTask.Path.empty t1, rfl ⟩;
   · rename_i h₁ h₂;
     obtain ⟨ t2, ht2, q, hq ⟩ := h₂ ( show ha ⊆ t1 ∪ s1.add from fun i => by cases ih ; aesop );
-    refine' ⟨ t2, ht2, Path.cons _ _ _ _ q, _ ⟩;
+    refine' ⟨ t2, ht2, PlanningTask.Path.cons _ _ _ _ q, _ ⟩;
     exact delete_relax_action s1;
-    all_goals norm_num [ Path.actionsUsed, delete_relax_action ];
+    all_goals norm_num [ PlanningTask.Path.actionsUsed, delete_relax_action ];
     · simp +decide [ delete_relaxation, PlanningTask.actions ];
       exact ⟨ s1, by simpa [ PlanningTask.actions ] using π, rfl ⟩;
     · constructor;
@@ -213,14 +222,14 @@ does not hold: its conclusion would require an action `a ∈ lm` to occur verbat
 plan, but delete relaxation forgets delete effects, so the action witnessed by a relaxed plan is
 only determined up to its relaxation. The naive version is kept below for reference.
 lemma delete_relaxation_landmarks_are_landmarks {n : ℕ} (prob : PlanningTask n) (lm : List (Action n))
-(s : State' n):
+(s : BitVec n):
 is_delete_relaxed_disjunctive_action_landmark_for_state prob lm s →
 is_disjunctive_action_landmark_for_state prob lm s
 -/
 lemma delete_relaxation_landmarks_have_landmark_property {n : ℕ} (prob : PlanningTask n) (lm : List (Action n))
-    (s : State' n) :
+    (s : BitVec n) :
     is_delete_relaxed_disjunctive_action_landmark_for_state prob lm s →
-      ∀ plan : Plan prob (convertState s),
+      ∀ plan : PlanningTask.Plan prob (convertState s),
         ∃ a ∈ plan, delete_relax_action a ∈ lm.map delete_relax_action := by
           intro h plan;
           have := h.2;
@@ -228,7 +237,7 @@ lemma delete_relaxation_landmarks_have_landmark_property {n : ℕ} (prob : Plann
           obtain ⟨ a, ha₁, ha₂ ⟩ := this ⟨ t2, q, by
             exact fun x hx => ht2 <| plan.goal hx ⟩
           generalize_proofs at *;
-          simp_all +decide [ Membership.mem, Path.actionsUsed ];
+          simp_all +decide [ Membership.mem, PlanningTask.Path.actionsUsed ];
           obtain ⟨ b, hb₁, hb₂ ⟩ := List.mem_map.mp ha₂;
           exact ⟨ b, hb₁, List.mem_map.mpr ⟨ a, ha₁, hb₂ ▸ rfl ⟩ ⟩
 
@@ -240,7 +249,7 @@ stronger statement: if the actions a ∈ lm are actually part of the original pr
 -/
 lemma delete_relaxation_landmarks_are_landmarks {n : ℕ} (prob : PlanningTask n) (lm : List (Action n))
   (action_all_exist : lm.all (fun a => decide (a ∈ prob.actions)))
-    (s : State' n) :
+    (s : BitVec n) :
     is_delete_relaxed_disjunctive_action_landmark_for_state prob lm s →
       is_disjunctive_action_landmark_for_state prob (get_all_equiv_delete_relaxed_actions prob lm) s := by
         intro h
@@ -251,8 +260,8 @@ lemma delete_relaxation_landmarks_are_landmarks {n : ℕ} (prob : PlanningTask n
           have := delete_relaxation_landmarks_have_landmark_property prob lm s h plan
           obtain ⟨ a, ha₁, ha₂ ⟩ := this; use a; simp_all [ get_all_equiv_delete_relaxed_actions ]
           exact ⟨ by
-            have h_mem : ∀ {s1 s2 : State n} {p : Path prob s1 s2}, ∀ a ∈ p.actionsUsed, a ∈ prob.actions' := by
-              intros s1 s2 p a ha; induction p <;> simp_all [ Path.actionsUsed ]
+            have h_mem : ∀ {s1 s2 : State n} {p : PlanningTask.Path prob s1 s2}, ∀ a ∈ p.actionsUsed, a ∈ prob.actions' := by
+              intros s1 s2 p a ha; induction p <;> simp_all [ PlanningTask.Path.actionsUsed ]
               unfold PlanningTask.actions at *
               rename_i succ π π_ih
               simp_all only [List.coe_toFinset, Set.mem_setOf_eq]
@@ -298,7 +307,7 @@ lemma mem_get_all_equiv_of_mem {n : ℕ} (prob : PlanningTask n) (lm : List (Act
 
 --- elementary landmark heuristic
 def elementary_landmark_heuristic {n : ℕ} (prob : PlanningTask n) (lm : List (Action n))
-    (s : State' n) : ℕ∞ :=
+    (s : BitVec n) : ℕ∞ :=
   if is_disjunctive_action_landmark_for_state prob lm s then
     if lm_empty : lm = [] then ⊤
     else
@@ -308,10 +317,10 @@ def elementary_landmark_heuristic {n : ℕ} (prob : PlanningTask n) (lm : List (
   else 0
 
 /-
-Every action appearing in a `Path` is a member of the problem's action set.
+Every action appearing in a `PlanningTask.Path` is a member of the problem's action set.
 -/
 private lemma action_in_path_mem_actions {n : ℕ} {pt : PlanningTask n} {s s' : State n}
-    (p : Path pt s s') (a : Action n) (ha : a ∈ p.actionsUsed) : a ∈ pt.actions := by
+    (p : PlanningTask.Path pt s s') (a : Action n) (ha : a ∈ p.actionsUsed) : a ∈ pt.actions := by
   induction' p with a' s2 ha' succ p' ih generalizing a
   · cases ha
   · cases ha
@@ -323,13 +332,13 @@ private lemma action_in_path_mem_actions {n : ℕ} {pt : PlanningTask n} {s s' :
       exact a_1
 
 /-
-The cost of a `Path` is at least the cost of any single action used in it.
+The cost of a `PlanningTask.Path` is at least the cost of any single action used in it.
 -/
 private lemma path_cost_ge_action_cost {n : ℕ} {pt : PlanningTask n} {s s' : State n}
-    (p : Path pt s s') (a : Action n) (ha : a ∈ p.actionsUsed) : p.cost ≥ a.cost := by
+    (p : PlanningTask.Path pt s s') (a : Action n) (ha : a ∈ p.actionsUsed) : p.cost ≥ a.cost := by
   induction' p with a' s2 ha' succ p' ih generalizing a
   · cases ha
-  · cases ha <;> simp_all [ Path.cost ]
+  · cases ha <;> simp_all [ PlanningTask.Path.cost ]
     exact le_add_right ( by solve_by_elim )
 
 lemma elementary_landmark_heuristic_is_admissible {n : ℕ} (prob : PlanningTask n)
@@ -353,16 +362,16 @@ lemma elementary_landmark_heuristic_is_admissible {n : ℕ} (prob : PlanningTask
     rw [if_neg h]
     simp
 
-/-- Every action appearing in a `Path` is a member of the problem's action set. -/
+/-- Every action appearing in a `PlanningTask.Path` is a member of the problem's action set. -/
 lemma mem_actions_of_mem_actionsUsed {n : ℕ} {pt : PlanningTask n} {s s' : State n}
-    (p : Path pt s s') {a : Action n} (ha : a ∈ p.actionsUsed) : a ∈ pt.actions :=
+    (p : PlanningTask.Path pt s s') {a : Action n} (ha : a ∈ p.actionsUsed) : a ∈ pt.actions :=
   action_in_path_mem_actions p a ha
 
-/-- The cost of a `Path` is the sum of the costs of the actions it uses. -/
+/-- The cost of a `PlanningTask.Path` is the sum of the costs of the actions it uses. -/
 lemma path_cost_eq_sum_actionsUsed {n : ℕ} {pt : PlanningTask n} {s s' : State n}
-    (p : Path pt s s') : p.cost = (p.actionsUsed.map (fun a => a.cost)).sum := by
+    (p : PlanningTask.Path pt s s') : p.cost = (p.actionsUsed.map (fun a => a.cost)).sum := by
   induction p with
   | empty s => rfl
-  | cons a s2 ha succ p' ih => simp [Path.cost, Path.actionsUsed, ih, Nat.add_comm]
+  | cons a s2 ha succ p' ih => simp [PlanningTask.Path.cost, PlanningTask.Path.actionsUsed, ih, Nat.add_comm]
 
 end STRIPS

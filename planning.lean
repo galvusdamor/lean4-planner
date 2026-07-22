@@ -8,7 +8,9 @@ import planning.H1
 import planning.Heuristics
 import planning.PerfectHeuristic
 import planning.Planner
+import planning.PlannerGen
 import planning.Planning
+import planning.SearchCompat
 import planning.temp
 import planning.Landmark
 import planning.LandmarkCutting

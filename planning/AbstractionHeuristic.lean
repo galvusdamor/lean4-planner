@@ -1,5 +1,5 @@
-import Strips.Core
-import Strips.Basic
+import Strips.PlanningTask
+import Strips.PlanningTask
 import SearchAlgorithms.AStar
 import planning.Heuristics
 import planning.SearchCompat
@@ -20,7 +20,7 @@ def is_bisimulation {V V': Type} [FinEnum V] [FinEnum V'] (g : NatGraph V) (g' :
 
 
 
-def abstraction_heuristic {n : ℕ} (prob : PlanningTask n) {V : Type} [FinEnum V] (g : NatGraph V) (abstraction: State' n → V) (s : State' n) : ℕ∞ :=
+def abstraction_heuristic {n : ℕ} (prob : PlanningTask n) {V : Type} [FinEnum V] (g : NatGraph V) (abstraction: BitVec n → V) (s : BitVec n) : ℕ∞ :=
   let goals := (trans_of_STRIPS_goals prob).map abstraction
   let opt_ret := NatGraph.astar_multigoal (g:=g) (fun _ => 0) (abstraction s) goals
   match opt_ret with
@@ -33,7 +33,7 @@ def abstraction_heuristic {n : ℕ} (prob : PlanningTask n) {V : Type} [FinEnum 
    says nothing about costs.  Admissibility additionally requires that abstract edge costs
    never exceed concrete edge costs; otherwise the abstract shortest path can overestimate.
    We comment out the original and provide a corrected version with the extra cost hypothesis. -/
--- lemma abstractions_admissible {n : ℕ} (prob : PlanningTask n) {V : Type} [FinEnum V] {g : NatGraph V} (abstraction: State' n → V) (is_abstraction : is_valid_abstraction (trans_of_STRIPS prob) (g) abstraction) :
+-- lemma abstractions_admissible {n : ℕ} (prob : PlanningTask n) {V : Type} [FinEnum V] {g : NatGraph V} (abstraction: BitVec n → V) (is_abstraction : is_valid_abstraction (trans_of_STRIPS prob) (g) abstraction) :
 --   heur_admissible' prob (fun s => abstraction_heuristic prob g abstraction s)
 --     := ...
 
@@ -70,9 +70,9 @@ require that abstract edge costs are at most the concrete edge costs.
 Modified from the original: added `cost_le` hypothesis, without which the statement is
 false (a valid abstraction can have arbitrarily high edge costs). -/
 lemma abstractions_admissible {n : ℕ} (prob : PlanningTask n) {V : Type} [FinEnum V]
-    {g : NatGraph V} (abstraction : State' n → V)
+    {g : NatGraph V} (abstraction : BitVec n → V)
     (is_abstraction : is_valid_abstraction (trans_of_STRIPS prob) g abstraction)
-    (cost_le : ∀ (u v : State' n) (adj : (trans_of_STRIPS prob).Adj u v),
+    (cost_le : ∀ (u v : BitVec n) (adj : (trans_of_STRIPS prob).Adj u v),
       NatGraph.edgeCost (is_abstraction u v adj) ≤ NatGraph.edgeCost adj) :
     heur_admissible' prob (fun s => abstraction_heuristic prob g abstraction s) := by
   intro v goal goal_in_goals path
@@ -194,18 +194,18 @@ def project_pattern_List {n : ℕ} (pat : pattern n) (l : List (Fin n)) : List (
 
 /-- The projection of a variable set to a pattern: the bit-vector variable set
 whose members are exactly the projections of the members of `vs` that lie in `pat`. -/
-def project_pattern_VarSet {n : ℕ} (pat : pattern n) (vs : VarSet' n) : VarSet' (pat.card) :=
-  toVarSet' (project_pattern_List pat vs.toList)
+def project_pattern_VarSet {n : ℕ} (pat : pattern n) (vs : VarSet n) : VarSet (pat.card) :=
+  VarSet.ofList (project_pattern_List pat vs.toList)
 
 def project_pattern_action {n : ℕ} (a : Action n) (pat : pattern n) : Action (pat.card) := Action.mk a.name
-    (project_pattern_VarSet pat a.pre')
-    (project_pattern_VarSet pat a.add')
-    (project_pattern_VarSet pat a.del')
+    (project_pattern_VarSet pat a.pre)
+    (project_pattern_VarSet pat a.add)
+    (project_pattern_VarSet pat a.del)
     a.cost
 
-def project_pattern_state {n : ℕ} (pat : pattern n) (s : State' n) : State' (pat.card) :=
-  let v : VarSet' n := varset'_of_state' s
-  let v' : VarSet' (pat.card) := project_pattern_VarSet pat v
+def project_pattern_state {n : ℕ} (pat : pattern n) (s : BitVec n) : BitVec (pat.card) :=
+  let v : VarSet n := varset'_of_state' s
+  let v' : VarSet (pat.card) := project_pattern_VarSet pat v
   state'_of_varset' v'
 
 
@@ -221,50 +221,33 @@ def project_pattern_STRIPS {n : ℕ} (prob : PlanningTask n) (pat : pattern n) :
   let names : Vector String (Finset.card pat) := ⟨ namesList.toArray , by grind⟩
   let actions : List (Action (Finset.card pat)) := prob.actions'.map (fun a =>
     project_pattern_action a pat)
-  let init : State' (Finset.card pat) := project_pattern_state pat prob.init'
-  let goal : VarSet' (Finset.card pat) := project_pattern_VarSet pat prob.goal'
+  let init : VarSet (Finset.card pat) := project_pattern_VarSet pat prob.init'
+  let goal : VarSet (Finset.card pat) := project_pattern_VarSet pat prob.goal'
   PlanningTask.mk names actions init goal
 
 
 
-def pdb_heuristic {n : ℕ} (prob : PlanningTask n) (pat : pattern n) (s : State' n) : ℕ∞ :=
-  let pdb_trans : NatGraph (State' (pat.card)) := trans_of_STRIPS (project_pattern_STRIPS prob pat)
+def pdb_heuristic {n : ℕ} (prob : PlanningTask n) (pat : pattern n) (s : BitVec n) : ℕ∞ :=
+  let pdb_trans : NatGraph (BitVec (pat.card)) := trans_of_STRIPS (project_pattern_STRIPS prob pat)
   abstraction_heuristic prob pdb_trans (project_pattern_state pat) (s)
-
-/-
-If action `a` is applicable in state `v`, then its projection is applicable in the
-    projected state.
--/
-lemma project_pattern_state_satisfies_pre {n : ℕ} (pat : pattern n) (a : Action n)
-    (v : State' n) (h : applicable' a v = true) :
-    applicable' (project_pattern_action a pat) (project_pattern_state pat v) = true := by
-      convert Set.subset_def using 1;
-      rotate_left;
-      exact Fin pat.card;
-      exact { i | ( project_pattern_VarSet pat a.pre' ).toBitVec[i] };
-      exact { i | ( project_pattern_state pat v )[i] = true };
-      simp +decide [ Set.subset_def, applicable' ];
-      intro i hi; simp_all +decide [ project_pattern_action, project_pattern_state ] ;
-      unfold project_pattern_VarSet at *; simp_all +decide [ project_pattern_List ] ;
-      grind +suggestions
 
 /-- `project_pattern_state` at a projected index checks whether the corresponding
     original variable is in the pattern and true in the state. -/
-lemma project_pattern_state_getElem {n : ℕ} (pat : pattern n) (s : State' n) (i : Fin pat.card) :
+lemma project_pattern_state_getElem {n : ℕ} (pat : pattern n) (s : BitVec n) (i : Fin pat.card) :
     (project_pattern_state pat s)[i.val] =
       decide (i ∈ (project_pattern_VarSet pat (varset'_of_state' s)).toList) := by
   unfold project_pattern_state
   rw [state'_of_varset'_getElem]
-  simp only [VarSet'.mem_toList]
+  simp only [VarSet.mem_toList]
 
 /-- Membership in `project_pattern_VarSet` iff there exists a variable in the pattern
     and in the original var-set that projects to the given index. -/
-lemma mem_project_pattern_VarSet {n : ℕ} (pat : pattern n) (vs : VarSet' n)
+lemma mem_project_pattern_VarSet {n : ℕ} (pat : pattern n) (vs : VarSet n)
     (x : Fin pat.card) :
     x ∈ (project_pattern_VarSet pat vs).toList ↔
       ∃ j ∈ vs.toList, ∃ hj : j ∈ pat, project_pattern n pat ⟨j, hj⟩ = x := by
   unfold project_pattern_VarSet project_pattern_List
-  simp only [VarSet'.mem_toList, mem_toVarSet', List.mem_filterMap]
+  simp only [VarSet.mem_toList, mem_val_ofList, List.mem_filterMap]
   constructor
   · rintro ⟨j, hj, hproj⟩
     split_ifs at hproj with hjp
@@ -273,26 +256,118 @@ lemma mem_project_pattern_VarSet {n : ℕ} (pat : pattern n) (vs : VarSet' n)
     exact ⟨j, hj, by simp [hjp, hproj]⟩
 
 /-
+If action `a` is applicable in state `v`, then its projection is applicable in the
+    projected state.
+-/
+lemma project_pattern_state_satisfies_pre {n : ℕ} (pat : pattern n) (a : Action n)
+    (v : BitVec n) (h : applicable' a v = true) :
+    applicable' (project_pattern_action a pat) (project_pattern_state pat v) = true := by
+  rw [applicable'_iff]
+  intro i hi
+  rw [project_pattern_state_getElem]
+  apply decide_eq_true
+  rw [mem_project_pattern_VarSet]
+  rw [applicable'_iff] at h
+  have hiproj : i ∈ (project_pattern_VarSet pat a.pre).toList := by
+    simpa [project_pattern_action, Action.pre] using hi
+  rcases (mem_project_pattern_VarSet pat a.pre i).mp hiproj with
+    ⟨j, hj, hjpat, hproj⟩
+  refine ⟨j, ?_, hjpat, hproj⟩
+  change j ∈ (varset'_of_state' v).val
+  rw [varset'_of_state'_mem]
+  exact h j (by simpa using hj)
+
+
+/-
 If `a` transforms `v` into `v'`, then the projected action transforms the projected
     states.
 -/
 lemma project_pattern_preserves_successor {n : ℕ} (pat : pattern n) (a : Action n)
-    (v v' : State' n) (h_succ : is_successor' a v v' = true) :
+    (v v' : BitVec n) (h_succ : is_successor' a v v' = true) :
     is_successor' (project_pattern_action a pat) (project_pattern_state pat v)
       (project_pattern_state pat v') = true := by
-        unfold is_successor' at *;
-        unfold project_pattern_state at *; simp_all +decide [ successor', project_pattern_action ] ;
-        ext i; simp +decide [ project_pattern_VarSet, project_pattern_state, project_pattern_List ] ;
-        unfold state'_of_varset' at *; simp_all +decide [ toVarSet', varset'_of_state' ] ;
-        by_cases h : ∃ a_1 ∈ a.del'.toList, ∃ h : a_1 ∈ pat, project_pattern n pat ⟨ a_1, h ⟩ = ⟨ i, ‹_› ⟩ <;> simp_all +decide [ decide_eq_true_iff ];
-        · constructor <;> rintro ⟨ x, hx, hx' ⟩;
-          · obtain ⟨ y, hy, hy' ⟩ := h; use x; simp_all +decide [ Fin.ext_iff ] ;
-            have h_inj : Function.Injective (fun x : {x : Fin n // x ∈ pat} => project_pattern n pat x) := by
-              intro x y hxy; exact (by
-              exact Subtype.ext <| le_antisymm ( le_of_not_gt fun h => by have := projeect_pattern_monotone pat _ _ h; aesop ) ( le_of_not_gt fun h => by have := projeect_pattern_monotone pat _ _ h; aesop ));
-            have := h_inj ( show project_pattern n pat ⟨ x, hx'.choose ⟩ = project_pattern n pat ⟨ y, hy'.choose ⟩ from by aesop ) ; aesop;
-          · exact ⟨ x, Or.inr hx, hx' ⟩;
-        · grind +splitIndPred
+  have hbit (vs : VarSet n) (x : Fin pat.card) :
+      (project_pattern_VarSet pat vs).toBitVec[x.val] = true ↔
+        ∃ j ∈ vs.toList, ∃ hj : j ∈ pat, project_pattern n pat ⟨j, hj⟩ = x := by
+    constructor
+    · intro hb
+      apply (mem_project_pattern_VarSet pat vs x).mp
+      apply VarSet.mem_toList.mpr
+      apply VarSet.mem_val.mpr
+      exact VarSet.mem_iff.mpr hb
+    · intro hm
+      apply VarSet.mem_iff.mp
+      apply VarSet.mem_val.mp
+      apply VarSet.mem_toList.mp
+      exact (mem_project_pattern_VarSet pat vs x).mpr hm
+  have hstate (s : BitVec n) (x : Fin pat.card) :
+      (project_pattern_state pat s)[x.val] = true ↔
+        ∃ j, s[j.val] = true ∧ ∃ hj : j ∈ pat, project_pattern n pat ⟨j, hj⟩ = x := by
+    rw [project_pattern_state_getElem]
+    rw [decide_eq_true_eq, mem_project_pattern_VarSet]
+    constructor
+    · rintro ⟨j, hj, hjpat, hproj⟩
+      exact ⟨j, (BitVec.mem_toList.mp hj), hjpat, hproj⟩
+    · rintro ⟨j, hj, hjpat, hproj⟩
+      exact ⟨j, BitVec.mem_toList.mpr hj, hjpat, hproj⟩
+  have hinj : Function.Injective
+      (fun y : {y : Fin n // y ∈ pat} => project_pattern n pat y) := by
+    intro y z hyz
+    apply Subtype.ext
+    exact le_antisymm
+      (le_of_not_gt fun h => ne_of_gt (projeect_pattern_monotone pat _ _ h) hyz)
+      (le_of_not_gt fun h => ne_of_gt (projeect_pattern_monotone pat _ _ h) hyz.symm)
+  have hsource (j : Fin n) :
+      v'[j.val] = true ↔ (v[j.val] = true ∧ j ∉ a.del) ∨ j ∈ a.add := by
+    unfold is_successor' at h_succ
+    simp only [decide_eq_true_eq] at h_succ
+    rw [h_succ]
+    simp [successor', VarSet.mem_iff, Action.del, Action.add]
+  unfold is_successor'
+  simp only [decide_eq_true_eq]
+  apply BitVec.eq_of_getElem_eq
+  intro k hk
+  let x : Fin pat.card := ⟨k, hk⟩
+  apply Bool.eq_iff_iff.mpr
+  unfold successor'
+  simp only [BitVec.getElem_or, BitVec.getElem_and, BitVec.getElem_not]
+  change (project_pattern_state pat v')[k] = true ↔
+    (((project_pattern_state pat v)[k] &&
+      !(project_pattern_action a pat).del.toBitVec[k]) ||
+      (project_pattern_action a pat).add.toBitVec[k]) = true
+  rw [Bool.or_eq_true, Bool.and_eq_true, Bool.not_eq_true_eq_eq_false]
+  rw [show (project_pattern_state pat v')[k] = true ↔ _ by simpa [x] using hstate v' x]
+  rw [show (project_pattern_state pat v)[k] = true ↔ _ by simpa [x] using hstate v x]
+  simp only [project_pattern_action, Action.del, Action.add]
+  rw [Bool.eq_false_iff]
+  have hdelbit : (project_pattern_VarSet pat a.del).toBitVec[k] = true ↔
+      ∃ j ∈ a.del.toList, ∃ hj : j ∈ pat, project_pattern n pat ⟨j, hj⟩ = x := by
+    simpa [x] using hbit a.del x
+  have haddbit : (project_pattern_VarSet pat a.add).toBitVec[k] = true ↔
+      ∃ j ∈ a.add.toList, ∃ hj : j ∈ pat, project_pattern n pat ⟨j, hj⟩ = x := by
+    simpa [x] using hbit a.add x
+  rw [show ((project_pattern_VarSet pat a.del).toBitVec[k] ≠ true) ↔ _ from not_congr hdelbit]
+  rw [haddbit]
+  constructor
+  · rintro ⟨j, hjv', hjpat, hjproj⟩
+    rcases (hsource j).1 hjv' with ⟨hjv, hjndel⟩ | hjadd
+    · left
+      refine ⟨⟨j, hjv, hjpat, hjproj⟩, ?_⟩
+      rintro ⟨q, hqdel, hqpat, hqproj⟩
+      have hqj : q = j := by
+        have hs := hinj (hqproj.trans hjproj.symm)
+        exact congrArg Subtype.val hs
+      subst q
+      exact hjndel (by simpa using hqdel)
+    · right
+      exact ⟨j, by simpa using hjadd, hjpat, hjproj⟩
+  · rintro (⟨⟨j, hjv, hjpat, hjproj⟩, hndel⟩ | ⟨j, hjadd, hjpat, hjproj⟩)
+    · refine ⟨j, (hsource j).2 (Or.inl ⟨hjv, ?_⟩), hjpat, hjproj⟩
+      intro hjdel
+      apply hndel
+      exact ⟨j, by simpa using hjdel, hjpat, hjproj⟩
+    · refine ⟨j, (hsource j).2 (Or.inr ?_), hjpat, hjproj⟩
+      simpa using hjadd
 
 /-- The projected action has the same cost as the original action. -/
 lemma project_pattern_action_cost {n : ℕ} (a : Action n) (pat : pattern n) :
@@ -304,7 +379,7 @@ lemma project_pattern_action_cost {n : ℕ} (a : Action n) (pat : pattern n) :
 The abstract edge cost in the projected graph is at most the concrete edge cost.
 -/
 lemma project_cost_le {n : ℕ} (prob : PlanningTask n) (pat : pattern n)
-    (u v : State' n) (adj : (trans_of_STRIPS prob).Adj u v)
+    (u v : BitVec n) (adj : (trans_of_STRIPS prob).Adj u v)
     (val_abs : is_valid_abstraction (trans_of_STRIPS prob)
       (trans_of_STRIPS (project_pattern_STRIPS prob pat)) (project_pattern_state pat)) :
     NatGraph.edgeCost (val_abs u v adj) ≤ NatGraph.edgeCost adj := by

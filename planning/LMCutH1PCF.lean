@@ -42,20 +42,20 @@ def h1_goal_value {m : ℕ} (p : PlanningTask m) (f : Fin m) : ℕ :=
 
 /-- The fact of `a`'s preconditions with the largest `h_1` value (taking that fact as the goal).
 Requires that `a` has at least one precondition (`hne`). -/
-def h1_argmax_pre {m : ℕ} (p : PlanningTask m) (a : Action m) (hne : a.pre'.toList ≠ []) : Fin m :=
-  (a.pre'.toList.argmax (fun f => h1_goal_value p f)).get (by
+def h1_argmax_pre {m : ℕ} (p : PlanningTask m) (a : Action m) (hne : a.pre.toList ≠ []) : Fin m :=
+  (a.pre.toList.argmax (fun f => h1_goal_value p f)).get (by
     rw [Option.isSome_iff_ne_none]
     intro h
     exact hne (List.argmax_eq_none.mp h))
 
 /-- `h1_argmax_pre` is one of `a`'s preconditions. -/
-lemma h1_argmax_pre_mem {m : ℕ} (p : PlanningTask m) (a : Action m) (hne : a.pre'.toList ≠ []) :
-    h1_argmax_pre p a hne ∈ a.pre'.toList :=
+lemma h1_argmax_pre_mem {m : ℕ} (p : PlanningTask m) (a : Action m) (hne : a.pre.toList ≠ []) :
+    h1_argmax_pre p a hne ∈ a.pre.toList :=
   List.argmax_mem (Option.get_mem _)
 
 /-- `h1_argmax_pre` maximises the `h_1` value over all of `a`'s preconditions. -/
-lemma h1_argmax_pre_max {m : ℕ} (p : PlanningTask m) (a : Action m) (hne : a.pre'.toList ≠ [])
-    {f : Fin m} (hf : f ∈ a.pre'.toList) :
+lemma h1_argmax_pre_max {m : ℕ} (p : PlanningTask m) (a : Action m) (hne : a.pre.toList ≠ [])
+    {f : Fin m} (hf : f ∈ a.pre.toList) :
     h1_goal_value p f ≤ h1_goal_value p (h1_argmax_pre p a hne) :=
   List.le_of_mem_argmax hf (Option.get_mem _)
 
@@ -107,16 +107,16 @@ lemma h1_goal_value_init_zero {m : ℕ} (p : PlanningTask m) (u_i : unitary_init
       · grind +suggestions;
       · exact List.mem_cons_self
 
-lemma mem_pre_of_mem_regress_add {m : ℕ} (a : Action m) (t : Fin m) (ht : t ∈ a.add'.toList)
+lemma mem_pre_of_mem_regress_add {m : ℕ} (a : Action m) (t : Fin m) (ht : t ∈ a.add.toList)
     {g' : Fin m}
     (hg' : g' ∈ (varset'_of_state' (regress' a (state'_of_varset' (singletonVarSet t)))).toList) :
-    g' ∈ a.pre'.toList := by
+    g' ∈ a.pre.toList := by
   contrapose! hg';
   unfold regress' varset'_of_state';
   grind +suggestions
 
 lemma h1_goal_value_bellman_argmax {m : ℕ} (p : PlanningTask m) (a : Action m) (ha : a ∈ p.actions')
-    (hne : a.pre'.toList ≠ []) (t : Fin m) (ht : t ∈ a.add'.toList) :
+    (hne : a.pre.toList ≠ []) (t : Fin m) (ht : t ∈ a.add.toList) :
     h1_goal_value p t ≤ a.cost + h1_goal_value p (h1_argmax_pre p a hne) := by
   convert h_1_singleton_bellman_add p t p.init' a ha ht using 1;
   -- By definition of `h1_goal_value`, we know that it is the h1 value of the singleton goal set for a given variable.
@@ -124,7 +124,7 @@ lemma h1_goal_value_bellman_argmax {m : ℕ} (p : PlanningTask m) (a : Action m)
     grind +locals;
   have h_h1_goal_value : ∀ g' ∈ (varset'_of_state' (regress' a (state'_of_varset' (singletonVarSet t)))).toList, h1_goal_value p g' ≤ h1_goal_value p (h1_argmax_pre p a hne) := by
     intros g' hg'
-    have h_g'_in_pre : g' ∈ a.pre'.toList := by
+    have h_g'_in_pre : g' ∈ a.pre.toList := by
       apply mem_pre_of_mem_regress_add a t ht hg';
     exact h1_argmax_pre_max p a hne h_g'_in_pre;
   have h_h1_goal_value : h_1 (replace_goal p (varset'_of_state' (regress' a (state'_of_varset' (singletonVarSet t))))) p.init' ≤ h1_goal_value p (h1_argmax_pre p a hne) := by
@@ -139,9 +139,9 @@ lemma h1_goal_value_bellman_argmax {m : ℕ} (p : PlanningTask m) (a : Action m)
         convert h_h1_goal_value g' _;
         · convert hg' using 1;
           simp +decide [ varset'_of_state', singletonVarSet ];
-          simp +decide [ toVarSet' ];
-          simp +decide [ VarSet'.toList ];
-        · replace hg' := congr_arg List.toFinset hg'; rw [ Finset.ext_iff ] at hg'; specialize hg' g'; simp_all +decide [ toVarSet' ] ;
+          simp +decide [ VarSet.ofList ];
+          simp +decide [ VarSet.toList ];
+        · replace hg' := congr_arg List.toFinset hg'; rw [ Finset.ext_iff ] at hg'; specialize hg' g'; simp_all +decide [ VarSet.ofList ] ;
   refine' le_antisymm _ _ <;> simp_all +decide [ h1_goal_value ];
   apply h_1_mono_of_mem;
   apply regress_singleton_add_contains_pre; exact h1_argmax_pre_mem p a hne;
@@ -150,7 +150,7 @@ lemma jgraph_zero_cost_edge_witness {n : ℕ} (p : PlanningTask (n + 2)) (hp : h
     {f t : Fin (n + 2)} (adj : (justification_graph p (h1_pcf p hp)).Adj f t)
     (h0 : (justification_graph p (h1_pcf p hp)).Payload f t adj = 0) :
     ∃ a : {b : Action (n + 2) // b ∈ p.actions'},
-      (↑(h1_pcf p hp a) : Fin (n + 2)) = f ∧ t ∈ a.val.add'.toList.toFinset ∧ a.val.cost = 0 := by
+      (↑(h1_pcf p hp a) : Fin (n + 2)) = f ∧ t ∈ a.val.add.toList.toFinset ∧ a.val.cost = 0 := by
         unfold justification_graph at h0; simp_all +decide [ h1_pcf ] ;
         rw [ List.min_eq_iff ] at h0;
         simp +zetaDelta at *;
@@ -185,11 +185,11 @@ lemma h1_goal_value_edge_bound {n : ℕ} (p : PlanningTask (n + 2)) (hp : has_pr
     h1_goal_value p t
       ≤ (justification_graph p (h1_pcf p hp)).Payload f t adj + h1_goal_value p f := by
         -- Let `a` be the minimiser action for the edge `f → t`.
-        obtain ⟨ a, ha₁, ha₂, ha₃ ⟩ : ∃ a : {b : Action (n + 2) // b ∈ p.actions'}, (↑(h1_pcf p hp a) : Fin (n + 2)) = f ∧ t ∈ a.val.add'.toList.toFinset ∧ (justification_graph p (h1_pcf p hp)).Payload f t adj = a.val.cost := by
+        obtain ⟨ a, ha₁, ha₂, ha₃ ⟩ : ∃ a : {b : Action (n + 2) // b ∈ p.actions'}, (↑(h1_pcf p hp a) : Fin (n + 2)) = f ∧ t ∈ a.val.add.toList.toFinset ∧ (justification_graph p (h1_pcf p hp)).Payload f t adj = a.val.cost := by
           unfold justification_graph; simp +decide [ List.min_eq_iff ] at *;
           obtain ⟨ a, ha ⟩ := adj;
-          obtain ⟨b, hb⟩ : ∃ b : {b : Action (n + 2) // b ∈ p.actions'}, (↑(h1_pcf p hp b) : Fin (n + 2)) = f ∧ t ∈ b.val.add'.toList.toFinset ∧ ∀ c : {b : Action (n + 2) // b ∈ p.actions'}, (↑(h1_pcf p hp c) : Fin (n + 2)) = f → t ∈ c.val.add'.toList.toFinset → b.val.cost ≤ c.val.cost := by
-            have h_min : ∃ b ∈ Finset.filter (fun c : {b : Action (n + 2) // b ∈ p.actions'} => (↑(h1_pcf p hp c) : Fin (n + 2)) = f ∧ t ∈ c.val.add'.toList.toFinset) (Finset.univ : Finset {b : Action (n + 2) // b ∈ p.actions'}), ∀ c ∈ Finset.filter (fun c : {b : Action (n + 2) // b ∈ p.actions'} => (↑(h1_pcf p hp c) : Fin (n + 2)) = f ∧ t ∈ c.val.add'.toList.toFinset) (Finset.univ : Finset {b : Action (n + 2) // b ∈ p.actions'}), b.val.cost ≤ c.val.cost := by
+          obtain ⟨b, hb⟩ : ∃ b : {b : Action (n + 2) // b ∈ p.actions'}, (↑(h1_pcf p hp b) : Fin (n + 2)) = f ∧ t ∈ b.val.add.toList.toFinset ∧ ∀ c : {b : Action (n + 2) // b ∈ p.actions'}, (↑(h1_pcf p hp c) : Fin (n + 2)) = f → t ∈ c.val.add.toList.toFinset → b.val.cost ≤ c.val.cost := by
+            have h_min : ∃ b ∈ Finset.filter (fun c : {b : Action (n + 2) // b ∈ p.actions'} => (↑(h1_pcf p hp c) : Fin (n + 2)) = f ∧ t ∈ c.val.add.toList.toFinset) (Finset.univ : Finset {b : Action (n + 2) // b ∈ p.actions'}), ∀ c ∈ Finset.filter (fun c : {b : Action (n + 2) // b ∈ p.actions'} => (↑(h1_pcf p hp c) : Fin (n + 2)) = f ∧ t ∈ c.val.add.toList.toFinset) (Finset.univ : Finset {b : Action (n + 2) // b ∈ p.actions'}), b.val.cost ≤ c.val.cost := by
               exact Finset.exists_min_image _ _ ⟨ a, by aesop ⟩;
             exact ⟨ h_min.choose, Finset.mem_filter.mp h_min.choose_spec.1 |>.2.1, Finset.mem_filter.mp h_min.choose_spec.1 |>.2.2, fun c hc₁ hc₂ => h_min.choose_spec.2 c ( Finset.mem_filter.mpr ⟨ Finset.mem_univ _, hc₁, hc₂ ⟩ ) ⟩;
           simp_all +decide [ Finset.ext_iff ];
@@ -228,10 +228,10 @@ lemma h1_goal_value_eq_fixpoint {n : ℕ} (p : PlanningTask (n + 2)) (w : Fin (n
   convert Option.eq_none_iff_forall_not_mem.mpr _;
   intro a ha; simp_all +decide [ h_1_iter_fix_replace_goal ] ;
   split_ifs at hw <;> simp_all +decide [ replace_goal ];
-  · simp_all +decide [ VarSet'.toList, singletonVarSet ];
-    simp_all +decide [ toVarSet' ];
-  · unfold singletonVarSet at hw; simp_all +decide [ toVarSet' ] ;
-    unfold VarSet'.toList at hw; simp_all +decide [ List.attach ] ;
+  · simp_all +decide [ VarSet.toList, singletonVarSet ];
+    simp_all +decide [ VarSet.ofList ];
+  · unfold singletonVarSet at hw; simp_all +decide [ VarSet.ofList ] ;
+    unfold VarSet.toList at hw; simp_all +decide [ List.attach ] ;
     exact hw ( by simp +decide [ List.max ] );
   · grind +suggestions
 
@@ -256,8 +256,8 @@ theorem withTop_eq_of_getD_eq {a b : WithTop ℕ} (ha : a.isSome) (hb : b.isSome
 The maximiser precondition `h1_argmax_pre` realises the maximum `h1_goal_value` over the
 precondition list (as a `foldl max`).
 -/
-lemma h1_argmax_pre_foldl_max {n : ℕ} (p : PlanningTask n) (a : Action n) (hne : a.pre'.toList ≠ []) :
-    (a.pre'.toList.map (fun j => h1_goal_value p j)).foldl max 0
+lemma h1_argmax_pre_foldl_max {n : ℕ} (p : PlanningTask n) (a : Action n) (hne : a.pre.toList ≠ []) :
+    (a.pre.toList.map (fun j => h1_goal_value p j)).foldl max 0
       = h1_goal_value p (h1_argmax_pre p a hne) := by
   refine' le_antisymm _ _
   · have h_foldl_le : ∀ (L : List ℕ) (b : ℕ), (∀ x ∈ L, x ≤ b) → 0 ≤ b → List.foldl max 0 L ≤ b := by
@@ -291,7 +291,7 @@ lemma justification_graph_payload_le {n : ℕ} (prob : PlanningTask n)
     (pcf : precondition_choice_function prob) {f t : Fin n}
     (adj : (justification_graph prob pcf).Adj f t)
     (a : {b : Action n // b ∈ prob.actions'}) (hf : (↑(pcf a) : Fin n) = f)
-    (ht : t ∈ a.val.add'.toList.toFinset) :
+    (ht : t ∈ a.val.add.toList.toFinset) :
     (justification_graph prob pcf).Payload f t adj ≤ a.val.cost := by
       apply List.min_le_of_mem;
       simp +decide [ hf, ht, List.mem_map, List.mem_filter ];
@@ -314,13 +314,13 @@ lemma h1_walk_pred_step {n : ℕ} (p : PlanningTask (n + 2)) (hp : has_precondit
   obtain ⟨a, ha₁, ha₂, ha₃, ha₄, ha₅⟩ := h_1_rank_attained p base w hw hr
   set fixv := h_1_iter_fix (n + 2) p base with hfixv
   have hmem := h1_argmax_pre_mem p a (hp a ha₁)
-  have hpreSome : ∀ j ∈ a.pre'.toList, (fixv[j]).isSome :=
+  have hpreSome : ∀ j ∈ a.pre.toList, (fixv[j]).isSome :=
     fun j hj => h_1_iter_fix_isSome_of_iter p _ _ _
       (vec_to_state_isSome_of_applicable _ _ _ ha₂ j hj)
-  have hKey : (a.pre'.toList.map (fun j => (fixv[j]).getD 0)).foldl max 0
+  have hKey : (a.pre.toList.map (fun j => (fixv[j]).getD 0)).foldl max 0
       = (fixv[h1_argmax_pre p a (hp a ha₁)]).getD 0 := by
-    have h1 : (a.pre'.toList.map (fun j => (fixv[j]).getD 0)).foldl max 0
-        = (a.pre'.toList.map (fun j => h1_goal_value p j)).foldl max 0 := by
+    have h1 : (a.pre.toList.map (fun j => (fixv[j]).getD 0)).foldl max 0
+        = (a.pre.toList.map (fun j => h1_goal_value p j)).foldl max 0 := by
       refine congr_arg _ (List.map_congr_left ?_)
       intro j hj
       exact congr_arg (fun x : WithTop ℕ => x.getD 0)
@@ -336,11 +336,11 @@ lemma h1_walk_pred_step {n : ℕ} (p : PlanningTask (n + 2)) (hp : has_precondit
       (hpreSome _ hmem)
       (le_antisymm ?_ ?_)
     · calc ((h_1_iter p base (h_1_rank p base w - 1))[h1_argmax_pre p a (hp a ha₁)]).getD 0
-          ≤ (a.pre'.toList.map
+          ≤ (a.pre.toList.map
               (fun j => ((h_1_iter p base (h_1_rank p base w - 1))[j]).getD 0)).foldl max 0 :=
             le_foldl_max_of_mem
               (fun j => ((h_1_iter p base (h_1_rank p base w - 1))[j]).getD 0) hmem
-        _ = (a.pre'.toList.map (fun j => (fixv[j]).getD 0)).foldl max 0 := ha₅
+        _ = (a.pre.toList.map (fun j => (fixv[j]).getD 0)).foldl max 0 := ha₅
         _ = (fixv[h1_argmax_pre p a (hp a ha₁)]).getD 0 := hKey
     · exact withTop_getD_le_getD (h_1_iter_fix_le_iter _ _ _ _)
         (vec_to_state_isSome_of_applicable _ _ _ ha₂ _ hmem)
@@ -352,9 +352,9 @@ lemma h1_walk_pred_step {n : ℕ} (p : PlanningTask (n + 2)) (hp : has_precondit
       · unfold h1_pcf; simp [h1_argmax_pre]
       · exact List.mem_toFinset.mpr ha₃
     have hvw : h1_goal_value p w
-        = a.cost + (a.pre'.toList.map (fun j => (fixv[j]).getD 0)).foldl max 0 := by
+        = a.cost + (a.pre.toList.map (fun j => (fixv[j]).getD 0)).foldl max 0 := by
       have hh : fixv[w]
-          = some (a.cost + (a.pre'.toList.map (fun j => (fixv[j]).getD 0)).foldl max 0) := by
+          = some (a.cost + (a.pre.toList.map (fun j => (fixv[j]).getD 0)).foldl max 0) := by
         rw [ha₄]; unfold actionContribUB; rw [← ha₅]
       exact Option.some_inj.mp (h1_goal_value_eq_fixpoint p w hw ▸ hh)
     have hvf : h1_goal_value p (h1_argmax_pre p a (hp a ha₁))
@@ -385,7 +385,7 @@ lemma h1_goal_value_walk_lb {n : ℕ} (p : PlanningTask (n + 2)) (hp : has_preco
             have hv_init : v ∈ p.init := by
               rw [init_eq_varset_toFinset]
               simp only [Finset.mem_coe, List.mem_toFinset]
-              exact State'.mem_toList.mpr (by simpa using h_base)
+              exact BitVec.mem_toList.mpr (by simpa using h_base)
             have hv_eq : v = get_unitary_init p u_i := by
               rw [get_unitary_init_is_init p u_i] at hv_init
               simpa using hv_init
@@ -556,8 +556,8 @@ rest of the action: two actions of `p` with the same `pre.val` have the same `h1
 precondition.
 -/
 lemma h1_argmax_pre_congr {m : ℕ} (p : PlanningTask m) (a b : Action m)
-    (hne_a : a.pre'.toList ≠ []) (hne_b : b.pre'.toList ≠ [])
-    (h : a.pre'.toList = b.pre'.toList) :
+    (hne_a : a.pre.toList ≠ []) (hne_b : b.pre.toList ≠ [])
+    (h : a.pre.toList = b.pre.toList) :
     h1_argmax_pre p a hne_a = h1_argmax_pre p b hne_b := by
   unfold h1_argmax_pre
   grind
@@ -575,7 +575,7 @@ same `h1`-maximiser precondition `f ∉ goal_zone`.
 lemma h1_lm'_argmax_pre_not_mem_goal_zone {n : ℕ} (p : PlanningTask (n + 2)) (u_g : unitary_goal p)
     (hp : has_preconditions p) (a : Action (n + 2))
     (ha : a ∈ get_all_equiv_delete_relaxed_actions p (lmcut_step p u_g (h1_pcf p hp)).1)
-    (hne : a.pre'.toList ≠ []) :
+    (hne : a.pre.toList ≠ []) :
     h1_argmax_pre p a hne ∉
       goal_zone (justification_graph p (h1_pcf p hp)) (get_unitary_goal p u_g) := by
   -- Extract a genuine landmark action `l` that is delete-relaxation-equivalent to `a`.
@@ -583,11 +583,11 @@ lemma h1_lm'_argmax_pre_not_mem_goal_zone {n : ℕ} (p : PlanningTask (n + 2)) (
       delete_relax_action a = delete_relax_action l := by
     contrapose! ha; simp_all +decide [get_all_equiv_delete_relaxed_actions]
   -- `a` and `l` share their preconditions (delete relaxation preserves them).
-  have hpre : a.pre'.toList = l.pre'.toList := by
-    have h2 : a.pre' = l.pre' := by
-      have := congrArg Action.pre' h_eq; simpa [delete_relax_action] using this
+  have hpre : a.pre.toList = l.pre.toList := by
+    have h2 : a.pre = l.pre := by
+      have := congrArg Action.pre h_eq; simpa [delete_relax_action] using this
     rw [h2]
-  have hne_l : l.pre'.toList ≠ [] := hpre ▸ hne
+  have hne_l : l.pre.toList ≠ [] := hpre ▸ hne
   -- `l` lies in the induced landmark, hence witnesses some cut edge `(f, t)`.
   have hl' : l ∈ landmark_induced_by_cut p
       (edges_entering_goal_zone (justification_graph p (h1_pcf p hp))
@@ -617,7 +617,7 @@ lemma h1_goal_value_of_not_isSome {n : ℕ} (p : PlanningTask (n + 2)) (f : Fin 
       = Vector.maxFinite (h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init')) + 1 := by
   unfold h1_goal_value;
   unfold h_1; simp_all +decide [ h_1_iter_fix_replace_goal ] ;
-  unfold replace_goal; simp +decide [ toVarSet' ] ;
+  unfold replace_goal; simp +decide [ VarSet.ofList ] ;
   grind +suggestions
 
 lemma h1_goal_value_le_maxFinite {n : ℕ} (p : PlanningTask (n + 2)) (f : Fin (n + 2))
@@ -643,7 +643,7 @@ lemma h1_edge_preserves_isSome {n : ℕ} (p : PlanningTask (n + 2)) (hp : has_pr
     (hf : ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'))[f]).isSome) :
     ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'))[t]).isSome := by
   obtain ⟨a, ha⟩ := adj
-  have h_preconditions : ∀ q ∈ a.val.pre'.toList, ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'))[q]).isSome := by
+  have h_preconditions : ∀ q ∈ a.val.pre.toList, ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'))[q]).isSome := by
     intro q hq
     by_contra hq_not_discovered
     have hq_goal_value : h1_goal_value p q = Vector.maxFinite (h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init')) + 1 := by
@@ -732,7 +732,7 @@ lemma graphDist_jg_postfixpoint {n : ℕ} (prob : PlanningTask (n + 2))
   refine ⟨(↑(pcf ⟨a, ha⟩) : Fin (n + 2)), ?_, ?_⟩
   · -- the chosen precondition is indeed a precondition of `a`
     have := (pcf ⟨a, ha⟩).2
-    simpa [VarSet'.toList] using (Action.mem_pre.mp this)
+    simpa [VarSet.toList] using (Action.mem_pre.mp this)
   · -- triangle inequality along the justification edge `pcf a → i`
     have hadj : jg.Adj (↑(pcf ⟨a, ha⟩) : Fin (n + 2)) i :=
       ⟨⟨a, ha⟩, rfl, by simpa using hi⟩
@@ -807,13 +807,13 @@ lemma justification_graph_payload_eq_witness {n : ℕ} (prob : PlanningTask n)
     (pcf : precondition_choice_function prob) {f t : Fin n}
     (adj : (justification_graph prob pcf).Adj f t) :
     ∃ a : {b : Action n // b ∈ prob.actions'},
-      f = (↑(pcf a) : Fin n) ∧ t ∈ a.val.add'.toList.toFinset ∧
+      f = (↑(pcf a) : Fin n) ∧ t ∈ a.val.add.toList.toFinset ∧
       (justification_graph prob pcf).Payload f t adj = a.val.cost := by
         unfold justification_graph; simp +decide [ List.min_eq_iff ] at *;
-        obtain ⟨a, ha⟩ : ∃ a : {b : Action n // b ∈ prob.actions'}, f = (↑(pcf a) : Fin n) ∧ t ∈ a.val.add'.toList.toFinset := by
+        obtain ⟨a, ha⟩ : ∃ a : {b : Action n // b ∈ prob.actions'}, f = (↑(pcf a) : Fin n) ∧ t ∈ a.val.add.toList.toFinset := by
           unfold justification_graph at adj; aesop;
-        obtain ⟨a, ha⟩ : ∃ a : {b : Action n // b ∈ prob.actions'}, f = (↑(pcf a) : Fin n) ∧ t ∈ a.val.add'.toList.toFinset ∧ ∀ b : {b : Action n // b ∈ prob.actions'}, f = (↑(pcf b) : Fin n) → t ∈ b.val.add'.toList.toFinset → a.val.cost ≤ b.val.cost := by
-          have h_min : ∃ a ∈ Finset.filter (fun c : {b : Action n // b ∈ prob.actions'} => f = (↑(pcf c) : Fin n) ∧ t ∈ c.val.add'.toList.toFinset) (Finset.univ : Finset {b : Action n // b ∈ prob.actions'}), ∀ c ∈ Finset.filter (fun c : {b : Action n // b ∈ prob.actions'} => f = (↑(pcf c) : Fin n) ∧ t ∈ c.val.add'.toList.toFinset) (Finset.univ : Finset {b : Action n // b ∈ prob.actions'}), a.val.cost ≤ c.val.cost := by
+        obtain ⟨a, ha⟩ : ∃ a : {b : Action n // b ∈ prob.actions'}, f = (↑(pcf a) : Fin n) ∧ t ∈ a.val.add.toList.toFinset ∧ ∀ b : {b : Action n // b ∈ prob.actions'}, f = (↑(pcf b) : Fin n) → t ∈ b.val.add.toList.toFinset → a.val.cost ≤ b.val.cost := by
+          have h_min : ∃ a ∈ Finset.filter (fun c : {b : Action n // b ∈ prob.actions'} => f = (↑(pcf c) : Fin n) ∧ t ∈ c.val.add.toList.toFinset) (Finset.univ : Finset {b : Action n // b ∈ prob.actions'}), ∀ c ∈ Finset.filter (fun c : {b : Action n // b ∈ prob.actions'} => f = (↑(pcf c) : Fin n) ∧ t ∈ c.val.add.toList.toFinset) (Finset.univ : Finset {b : Action n // b ∈ prob.actions'}), a.val.cost ≤ c.val.cost := by
             exact Finset.exists_min_image _ _ ⟨ a, by aesop ⟩;
           exact ⟨ h_min.choose, Finset.mem_filter.mp h_min.choose_spec.1 |>.2.1, Finset.mem_filter.mp h_min.choose_spec.1 |>.2.2, fun b hb₁ hb₂ => h_min.choose_spec.2 b ( Finset.mem_filter.mpr ⟨ Finset.mem_univ _, hb₁, hb₂ ⟩ ) ⟩;
         use a.val, by
@@ -875,7 +875,7 @@ genuine cut action, whose cut target is a goal-zone fact).
 lemma h1_lm'_has_goal_zone_add {n : ℕ} (p : PlanningTask (n + 2)) (u_g : unitary_goal p)
     (hp : has_preconditions p) {b : Action (n + 2)}
     (hb : b ∈ get_all_equiv_delete_relaxed_actions p (lmcut_step p u_g (h1_pcf p hp)).1) :
-    ∃ t : Fin (n + 2), t ∈ b.add'.toList.toFinset ∧
+    ∃ t : Fin (n + 2), t ∈ b.add.toList.toFinset ∧
       t ∈ goal_zone (justification_graph p (h1_pcf p hp)) (get_unitary_goal p u_g) := by
   unfold get_all_equiv_delete_relaxed_actions at hb
   unfold lmcut_step at hb; simp_all [ landmark_induced_by_cut ]
@@ -910,11 +910,11 @@ lemma h1_partition_edge_step {n : ℕ} (p : PlanningTask (n + 2)) (u_g : unitary
   set a0 := p.actions'[i] with ha0_def
   have ha0_mem : a0 ∈ p.actions' := by
     exact List.getElem_mem _
-  have ha0_pre : a.val.pre'.toList = a0.pre'.toList := by
+  have ha0_pre : a.val.pre.toList = a0.pre.toList := by
     rw [ ← ha_eq ];
     simp +decide [ partition_STRIPS, List.getElem_mapFinIdx ];
     rfl
-  have ha0_add : a.val.add'.toList = a0.add'.toList := by
+  have ha0_add : a.val.add.toList = a0.add.toList := by
     rw [ ← ha_eq ];
     unfold partition_STRIPS; aesop;
   have ha0_cost : a.val.cost = (if a0 ∈ get_all_equiv_delete_relaxed_actions p (lmcut_step p u_g (h1_pcf p hp)).1 then a0.cost - (lmcut_step p u_g (h1_pcf p hp)).2.1 else a0.cost) := by
@@ -1114,7 +1114,7 @@ at least the `h_1`/`h^max` value of the goal fact.
 lemma lmcut_inner_ge_h1_goal {n : ℕ} (M : ℕ) :
     ∀ (p : PlanningTask (n + 2)) (u_i : unitary_init p) (u_g : unitary_goal p) (hp : has_preconditions p),
       (p.actions'.map (fun a => a.cost)).sum = M →
-      Plan p p.init →
+      PlanningTask.Plan p p.init →
       (lmcut_inner p u_i u_g hp (@h1_pcf n)).2.1 ≥ h1_goal_value p (get_unitary_goal p u_g) := by
   induction M using Nat.strong_induction_on with
   | _ M IH =>
@@ -1152,7 +1152,7 @@ lemma lmcut_inner_ge_h1_goal {n : ℕ} (M : ℕ) :
 
 /-- `h_1_iter_fix` ignores the initial state (it depends only on the actions), so `set_init` does not
 change it. -/
-lemma h_1_iter_fix_set_init {n : ℕ} (prob : PlanningTask n) (s : State' n)
+lemma h_1_iter_fix_set_init {n : ℕ} (prob : PlanningTask n) (s : BitVec n)
     (bef : _root_.Vector (WithTop ℕ) n) :
     h_1_iter_fix n (set_init prob s) bef = h_1_iter_fix n prob bef := by
   unfold h_1_iter_fix
@@ -1165,7 +1165,7 @@ decreasing_by exact h_1_step_lex_decreasing prob bef ‹_›
 
 /-- `h_1` depends only on the actions, goal and the explicit state argument, so `set_init` (which
 only changes the unused initial-state field) leaves it unchanged. -/
-lemma h_1_set_init {n : ℕ} (prob : PlanningTask n) (s t : State' n) :
+lemma h_1_set_init {n : ℕ} (prob : PlanningTask n) (s t : BitVec n) :
     h_1 (set_init prob s) t = h_1 prob t := by
   unfold h_1
   simp only [h_1_iter_fix_set_init]

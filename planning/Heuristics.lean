@@ -1,5 +1,5 @@
-import Strips.Core
-import Strips.Basic
+import Strips.PlanningTask
+import Strips.PlanningTask
 import planning.Planning
 
 import Mathlib.Logic.Lemmas
@@ -13,19 +13,19 @@ The value `⊤` records that the heuristic has *proved the state unsolvable*: it
 estimate of `+∞`.  This replaces the earlier convention of returning the finite sentinel
 `2 ^ n * max_action_cost prob`, which merely *exceeded* every achievable plan cost. -/
 
-abbrev heur_admissible {n : ℕ} (prob : PlanningTask n) (heur : State' n → ℕ∞):=
-  ∀ v : State' n, ∀ plan : Plan prob (convertState v), heur v ≤ (plan.path.cost : ℕ∞)
+abbrev heur_admissible {n : ℕ} (prob : PlanningTask n) (heur : BitVec n → ℕ∞):=
+  ∀ v : BitVec n, ∀ plan : PlanningTask.Plan prob (convertState v), heur v ≤ (plan.path.cost : ℕ∞)
 
-abbrev heur_admissible' {n : ℕ} (prob : PlanningTask n) (heur : State' n → ℕ∞):=
-  ∀ v : State' n, ∀ goal ∈ trans_of_STRIPS_goals prob, ∀ path : WeightedDiGraph.Path (G:=trans_of_STRIPS prob) v goal, heur v ≤ (path.cost : ℕ∞)
+abbrev heur_admissible' {n : ℕ} (prob : PlanningTask n) (heur : BitVec n → ℕ∞):=
+  ∀ v : BitVec n, ∀ goal ∈ trans_of_STRIPS_goals prob, ∀ path : WeightedDiGraph.Path (G:=trans_of_STRIPS prob) v goal, heur v ≤ (path.cost : ℕ∞)
 
-abbrev heur_goal_aware {n : ℕ} (prob : PlanningTask n) (heur : State' n → ℕ∞) :=
-  ∀ v : State' n, satisfies' prob.goal' v → (heur v = 0)
+abbrev heur_goal_aware {n : ℕ} (prob : PlanningTask n) (heur : BitVec n → ℕ∞) :=
+  ∀ v : BitVec n, satisfies' prob.goal' v → (heur v = 0)
 
-abbrev heur_consistent {n : ℕ} (prob : PlanningTask n) (heur : State' n → ℕ∞) :=
-  ∀ v : State' n, ∀ a ∈ prob.actions', applicable' a v → heur v ≤ heur (successor' a v) + (a.cost : ℕ∞)
+abbrev heur_consistent {n : ℕ} (prob : PlanningTask n) (heur : BitVec n → ℕ∞) :=
+  ∀ v : BitVec n, ∀ a ∈ prob.actions', applicable' a v → heur v ≤ heur (successor' a v) + (a.cost : ℕ∞)
 
-lemma admissible_of_admissible' {n : ℕ} (prob : PlanningTask n) (heur : State' n → ℕ∞):
+lemma admissible_of_admissible' {n : ℕ} (prob : PlanningTask n) (heur : BitVec n → ℕ∞):
     heur_admissible' prob heur → heur_admissible prob heur := by
   intro h' v plan
   -- Get a BitVec representation of plan.last
@@ -33,7 +33,7 @@ lemma admissible_of_admissible' {n : ℕ} (prob : PlanningTask n) (heur : State'
   obtain ⟨g', hg'⟩ := state_has_bitvec plan.last
   -- Convert STRIPS path to graph walk
   obtain ⟨w, hw⟩ := strips_path_has_cheaper_walk prob (hg' ▸ plan.path)
-  -- Get a graph Path from the walk
+  -- Get a graph PlanningTask.Path from the walk
   obtain ⟨p, hp⟩ := WeightedDiGraph.Walk.cheaper_path_exists w
   -- Show g' is in the goals list
   have g'_in_goals : g' ∈ trans_of_STRIPS_goals prob := by
@@ -43,13 +43,13 @@ lemma admissible_of_admissible' {n : ℕ} (prob : PlanningTask n) (heur : State'
   have hge := h' v g' g'_in_goals p
   -- Cost preservation under cast
   have hcost : (hg' ▸ plan.path).cost = plan.path.cost :=
-    Path.cost_eq_of_cast hg' plan.path
+    PlanningTask.Path.cost_eq_of_cast hg' plan.path
   calc heur v ≤ (p.cost : ℕ∞) := hge
     _ ≤ (w.cost : ℕ∞) := by exact_mod_cast hp
     _ ≤ ((hg' ▸ plan.path).cost : ℕ∞) := by exact_mod_cast hw
     _ = (plan.path.cost : ℕ∞) := by rw [hcost]
 
-lemma admissible'_of_admissible {n : ℕ} (prob : PlanningTask n) (heur : State' n → ℕ∞):
+lemma admissible'_of_admissible {n : ℕ} (prob : PlanningTask n) (heur : BitVec n → ℕ∞):
     heur_admissible prob heur → heur_admissible' prob heur := by
   intro h v goal goal_in_goals graphPath
   -- goal satisfies the goal condition
@@ -57,10 +57,10 @@ lemma admissible'_of_admissible {n : ℕ} (prob : PlanningTask n) (heur : State'
     (mem_trans_of_STRIPS_goals_iff prob goal).mp goal_in_goals
   -- Convert graph path to STRIPS path
   let stripsPath := walk_to_strips_path prob graphPath.val sat
-  -- Build a Plan
+  -- Build a PlanningTask.Plan
   have goal_sat := satisfies'_implies_GoalState prob goal sat
-  let plan : Plan prob (convertState v) :=
-    Plan.mk (convertState goal) stripsPath goal_sat
+  let plan : PlanningTask.Plan prob (convertState v) :=
+    PlanningTask.Plan.mk (convertState goal) stripsPath goal_sat
   -- Apply admissible
   have hplan := h v plan
   -- The costs are equal
@@ -74,14 +74,14 @@ lemma admissible'_of_admissible {n : ℕ} (prob : PlanningTask n) (heur : State'
 PROVIDED SOLUTION
 h2 s ≤ h1 s (by dominated) ≤ path.cost (by admissible). Unfold heur_admissible' and use le_trans with dominated and admissible.
 -/
-lemma admissible_of_dominated_by_admissible {n : ℕ} (prob : PlanningTask n) (h1 h2 : State' n → ℕ∞) (admissible : heur_admissible' prob h1) (dominated : ∀ s : State' n, h1 s ≥ h2 s) : heur_admissible' prob h2 := by
+lemma admissible_of_dominated_by_admissible {n : ℕ} (prob : PlanningTask n) (h1 h2 : BitVec n → ℕ∞) (admissible : heur_admissible' prob h1) (dominated : ∀ s : BitVec n, h1 s ≥ h2 s) : heur_admissible' prob h2 := by
   intro v goal goal_in_goals p
   exact le_trans (dominated v) (admissible v goal goal_in_goals p)
 
-private lemma strips_path_cost_ge_heur {n : ℕ} (prob : PlanningTask n) (h : State' n → ℕ∞)
+private lemma strips_path_cost_ge_heur {n : ℕ} (prob : PlanningTask n) (h : BitVec n → ℕ∞)
     (ga : heur_goal_aware prob h) (hc : heur_consistent prob h)
-    (k : ℕ) {start : State' n} {goal : State n}
-    (path : Path prob (convertState start) goal)
+    (k : ℕ) {start : BitVec n} {goal : State n}
+    (path : PlanningTask.Path prob (convertState start) goal)
     (hlen : path.length ≤ k)
     (goal_state : prob.GoalState goal) :
     h start ≤ (path.cost : ℕ∞) := by
@@ -90,14 +90,14 @@ private lemma strips_path_cost_ge_heur {n : ℕ} (prob : PlanningTask n) (h : St
     generalize hs : convertState start = s at path
     cases path with
     | empty =>
-      simp [Path.cost]
+      simp [PlanningTask.Path.cost]
       exact ga start (GoalState_implies_satisfies' prob start (hs ▸ goal_state))
-    | cons => simp [Path.length] at hlen
+    | cons => simp [PlanningTask.Path.length] at hlen
   | succ k ih =>
     generalize hs : convertState start = s at path
     cases path with
     | empty =>
-      simp [Path.cost]
+      simp [PlanningTask.Path.cost]
       exact ga start (GoalState_implies_satisfies' prob start (hs ▸ goal_state))
     | cons a s2 ha succ path' =>
       subst hs
@@ -107,12 +107,12 @@ private lemma strips_path_cost_ge_heur {n : ℕ} (prob : PlanningTask n) (h : St
       have s2'_eq : s2' = successor' a start :=
         is_successor'_eq_successor' a start s2' (successor_implies_is_successor succ)
       subst s2'_eq
-      have ih' := ih path' (by simp [Path.length] at hlen; exact hlen) goal_state
+      have ih' := ih path' (by simp [PlanningTask.Path.length] at hlen; exact hlen) goal_state
       calc h start ≤ h (successor' a start) + (a.cost : ℕ∞) := hc start a (mem_actions'_of_mem_actions ha) a_app
         _ ≤ (path'.cost : ℕ∞) + (a.cost : ℕ∞) := by gcongr
-        _ = ((Path.cons a (convertState (successor' a start)) ha succ path').cost : ℕ∞) := by
-              simp [Path.cost]
-lemma heur_admissible_of_goal_aware_and_consistent {n : ℕ} (prob : PlanningTask n) (h : State' n → ℕ∞):
+        _ = ((PlanningTask.Path.cons a (convertState (successor' a start)) ha succ path').cost : ℕ∞) := by
+              simp [PlanningTask.Path.cost]
+lemma heur_admissible_of_goal_aware_and_consistent {n : ℕ} (prob : PlanningTask n) (h : BitVec n → ℕ∞):
     heur_goal_aware prob h ∧ heur_consistent prob h → heur_admissible prob h := by
   intro ⟨ga, hc⟩ v plan
   exact strips_path_cost_ge_heur prob h ga hc plan.path.length plan.path (le_refl _) plan.goal
@@ -121,10 +121,10 @@ lemma heur_admissible_of_goal_aware_and_consistent {n : ℕ} (prob : PlanningTas
 
 /-- A heuristic is *perfect* when it agrees with the optimal plan cost on every solvable
 state and returns `⊤` on every unsolvable state. -/
-def heur_is_perfect {n : ℕ} (prob : PlanningTask n) (h : State' n → ℕ∞) : Prop :=
+def heur_is_perfect {n : ℕ} (prob : PlanningTask n) (h : BitVec n → ℕ∞) : Prop :=
   heur_admissible prob h ∧
-    (∀ v : State' n, Nonempty (Plan prob (convertState v)) → ∃ plan : Plan prob (convertState v), (plan.path.cost : ℕ∞) = (h v)) ∧
-    (∀ v : State' n, IsEmpty (Plan prob (convertState v)) → (h v) = ⊤)
+    (∀ v : BitVec n, Nonempty (PlanningTask.Plan prob (convertState v)) → ∃ plan : PlanningTask.Plan prob (convertState v), (plan.path.cost : ℕ∞) = (h v)) ∧
+    (∀ v : BitVec n, IsEmpty (PlanningTask.Plan prob (convertState v)) → (h v) = ⊤)
 
 
 ------------------------------- Particular Heuristics

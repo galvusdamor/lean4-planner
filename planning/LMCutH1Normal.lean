@@ -60,14 +60,14 @@ The only actions of the normal form that add the goal fact `g = ⟨n+1⟩` are (
 -/
 lemma ignf_action_adds_goal {n : ℕ} (q : PlanningTask n) (a : Action (n + 2))
     (ha : a ∈ (i_g_normal_form q).actions')
-    (hg : (⟨n + 1, by omega⟩ : Fin (n + 2)) ∈ a.add'.toList) :
+    (hg : (⟨n + 1, by omega⟩ : Fin (n + 2)) ∈ a.add.toList) :
     a.cost = 0 ∧
-      a.pre'.toList = q.goal'.toList.map (Fin.castLE (show n ≤ n + 2 by omega)) := by
+      a.pre.toList = q.goal'.toList.map (Fin.castLE (show n ≤ n + 2 by omega)) := by
   unfold i_g_normal_form at ha; simp_all +decide [ Finset.ext_iff,PlanningTask ] ;
-  rcases ha with ( ⟨ b, hb, rfl ⟩ | rfl | rfl ) <;> simp_all +decide [ toVarSet' ];
+  rcases ha with ( ⟨ b, hb, rfl ⟩ | rfl | rfl ) <;> simp_all +decide [ VarSet.ofList ];
   · obtain ⟨ a, ha, ha' ⟩ := hg; have := Fin.is_lt a; simp_all +decide [ Fin.ext_iff ] ;
   · obtain ⟨ a, ha, ha' ⟩ := hg; have := Fin.is_lt a; simp_all +decide [ Fin.ext_iff ] ;
-  · unfold VarSet'.toList; simp +decide [ Finset.sort ] ;
+  · unfold VarSet.toList; simp +decide [ Finset.sort ] ;
     rw [ List.mergeSort_eq_self ];
     · grind +suggestions;
     · rw [ List.pairwise_iff_get ];
@@ -91,19 +91,19 @@ lemma ignf_step_embed {n : ℕ} (q : PlanningTask n) (V : _root_.Vector (WithTop
     (h_1_step (n + 2) (i_g_normal_form q) V)[(Fin.castLE (show n ≤ n + 2 by omega) f)]
       = (h_1_step n q W)[f] := by
   rw [ h_1_step_getElem_contrib, h_1_step_getElem_contrib ];
-  have h_filterMap_eq : List.filterMap (fun a => if (Fin.castLE (show n ≤ n + 2 by omega) f) ∈ a.add'.toList then if applicable' a (vec_to_state (n + 2) V) = true then some (actionContribUB V a) else none else none) (i_g_normal_form q).actions' = List.filterMap (fun a => if f ∈ a.add'.toList then if applicable' a (vec_to_state n W) = true then some (actionContribUB W a) else none else none) q.actions' := by
-                                                                  have h_filterMap_eq : ∀ a ∈ q.actions', applicable' (Action.mk a.name (toVarSet' (a.pre'.toList.map (Fin.castLE (show n ≤ n + 2 by omega)) ++ [⟨n, by omega⟩])) (toVarSet' (a.add'.toList.map (Fin.castLE (show n ≤ n + 2 by omega)))) (toVarSet' (a.del'.toList.map (Fin.castLE (show n ≤ n + 2 by omega)))) a.cost) (vec_to_state (n + 2) V) ↔ applicable' a (vec_to_state n W) := by
+  have h_filterMap_eq : List.filterMap (fun a => if (Fin.castLE (show n ≤ n + 2 by omega) f) ∈ a.add.toList then if applicable' a (vec_to_state (n + 2) V) = true then some (actionContribUB V a) else none else none) (i_g_normal_form q).actions' = List.filterMap (fun a => if f ∈ a.add.toList then if applicable' a (vec_to_state n W) = true then some (actionContribUB W a) else none else none) q.actions' := by
+                                                                  have h_filterMap_eq : ∀ a ∈ q.actions', applicable' (Action.mk a.name (VarSet.ofList (a.pre.toList.map (Fin.castLE (show n ≤ n + 2 by omega)) ++ [⟨n, by omega⟩])) (VarSet.ofList (a.add.toList.map (Fin.castLE (show n ≤ n + 2 by omega)))) (VarSet.ofList (a.del.toList.map (Fin.castLE (show n ≤ n + 2 by omega)))) a.cost) (vec_to_state (n + 2) V) ↔ applicable' a (vec_to_state n W) := by
                                                                                                                                                                                                                                                                                                                                                       grind +suggestions;
-                                                                  have h_filterMap_eq : ∀ a ∈ q.actions', actionContribUB V (Action.mk a.name (toVarSet' (a.pre'.toList.map (Fin.castLE (show n ≤ n + 2 by omega)) ++ [⟨n, by omega⟩])) (toVarSet' (a.add'.toList.map (Fin.castLE (show n ≤ n + 2 by omega)))) (toVarSet' (a.del'.toList.map (Fin.castLE (show n ≤ n + 2 by omega)))) a.cost) = actionContribUB W a := by
+                                                                  have h_filterMap_eq : ∀ a ∈ q.actions', actionContribUB V (Action.mk a.name (VarSet.ofList (a.pre.toList.map (Fin.castLE (show n ≤ n + 2 by omega)) ++ [⟨n, by omega⟩])) (VarSet.ofList (a.add.toList.map (Fin.castLE (show n ≤ n + 2 by omega)))) (VarSet.ofList (a.del.toList.map (Fin.castLE (show n ≤ n + 2 by omega)))) a.cost) = actionContribUB W a := by
                                                                                                                                                                                                                                                                                                                                                             intros a ha
                                                                                                                                                                                                                                                                                                                                                             simp [actionContribUB, hWV];
-                                                                                                                                                                                                                                                                                                                                                            have h_foldl_eq : List.Perm (toVarSet' (a.pre'.toList.map (Fin.castLE (show n ≤ n + 2 by omega)) ++ [⟨n, by omega⟩])).toList (a.pre'.toList.map (Fin.castLE (show n ≤ n + 2 by omega)) ++ [⟨n, by omega⟩]) := by
+                                                                                                                                                                                                                                                                                                                                                            have h_foldl_eq : List.Perm (VarSet.ofList (a.pre.toList.map (Fin.castLE (show n ≤ n + 2 by omega)) ++ [⟨n, by omega⟩])).toList (a.pre.toList.map (Fin.castLE (show n ≤ n + 2 by omega)) ++ [⟨n, by omega⟩]) := by
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           apply List.perm_of_nodup_nodup_toFinset_eq;
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          · exact VarSet'.toList_nodup _;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          · exact VarSet.toList_nodup _;
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           · simp +decide [ List.nodup_append, List.nodup_map_iff_inj_on ];
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            exact ⟨ List.Nodup.map ( fun x y hxy => by simpa [ Fin.ext_iff ] using hxy ) ( a.pre'.toList_nodup ), fun x hx => ne_of_lt ( Fin.castSucc_lt_last x ) ⟩;
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          · ext; simp [toVarSet'];
-                                                                                                                                                                                                                                                                                                                                                            have h_foldl_eq : List.foldl max 0 (List.map (fun j => Option.getD V[j] 0) (toVarSet' (a.pre'.toList.map (Fin.castLE (show n ≤ n + 2 by omega)) ++ [⟨n, by omega⟩])).toList) = List.foldl max 0 (List.map (fun j => Option.getD V[j] 0) (a.pre'.toList.map (Fin.castLE (show n ≤ n + 2 by omega)) ++ [⟨n, by omega⟩])) := by
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            exact ⟨ List.Nodup.map ( fun x y hxy => by simpa [ Fin.ext_iff ] using hxy ) ( a.pre.toList_nodup ), fun x hx => ne_of_lt ( Fin.castSucc_lt_last x ) ⟩;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          · ext; simp [VarSet.ofList];
+                                                                                                                                                                                                                                                                                                                                                            have h_foldl_eq : List.foldl max 0 (List.map (fun j => Option.getD V[j] 0) (VarSet.ofList (a.pre.toList.map (Fin.castLE (show n ≤ n + 2 by omega)) ++ [⟨n, by omega⟩])).toList) = List.foldl max 0 (List.map (fun j => Option.getD V[j] 0) (a.pre.toList.map (Fin.castLE (show n ≤ n + 2 by omega)) ++ [⟨n, by omega⟩])) := by
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       apply_rules [ List.Perm.foldl_eq ];
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       exact h_foldl_eq.map _;
                                                                                                                                                                                                                                                                                                                                                             simp_all +decide [ List.foldl_append ];
@@ -180,9 +180,9 @@ lemma ignf_extend_step_i {n : ℕ} (q : PlanningTask n) :
         · exact h_1_step_le (n + 2) (i_g_normal_form q) (ignf_extend q) ⟨n, by omega⟩;
         · refine' h_1_step_ge_of_action_bound _ _ _ _;
           intro a ha hadd happ;
-          obtain ⟨q_1, hq_1⟩ : ∃ q_1 ∈ a.pre'.toList, q_1 = ⟨n, by omega⟩ := by
+          obtain ⟨q_1, hq_1⟩ : ∃ q_1 ∈ a.pre.toList, q_1 = ⟨n, by omega⟩ := by
             unfold i_g_normal_form at ha; simp_all +decide [ List.mem_append, List.mem_map ] ;
-            rcases ha with ( ⟨ a, ha, rfl ⟩ | rfl | rfl ) <;> simp_all +decide [ toVarSet' ];
+            rcases ha with ( ⟨ a, ha, rfl ⟩ | rfl | rfl ) <;> simp_all +decide [ VarSet.ofList ];
           use q_1;
           simp_all +decide [ Fin.ext_iff ]
 
@@ -205,7 +205,7 @@ lemma ignf_extend_step_g {n : ℕ} (q : PlanningTask n) :
           grind;
       have h_foldl_max : ∀ g ∈ q.goal'.toList, ((ignf_R0 q)[g]).isSome := by
         intro g hg
-        have h_applicable : ∀ p ∈ a.pre'.toList, (vec_to_state (n + 2) (ignf_extend q))[p] = true := by
+        have h_applicable : ∀ p ∈ a.pre.toList, (vec_to_state (n + 2) (ignf_extend q))[p] = true := by
           unfold applicable' at happ; aesop;
         have h_applicable : (vec_to_state (n + 2) (ignf_extend q))[(Fin.castLE (show n ≤ n + 2 by omega) g)] = true := by
                                                                                   have := ignf_action_adds_goal q a ha ‹_›; aesop;
@@ -241,11 +241,11 @@ lemma ignf_fix_emb_init {n : ℕ} (q : PlanningTask n) (j : Fin n) (hj : q.init'
   have hR : h_1_step (n + 2) (i_g_normal_form q) R = R := by
     exact h_1_iter_fix_is_fixpoint ( n + 2 ) ( i_g_normal_form q ) ( h_1_base ( n + 2 ) ( i_g_normal_form q ).init' );
   -- To bound `R[emb j] ≤ some 0`, apply `fixpoint_value_le_action_cost` to the `init` action of `i_g_normal_form q`.
-  have h_init_action : ∃ a : Action (n + 2), a ∈ (i_g_normal_form q).actions' ∧ (Fin.castLE (show n ≤ n + 2 by omega) j) ∈ a.add'.toList ∧ a.cost = 0 ∧ a.pre'.toList = [⟨n, by omega⟩] := by
-                                                                                              refine' ⟨ Action.mk "init" ( singletonVarSet ⟨ n, by omega ⟩ ) ( toVarSet' ( q.init'.toList.map ( Fin.castLE ( show n ≤ n + 2 by omega ) ) ) ) ∅ 0, _, _, _, _ ⟩ <;> simp +decide [ i_g_normal_form ];
+  have h_init_action : ∃ a : Action (n + 2), a ∈ (i_g_normal_form q).actions' ∧ (Fin.castLE (show n ≤ n + 2 by omega) j) ∈ a.add.toList ∧ a.cost = 0 ∧ a.pre.toList = [⟨n, by omega⟩] := by
+                                                                                              refine' ⟨ Action.mk "init" ( singletonVarSet ⟨ n, by omega ⟩ ) ( VarSet.ofList ( q.init'.toList.map ( Fin.castLE ( show n ≤ n + 2 by omega ) ) ) ) ∅ 0, _, _, _, _ ⟩ <;> simp +decide [ i_g_normal_form ];
                                                                                               · exact hj;
                                                                                               · unfold singletonVarSet;
-                                                                                                unfold toVarSet'; simp +decide [ mem_toVarSet' ] ;
+                                                                                                unfold VarSet.ofList; simp +decide [ mem_val_ofList ] ;
                                                                                                 rfl;
   obtain ⟨a, ha_mem, ha_add, ha_cost, ha_pre⟩ := h_init_action
   have h_applicable : applicable' a (vec_to_state (n + 2) R) = true := by
@@ -329,11 +329,11 @@ lemma ignf_fix_g_le {n : ℕ} (q : PlanningTask n) :
   by_cases h_all : q.goal'.toList.all (fun f => ((ignf_R0 q)[f]).isSome)
   · obtain ⟨a, ha_mem, ha_add, ha_cost, ha_pre⟩ :
         ∃ a : Action (n + 2), a ∈ (i_g_normal_form q).actions' ∧
-          (⟨n + 1, by omega⟩ : Fin (n + 2)) ∈ a.add'.toList ∧ a.cost = 0 ∧
-          a.pre'.toList = q.goal'.toList.map (Fin.castLE (show n ≤ n + 2 by omega)) := by
+          (⟨n + 1, by omega⟩ : Fin (n + 2)) ∈ a.add.toList ∧ a.cost = 0 ∧
+          a.pre.toList = q.goal'.toList.map (Fin.castLE (show n ≤ n + 2 by omega)) := by
       unfold i_g_normal_form; simp +decide [ List.mem_append, List.mem_map ]
-      refine' ⟨ _, Or.inr <| Or.inr rfl, _, _, _ ⟩ <;> simp +decide [ singletonVarSet, toVarSet' ]
-      unfold VarSet'.toList; simp +decide [ Finset.sort ]
+      refine' ⟨ _, Or.inr <| Or.inr rfl, _, _, _ ⟩ <;> simp +decide [ singletonVarSet, VarSet.ofList ]
+      unfold VarSet.toList; simp +decide [ Finset.sort ]
       rw [ List.dedup_eq_self.mpr ]
       · rw [ List.mergeSort_eq_self ]
         simp +decide [ List.pairwise_map, List.pairwise_iff_get ]
@@ -344,7 +344,7 @@ lemma ignf_fix_g_le {n : ℕ} (q : PlanningTask n) :
       unfold applicable' satisfies'
       simp only [decide_eq_true_eq]
       intro i hi
-      have hi' : i ∈ a.pre'.toList := VarSet'.mem_toList.mp hi
+      have hi' : i ∈ a.pre.toList := VarSet.mem_toList.mp hi
       rw [ha_pre] at hi'
       obtain ⟨g, hg, rfl⟩ := List.mem_map.mp hi'
       rw [vec_to_state_getElem]
@@ -372,11 +372,11 @@ lemma ignf_fix_g_le {n : ℕ} (q : PlanningTask n) :
     · exact WithTop.coe_le_coe.mpr (Nat.zero_le _)
     · rw [Nat.zero_add, list_max_eq_foldl_max_zero _ hL]
       refine WithTop.coe_le_coe.mpr ?_
-      calc (a.pre'.toList.attach.map (fun x => (ignf_RN q)[x.1].get
+      calc (a.pre.toList.attach.map (fun x => (ignf_RN q)[x.1].get
                 (vec_to_state_isSome_of_applicable (n + 2) (ignf_RN q) a h_applicable x.1 x.2))).foldl max 0
-          = (a.pre'.toList.map (fun j => ((ignf_RN q)[j]).getD 0)).foldl max 0 := by
+          = (a.pre.toList.map (fun j => ((ignf_RN q)[j]).getD 0)).foldl max 0 := by
             congr 1
-            rw [← List.attach_map_val (l := a.pre'.toList)
+            rw [← List.attach_map_val (l := a.pre.toList)
               (f := fun j => ((ignf_RN q)[j]).getD 0)]
             apply List.map_congr_left
             intro x _
@@ -578,11 +578,11 @@ lemma h_1_i_g_normal_form_eq {n : ℕ} (q : PlanningTask n) :
 `h_1` does not depend on a task's initial state field (only on the state argument, actions and
 goal), so overwriting the initial state is irrelevant.
 -/
-lemma h_1_set_init_eq {n : ℕ} (prob : PlanningTask n) (s : State' n) :
+lemma h_1_set_init_eq {n : ℕ} (prob : PlanningTask n) (s : BitVec n) :
     h_1 (set_init prob s) s = h_1 prob s := by
   convert h_1_set_init prob s s using 1
 
-lemma h1_goal_value_normal_form {n : ℕ} (prob : PlanningTask n) (s : State' n)
+lemma h1_goal_value_normal_form {n : ℕ} (prob : PlanningTask n) (s : BitVec n)
     (hg : prob.goal'.toList ≠ []) :
     h1_goal_value (i_g_normal_form (set_init prob s))
         (get_unitary_goal (i_g_normal_form (set_init prob s))
@@ -596,7 +596,7 @@ lemma h1_goal_value_normal_form {n : ℕ} (prob : PlanningTask n) (s : State' n)
     exact this.mp ( by simp +decide [ i_g_normal_form ] ) ▸ rfl;
   · convert h_1_set_init_eq prob s |> Eq.symm
 
-lemma h_1_of_empty_goal {n : ℕ} (prob : PlanningTask n) (s : State' n) (hg : prob.goal'.toList = []) :
+lemma h_1_of_empty_goal {n : ℕ} (prob : PlanningTask n) (s : BitVec n) (hg : prob.goal'.toList = []) :
     h_1 prob s = 0 := by
   -- Since the goal is empty, the h_1 of the original problem is 0 by definition.
   simp [h_1, hg];
@@ -606,8 +606,8 @@ lemma h_1_of_empty_goal {n : ℕ} (prob : PlanningTask n) (s : State' n) (hg : p
   simp_all +decide [ Finset.ext_iff ];
   replace this := congr_arg List.toFinset this; rw [ Finset.ext_iff ] at this; specialize this i; aesop;
 
-theorem lmcut_h1_dominates {n : ℕ} (prob : PlanningTask n) (s : State' n)
-    (plan : Plan prob (convertState s)) :
+theorem lmcut_h1_dominates {n : ℕ} (prob : PlanningTask n) (s : BitVec n)
+    (plan : PlanningTask.Plan prob (convertState s)) :
     lmcut prob s (@h1_pcf n) ≥ (h_1 prob s : ℕ∞) := by
   rw [lmcut]
   split

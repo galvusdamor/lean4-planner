@@ -8,17 +8,17 @@ name = "planning"
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"
-rev = "v4.31.0"
+rev = "v4.32.0"
 
 [[require]]
 name = "strips"
 git = "https://github.com/AmosNico/lean4-strips"
-rev = "v4.31.0"
+rev = "v4.32.0"
 
 [[require]]
 name = "SearchAlgorithms"
 git = "https://github.com/galvusdamor/lean4-search-algorithms"
-rev = "v4.27.0"
+rev = "v4.32.0"
 
 [[lean_exe]]
 name = "planner"

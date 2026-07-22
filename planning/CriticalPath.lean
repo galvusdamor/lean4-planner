@@ -10,11 +10,11 @@ private lemma getElem_eq_rec_BitVec {m n : ℕ} (h : m = n) (bv : BitVec m) (i :
     (show BitVec n from h ▸ bv)[i] = bv[i]'(by omega) := by
   subst h; rfl
 
-def h_1_base (n : ℕ) (s : State' n) : Vector (WithTop ℕ) n :=
+def h_1_base (n : ℕ) (s : BitVec n) : Vector (WithTop ℕ) n :=
     (Vector.finRange n).map (fun i => if s[i] then some 0 else none)
 
 
-def vec_to_state (n : ℕ) (bef : Vector (WithTop ℕ) n) : State' n :=
+def vec_to_state (n : ℕ) (bef : Vector (WithTop ℕ) n) : BitVec n :=
   let l_bool : List Bool := (bef.map (fun x => x.isSome)).toList
   have l_bool_len : l_bool.length = n := by grind
   l_bool_len ▸ BitVec.ofBoolListLE l_bool
@@ -25,7 +25,7 @@ lemma vec_to_state_getElem (n : ℕ) (bef : Vector (WithTop ℕ) n) (i : Fin n) 
   grind +suggestions
 
 lemma vec_to_state_isSome_of_satisfies (n : ℕ) (bef : Vector (WithTop ℕ) n)
-    (cond : VarSet' n) (h : satisfies' cond (vec_to_state n bef) = true)
+    (cond : VarSet n) (h : satisfies' cond (vec_to_state n bef) = true)
     (i : Fin n) (hi : i ∈ cond.val) : (bef[i]).isSome = true := by
   have := (satisfies'_iff cond (vec_to_state n bef)).mp h i hi
   rw [← vec_to_state_getElem]
@@ -33,8 +33,8 @@ lemma vec_to_state_isSome_of_satisfies (n : ℕ) (bef : Vector (WithTop ℕ) n)
 
 lemma vec_to_state_isSome_of_applicable (n : ℕ) (bef : Vector (WithTop ℕ) n)
     (a : Action n) (h : applicable' a (vec_to_state n bef) = true)
-    (i : Fin n) (hi : i ∈ a.pre'.toList) : (bef[i]).isSome = true :=
-  vec_to_state_isSome_of_satisfies n bef a.pre' h i (VarSet'.mem_toList.mp hi)
+    (i : Fin n) (hi : i ∈ a.pre.toList) : (bef[i]).isSome = true :=
+  vec_to_state_isSome_of_satisfies n bef a.pre h i (VarSet.mem_toList.mp hi)
 
 /-- Compare a new cost with the current best: update if the new cost is strictly cheaper. -/
 def updateIfCheaper (newCost : ℕ) (current : WithTop ℕ) : WithTop ℕ :=
@@ -49,9 +49,9 @@ def h_1_step (n : ℕ) (prob : PlanningTask n) (bef : Vector (WithTop ℕ) n) : 
   -- update the values of each fact
   (Vector.finRange n).map (fun i : Fin n =>
     let applicable : List ℕ := prob.actions'.filterMap (fun a =>
-    if i ∈ a.add'.toList then -- consider only actions that add the fact i. We ignore delete effects
+    if i ∈ a.add.toList then -- consider only actions that add the fact i. We ignore delete effects
       if is_appli : applicable' a s_b then
-        let pre_cost : List ℕ := a.pre'.toList.attach.map (fun x : { x : Fin n // x ∈ a.pre'.toList } =>
+        let pre_cost : List ℕ := a.pre.toList.attach.map (fun x : { x : Fin n // x ∈ a.pre.toList } =>
           bef[x.1].get (by exact vec_to_state_isSome_of_applicable n bef a is_appli x.1 x.2))
 
         -- cost of the action plus most expensive precondition
@@ -70,7 +70,7 @@ def h_1_step (n : ℕ) (prob : PlanningTask n) (bef : Vector (WithTop ℕ) n) : 
 
 
 ---- h_1 effectively considers delete relaxation
---def h_1 {n : ℕ} (prob : PlanningTask n) (s : State' n) : ℕ :=
+--def h_1 {n : ℕ} (prob : PlanningTask n) (s : BitVec n) : ℕ :=
 --  let f : Vector (WithTop ℕ) n → Fin (prob.actions'.length) → Vector (WithTop ℕ) n := fun a _ =>
 --    h_1_step n prob a
 --  let result := (List.finRange prob.actions'.length).foldl f (h_1_base n s)
@@ -131,9 +131,9 @@ the step can reason by list manipulation instead of re-unfolding the definition.
 lemma h_1_step_getElem (n : ℕ) (prob : PlanningTask n) (bef : Vector (WithTop ℕ) n) (i : Fin n) :
     (h_1_step n prob bef)[i] =
       (let applicable : List ℕ := prob.actions'.filterMap (fun a =>
-        if i ∈ a.add'.toList then
+        if i ∈ a.add.toList then
           if is_appli : applicable' a (vec_to_state n bef) then
-            let pre_cost : List ℕ := a.pre'.toList.attach.map (fun x : { x : Fin n // x ∈ a.pre'.toList } =>
+            let pre_cost : List ℕ := a.pre.toList.attach.map (fun x : { x : Fin n // x ∈ a.pre.toList } =>
               bef[x.1].get (vec_to_state_isSome_of_applicable n bef a is_appli x.1 x.2))
             if pre_cost_nil : pre_cost = [] then .some (a.cost)
             else .some (a.cost + pre_cost.max pre_cost_nil)
@@ -152,7 +152,7 @@ lemma h_1_step_le (n : ℕ) (prob : PlanningTask n) (bef : Vector (WithTop ℕ) 
       split_ifs <;> [ rfl; exact updateIfCheaper_le _ _ ]
 
 /-- After k foldl iterations, the vector values are non-increasing compared to the base. -/
-lemma h_1_foldl_le {n : ℕ} (prob : PlanningTask n) (s : State' n) (l : List (Fin prob.actions'.length))
+lemma h_1_foldl_le {n : ℕ} (prob : PlanningTask n) (s : BitVec n) (l : List (Fin prob.actions'.length))
     (i : Fin n) :
     (l.foldl (fun a _ => h_1_step n prob a) (h_1_base n s))[i] ≤ (h_1_base n s)[i] := by
       induction l using List.reverseRecOn <;> simp_all [ List.foldl ];
@@ -160,9 +160,9 @@ lemma h_1_foldl_le {n : ℕ} (prob : PlanningTask n) (s : State' n) (l : List (F
 
 /-- The base values are admissible: if initially some c, then c = 0 ≤ path.cost.
 NOTE: lemma produced by Aristotle, but useless. It only holds for c = 0 and otherwise vacuous -/
-lemma h_1_base_admissible {n : ℕ} (prob : PlanningTask n) (s : State' n)
+lemma h_1_base_admissible {n : ℕ} (prob : PlanningTask n) (s : BitVec n)
     (i : Fin n) (c : ℕ) (h_val : (h_1_base n s)[i] = some c)
-    (goal : State' n)
+    (goal : BitVec n)
     (path : WeightedDiGraph.Path (G := trans_of_STRIPS prob) s goal) :
     c ≤ path.cost := by
       unfold h_1_base at h_val;
@@ -174,8 +174,8 @@ If an action is applicable in the current state and adds fact i, then fact i bec
 -/
 lemma h_1_step_discovers {n : ℕ} (prob : PlanningTask n) (bef : Vector (WithTop ℕ) n)
     (i : Fin n) (a : Action n) (ha : a ∈ prob.actions')
-    (hadd : i ∈ a.add'.toList)
-    (hpre : ∀ j ∈ a.pre'.toList, (bef[j]).isSome = true) :
+    (hadd : i ∈ a.add.toList)
+    (hpre : ∀ j ∈ a.pre.toList, (bef[j]).isSome = true) :
     ((h_1_step n prob bef)[i]).isSome = true := by
       unfold h_1_step;
       unfold updateIfCheaper;
@@ -207,7 +207,7 @@ lemma h_1_foldl_preserves_isSome {n : ℕ} (prob : PlanningTask n) (base : Vecto
       exact ih _ ( h_1_step_preserves_isSome prob base i h )
 
 /-- After k iterations, if fact i is true in state v, then bef[i].isSome. -/
-lemma h_1_foldl_true_in_v_isSome {n : ℕ} (prob : PlanningTask n) (v : State' n)
+lemma h_1_foldl_true_in_v_isSome {n : ℕ} (prob : PlanningTask n) (v : BitVec n)
     (l : List (Fin prob.actions'.length))
     (i : Fin n) (hvi : v[i.val] = true) :
     ((l.foldl (fun a _ => h_1_step n prob a) (h_1_base n v))[i]).isSome = true := by
@@ -221,8 +221,8 @@ At a fixpoint, a walk from s to goal ensures all goal-facts are isSome in bef.
 set_option maxHeartbeats 2000000 in
 lemma walk_at_fixpoint_goal_isSome {n : ℕ} (prob : PlanningTask n) (bef : Vector (WithTop ℕ) n)
     (hfix : ∀ a ∈ prob.actions', applicable' a (vec_to_state n bef) = true →
-      ∀ i ∈ a.add'.toList, (bef[i]).isSome = true)
-    {s goal : State' n} (w : (trans_of_STRIPS prob).Walk s goal)
+      ∀ i ∈ a.add.toList, (bef[i]).isSome = true)
+    {s goal : BitVec n} (w : (trans_of_STRIPS prob).Walk s goal)
     (hs : ∀ i : Fin n, s[i.val] = true → (bef[i]).isSome = true)
     (j : Fin n) (hj : goal[j.val] = true) :
     (bef[j]).isSome = true := by
@@ -237,7 +237,7 @@ lemma walk_at_fixpoint_goal_isSome {n : ℕ} (prob : PlanningTask n) (bef : Vect
 lemma h_1_step_applicable_effects {n : ℕ} (prob : PlanningTask n) (bef : Vector (WithTop ℕ) n)
     (a : Action n) (ha : a ∈ prob.actions')
     (happ : applicable' a (vec_to_state n bef) = true)
-    (i : Fin n) (hi : i ∈ a.add'.toList) :
+    (i : Fin n) (hi : i ∈ a.add.toList) :
     ((h_1_step n prob bef)[i]).isSome = true := by
   apply h_1_step_discovers prob bef i a ha hi
   intro j hj
@@ -251,7 +251,7 @@ lemma h_1_step_isSome_determined {n : ℕ} (prob : PlanningTask n) (bef1 bef2 : 
     (i : Fin n) :
     ((h_1_step n prob bef1)[i]).isSome = ((h_1_step n prob bef2)[i]).isSome := by
       have h_isSome_eq : ((h_1_step n prob bef1)[i]).isSome = true ↔ ((h_1_step n prob bef2)[i]).isSome = true := by
-        by_cases h : ∃ a : Action n, a ∈ prob.actions' ∧ i ∈ a.add'.toList ∧ applicable' a (vec_to_state n bef1) = true <;> simp_all
+        by_cases h : ∃ a : Action n, a ∈ prob.actions' ∧ i ∈ a.add.toList ∧ applicable' a (vec_to_state n bef1) = true <;> simp_all
         · obtain ⟨ a, ha, hi, ha' ⟩ := h; have := h_1_step_applicable_effects prob bef1 a; have := h_1_step_applicable_effects prob bef2 a; simp_all
         · unfold h_1_step;
           rw [ Vector.getElem_map, Vector.getElem_map ];
@@ -275,7 +275,7 @@ If an applicable action's effect is NOT isSome in bef, then h_1_step discovers n
 lemma h_1_step_changes_if_not_fixpoint {n : ℕ} (prob : PlanningTask n) (bef : Vector (WithTop ℕ) n)
     (a : Action n) (ha : a ∈ prob.actions')
     (happ : applicable' a (vec_to_state n bef) = true)
-    (i : Fin n) (hi : i ∈ a.add'.toList) (hnot : (bef[i]).isSome = false) :
+    (i : Fin n) (hi : i ∈ a.add.toList) (hnot : (bef[i]).isSome = false) :
     vec_to_state n (h_1_step n prob bef) ≠ vec_to_state n bef := by
       have h_step_some : ((h_1_step n prob bef)[i]).isSome = true := by
         exact h_1_step_applicable_effects prob bef a ha happ i hi;
@@ -307,7 +307,7 @@ lemma applicable_filter_grows {n : ℕ} (prob : PlanningTask n)
             (h_1_step n prob bef)[i].isSome = (bef)[i].isSome := by
           intro i
           by_cases h_add : ∃ a ∈ prob.actions',
-              applicable' a (vec_to_state n bef) ∧ i ∈ a.add'.toList
+              applicable' a (vec_to_state n bef) ∧ i ∈ a.add.toList
           · obtain ⟨ a, ha₁, ha₂, ha₃ ⟩ := h_add
             have h_filter_eq : (bef)[i].isSome = true := by
               have := h_1_step_applicable_effects prob bef_prev a ha₁
@@ -322,7 +322,7 @@ lemma applicable_filter_grows {n : ℕ} (prob : PlanningTask n)
             rw [dif_pos (by
               apply List.filterMap_eq_nil_iff.mpr
               intro a ha
-              by_cases hadd : i ∈ a.add'.toList
+              by_cases hadd : i ∈ a.add.toList
               · by_cases happ : applicable' a (vec_to_state n bef)
                 · exact absurd hadd (h_add a ha happ)
                 · simp [hadd, happ]
@@ -366,7 +366,7 @@ lemma applicable_filter_grows {n : ℕ} (prob : PlanningTask n)
 lemma stable_implies_fixpoint {n : ℕ} (prob : PlanningTask n) (bef : Vector (WithTop ℕ) n)
     (hstable : vec_to_state n (h_1_step n prob bef) = vec_to_state n bef) :
     ∀ a ∈ prob.actions', applicable' a (vec_to_state n bef) = true →
-      ∀ i ∈ a.add'.toList, (bef[i]).isSome = true := by
+      ∀ i ∈ a.add.toList, (bef[i]).isSome = true := by
   intro a ha happ i hi
   by_contra h
   simp at h
@@ -377,7 +377,7 @@ If the fixpoint property holds, then vec_to_state is stable.
 -/
 lemma fixpoint_implies_stable {n : ℕ} (prob : PlanningTask n) (bef : Vector (WithTop ℕ) n)
     (hfix : ∀ a ∈ prob.actions', applicable' a (vec_to_state n bef) = true →
-      ∀ i ∈ a.add'.toList, (bef[i]).isSome = true) :
+      ∀ i ∈ a.add.toList, (bef[i]).isSome = true) :
     vec_to_state n (h_1_step n prob bef) = vec_to_state n bef := by
       have h_vec_to_state_eq : ∀ i : Fin n, (vec_to_state n (h_1_step n prob bef))[i.val] = (vec_to_state n bef)[i.val] := by
         intro i; by_cases hi : ( bef[i] ).isSome = true <;> simp_all [ vec_to_state_getElem ] ;
@@ -393,10 +393,10 @@ lemma fixpoint_implies_stable {n : ℕ} (prob : PlanningTask n) (bef : Vector (W
 ---/
 --lemma fixpoint_persistent {n : ℕ} (prob : PlanningTask n) (base : Vector (WithTop ℕ) n)
 --    (k : ℕ) (hfix : ∀ a ∈ prob.actions', applicable' a (vec_to_state n (h_1_iter prob base k)) = true →
---      ∀ i ∈ a.add'.toList, ((h_1_iter prob base k)[i]).isSome = true)
+--      ∀ i ∈ a.add.toList, ((h_1_iter prob base k)[i]).isSome = true)
 --    (m : ℕ) (hm : m ≥ k) :
 --    ∀ a ∈ prob.actions', applicable' a (vec_to_state n (h_1_iter prob base m)) = true →
---      ∀ i ∈ a.add'.toList, ((h_1_iter prob base m)[i]).isSome = true := by
+--      ∀ i ∈ a.add.toList, ((h_1_iter prob base m)[i]).isSome = true := by
 --        induction' hm with m hm ih;
 --        · assumption;
 --        · intro a ha h;
