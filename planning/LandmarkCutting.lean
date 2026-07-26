@@ -104,8 +104,8 @@ private lemma lift_forward {n : ℕ} (prob : PlanningTask n) {S1 S2 : State n}
             rw [ha0.1] at hx
             simpa [delete_relax_action] using hx
           have hx' : x ∈ a0.add.toList := by simpa using hx0
-          have hm : Fin.castLE (by omega) x ∈
-              VarSet.ofList (a0.add.toList.map (Fin.castLE (by omega))) := by
+          have hm : Fin.castLE (show n ≤ n + 2 by omega) x ∈
+              VarSet.ofList (a0.add.toList.map (Fin.castLE (show n ≤ n + 2 by omega))) := by
             rw [← VarSet.mem_val]
             exact mem_val_ofList.mpr (List.mem_map.mpr ⟨x, hx', rfl⟩)
           simpa [hA.1, delete_relax_action] using hm
@@ -128,21 +128,43 @@ private lemma ignf_init_path {n : ℕ} (prob : PlanningTask n) :
       (∀ x ∈ (delete_relaxation prob).init, (Fin.castLE (show n ≤ n + 2 by omega) x) ∈ T) ∧
       ∃ q : PlanningTask.Path (delete_relaxation (i_g_normal_form prob))
         (delete_relaxation (i_g_normal_form prob)).init T, q.cost = 0 := by
-          constructor;
-          swap;
-          exact {x | x = ⟨n, by omega⟩ ∨ ∃ y ∈ prob.init', x = Fin.castLE (by omega) y};
-          simp +decide [ mem_convertState, PlanningTask.init, delete_relaxation ];
-          refine' ⟨ fun x hx => Or.inr hx, _, _ ⟩;
-          refine' PlanningTask.Path.cons _ _ _ _ ( PlanningTask.Path.empty _ );
-          exact Action.mk "init" ( singletonVarSet ⟨ n, by omega ⟩ ) ( VarSet.ofList ( prob.init'.toList.map ( Fin.castLE ( by omega ) ) ) ) ∅ 0;
-          all_goals norm_num [ i_g_normal_form, delete_relax_action ];
-          all_goals norm_num [ PlanningTask.actions,PlanningTask.actions',PlanningTask.Path.cost ];
-          unfold Successor; simp +decide [ singletonVarSet, VarSet.ofList ] ;
-          unfold Applicable; simp +decide [ Finset.ext_iff, Set.ext_iff ] ;
-          simp +decide [ Finset.subset_iff, Set.subset_def ];
-          intro x; by_cases hx : x.val < n <;> simp +decide [ hx, Fin.ext_iff ] ;
-          · exact ⟨ fun h => h.imp id fun h => ⟨ ⟨ x, hx ⟩, h, rfl ⟩, fun h => h.imp id fun ⟨ a, ha, ha' ⟩ => by simpa [ ha' ] using ha ⟩;
-          · grind
+  let emb : Fin n → Fin (n + 2) := Fin.castLE (by omega)
+  let initA : Action (n + 2) := Action.mk "init" (singletonVarSet ⟨n, by omega⟩)
+    (VarSet.ofList (prob.init'.toList.map emb)) ∅ 0
+  let T : State (n + 2) := {x | x = ⟨n, by omega⟩ ∨ ∃ y ∈ prob.init', x = emb y}
+  refine ⟨T, ?_, ?_, ?_⟩
+  · exact Or.inl rfl
+  · intro x hx
+    exact Or.inr ⟨x, hx, rfl⟩
+  · refine ⟨PlanningTask.Path.cons initA T ?_ ?_ (PlanningTask.Path.empty T), ?_⟩
+    · unfold initA emb
+      simp [delete_relaxation, i_g_normal_form, PlanningTask.actions, delete_relax_action]
+    · constructor
+      · intro x hx
+        have hx' : x ∈ singletonVarSet (⟨n, by omega⟩ : Fin (n + 2)) := by
+          simpa [initA] using hx
+        have hx'' : x = (⟨n, by omega⟩ : Fin (n + 2)) := by
+          simpa [singletonVarSet] using hx'
+        subst x
+        simp [delete_relaxation, i_g_normal_form, PlanningTask.init, VarSet.mem_iff]
+      · ext x
+        simp only [T, Set.mem_setOf_eq, initA, Successor, Set.mem_union,
+          SetLike.mem_coe, VarSet.mem_ofList, List.mem_map, VarSet.mem_toList_iff]
+        constructor
+        · intro hx
+          rcases hx with rfl | ⟨y, hy, rfl⟩
+          · exact Or.inl (by simp [delete_relaxation, i_g_normal_form, PlanningTask.init,
+              VarSet.mem_iff])
+          · exact Or.inr ⟨y, hy, rfl⟩
+        · intro hx
+          rcases hx with hx | ⟨y, hy, rfl⟩
+          · exact Or.inl (by
+              have hv : x.val = n := by
+                simpa [delete_relaxation, i_g_normal_form, PlanningTask.init,
+                  VarSet.mem_iff] using hx
+              exact Fin.ext hv)
+          · exact Or.inr ⟨y, hy, rfl⟩
+    · simp [PlanningTask.Path.cost, initA]
 
 private lemma ignf_goal_path {n : ℕ} (prob : PlanningTask n) {T2 : State (n + 2)}
     (hgoal : ∀ x ∈ prob.goal'.toList, (Fin.castLE (show n ≤ n + 2 by omega) x) ∈ T2) :
@@ -222,7 +244,7 @@ private lemma project_cons_embedded {n : ℕ} (prob : PlanningTask n) {a : Actio
 private lemma project_backward {n : ℕ} (prob : PlanningTask n) {E1 E2 : State (n + 2)}
     (q : PlanningTask.Path (delete_relaxation (i_g_normal_form prob)) E1 E2)
     {D0 : State n}
-    (hD : convertState prob.init' ⊆ D0)
+    (hD : convertState prob.init'.toBitVec ⊆ D0)
     (hD0 : {x : Fin n | (Fin.castLE (show n ≤ n + 2 by omega) x) ∈ E1} ⊆ D0) :
     ∃ (D' : State n),
       {x : Fin n | (Fin.castLE (show n ≤ n + 2 by omega) x) ∈ E2} ⊆ D' ∧
@@ -237,15 +259,27 @@ private lemma project_backward {n : ℕ} (prob : PlanningTask n) {E1 E2 : State 
           · rename_i h;
             unfold delete_relax_action at π; simp_all +decide [ delete_relaxation, i_g_normal_form ] ;
             obtain ⟨ D', hD', dq, hdq ⟩ := h hD ( by
-              exact fun x hx => hx.elim ( fun hx => hD0 hx ) fun hx => hD ( by simpa [ convertState ] using hx ) );
+              exact fun x hx => hx.elim ( fun hx => hD0 hx ) fun hx => hD ( by simpa [convertState, VarSet.mem_iff] using hx ) );
             exact ⟨ D', hD', dq, by simpa [ PlanningTask.Path.cost ] using hdq ⟩;
           · cases π ; simp_all +decide [ Successor ];
             rename_i h₁ h₂ h₃; specialize h₃ hD; simp_all +decide [ delete_relax_action ] ;
             contrapose! h₃; simp_all +decide [ Set.subset_def ] ;
             constructor;
-            · rintro x ( hx | hx ) <;> [ exact hD0 x hx; exact absurd hx ( by exact ne_of_lt ( Nat.lt_succ_of_le ( Nat.le_of_lt_succ ( by simp +decide [ Fin.ext_iff ] ) ) ) ) ];
+            · rintro x (hx | hx)
+              · exact hD0 x hx
+              · exfalso
+                have hx' : Fin.castLE (show n ≤ n + 2 by omega) x ∈
+                    singletonVarSet (⟨n + 1, by omega⟩ : Fin (n + 2)) := by
+                  simpa using hx
+                have heq : Fin.castLE (show n ≤ n + 2 by omega) x =
+                    (⟨n + 1, by omega⟩ : Fin (n + 2)) := by
+                  simpa [singletonVarSet] using hx'
+                have hv : (Fin.castLE (show n ≤ n + 2 by omega) x).val = n + 1 :=
+                  congrArg Fin.val heq
+                simp [Fin.castLE] at hv
+                omega
             · intro D' hD' dq; specialize h₃ D' hD' dq; simp_all +decide [ PlanningTask.Path.cost ] ;
-          · obtain ⟨ D', hD', dq, hdq ⟩ := ‹∀ { D0 : State n }, convertState prob.init' ⊆ D0 → { x | Fin.castLE _ x ∈ s3 } ⊆ D0 → ∃ D', { x | Fin.castLE _ x ∈ ha } ⊆ D' ∧ ∃ dq : PlanningTask.Path ( delete_relaxation prob ) D0 D', dq.cost ≤ ih.cost› ( show convertState prob.init' ⊆ D0 ∪ a0.add from by
+          · obtain ⟨ D', hD', dq, hdq ⟩ := ‹∀ { D0 : State n }, convertState prob.init'.toBitVec ⊆ D0 → { x | Fin.castLE _ x ∈ s3 } ⊆ D0 → ∃ D', { x | Fin.castLE _ x ∈ ha } ⊆ D' ∧ ∃ dq : PlanningTask.Path ( delete_relaxation prob ) D0 D', dq.cost ≤ ih.cost› ( show convertState prob.init'.toBitVec ⊆ D0 ∪ a0.add from by
                                                                                                                                                                                                                                                         exact Set.Subset.trans hD ( Set.subset_union_left ) ) ( show { x | Fin.castLE _ x ∈ s3 } ⊆ D0 ∪ a0.add from by
                                                                                                                                                                                                                                                                                                                               intro x hx; cases' π with h1 h2 h3; simp_all +decide [ Finset.subset_iff, Set.subset_def ] ;
                                                                                                                                                                                                                                                                                                                               cases hx <;> simp_all +decide [ delete_relax_action ] );
@@ -261,19 +295,28 @@ private lemma dr_plan_of_ignf_dr_plan {n : ℕ} (prob : PlanningTask n)
       plan.path.cost ≤ eplan.path.cost := by
         obtain ⟨eplan, hplan⟩ := eplan;
         rename_i hgoal;
-        obtain ⟨ D', hD', dq, hdq ⟩ := project_backward prob hplan ( show convertState prob.init' ⊆ convertState prob.init' from Set.Subset.refl _ ) ( by
-                                                                      unfold delete_relaxation i_g_normal_form; simp +decide [ PlanningTask.init ] ;
-                                                                      grind );
+        obtain ⟨ D', hD', dq, hdq ⟩ := project_backward prob hplan ( show convertState prob.init'.toBitVec ⊆ convertState prob.init'.toBitVec from Set.Subset.refl _ ) ( by
+          intro x hx
+          exfalso
+          have hv : (Fin.castLE (show n ≤ n + 2 by omega) x).val = n := by
+            simpa [delete_relaxation, i_g_normal_form, PlanningTask.init, VarSet.mem_iff] using hx
+          simp [Fin.castLE] at hv
+          omega );
         refine' ⟨ ⟨ D', dq, _ ⟩, hdq ⟩;
         intro x hx; have := hgoal; simp_all +decide [ PlanningTask.GoalState ] ;
         have := ep_goal_facts prob hplan ( show ( ⟨ n + 1, by omega ⟩ : Fin ( n + 2 ) ) ∉ ( delete_relaxation ( i_g_normal_form prob ) ).init from ?_ ) ( show ( ⟨ n + 1, by omega ⟩ : Fin ( n + 2 ) ) ∈ eplan from ?_ );
-        · exact hD' ( this x ( by simpa [ convertVarSet ] using hx ) );
-        · unfold delete_relaxation i_g_normal_form; simp +decide [ PlanningTask.init ] ;
-        · exact hgoal ( by simp +decide [ convertVarSet, delete_relaxation, i_g_normal_form ] )
+        · change x ∈ prob.goal' at hx
+          exact hD' (this x (by simpa [convertVarSet] using hx))
+        · unfold delete_relaxation i_g_normal_form
+          simp +decide [PlanningTask.init, VarSet.mem_iff]
+        · apply hgoal
+          change (⟨n + 1, by omega⟩ : Fin (n + 2)) ∈
+            singletonVarSet (⟨n + 1, by omega⟩ : Fin (n + 2))
+          exact VarSet.mem_ofList.mpr (List.mem_singleton.mpr rfl)
 
 lemma i_g_normal_form_keeps_h_plus {n : ℕ} {prob : PlanningTask n}
     (hsolv : ¬ PlanningTask.Unsolvable (delete_relaxation prob)) :
-   h_plus prob prob.init' = h_plus (i_g_normal_form prob) (i_g_normal_form prob).init'  := by
+   h_plus prob prob.init'.toBitVec = h_plus (i_g_normal_form prob) (i_g_normal_form prob).init'.toBitVec  := by
      -- Since `planner A (fun _=>0) ≠ none`, it must be `some retA`.
      obtain ⟨retA, hA⟩ : ∃ retA, planner (delete_relaxation prob) (fun _ => 0) = some retA := by
        contrapose! hsolv; have := planner_complete ( delete_relaxation prob ) ( fun _ => 0 ) ( zero_heur_admissible' ( delete_relaxation prob ) ) ; aesop;
@@ -283,16 +326,36 @@ lemma i_g_normal_form_keeps_h_plus {n : ℕ} {prob : PlanningTask n}
        exact Option.ne_none_iff_exists'.mp ( planner_complete _ _ ( zero_heur_admissible' _ ) |> fun h => by tauto );
      -- By `planner_optimal`, we have `retA.path.cost ≤ retB.path.cost`.
      have h_le : retA.path.cost ≤ retB.path.cost := by
-       obtain ⟨plan, hplan⟩ := dr_plan_of_ignf_dr_plan prob retB;
-       convert planner_optimal ( delete_relaxation prob ) ( fun _ => 0 ) ( zero_heur_admissible _ ) ( show ( planner ( delete_relaxation prob ) fun _ => 0 ).isSome from by simp +decide [ hA ] ) plan |> le_trans <| hplan using 1;
-       grind +splitIndPred;
+       obtain ⟨plan, hplan⟩ := dr_plan_of_ignf_dr_plan prob retB
+       have hopt := planner_optimal (delete_relaxation prob) (fun _ => 0)
+         (zero_heur_admissible _) (show (planner (delete_relaxation prob) (fun _ => 0)).isSome from by
+           simp [hA]) plan
+       have hget : (planner (delete_relaxation prob) (fun _ => 0)).get
+           (by simp [hA]) = retA := by simp [hA]
+       rw [hget] at hopt
+       exact hopt.trans hplan
      -- By `planner_optimal`, we have `retB.path.cost ≤ retA.path.cost`.
      have h_ge : retB.path.cost ≤ retA.path.cost := by
        have := ignf_dr_plan_of_dr_plan prob retA;
        have := planner_optimal ( delete_relaxation ( i_g_normal_form prob ) ) ( fun _ => 0 ) ( zero_heur_admissible _ ) ( show ( planner ( delete_relaxation ( i_g_normal_form prob ) ) ( fun _ => 0 ) ).isSome from by simp +decide [ hB ] ) this.choose;
        grind;
-     unfold h_plus; simp_all +decide [ delete_relaxation, i_g_normal_form ] ;
-     exact le_antisymm h_le h_ge
+     have hvs : varset'_of_state' prob.init'.toBitVec = prob.init' := by
+       cases prob.init'
+       rfl
+     have hivs : varset'_of_state' (i_g_normal_form prob).init'.toBitVec =
+         (i_g_normal_form prob).init' := by
+       cases (i_g_normal_form prob).init'
+       rfl
+     have hA' : planner (PlanningTask.mk prob.varNames
+         (prob.actions'.map delete_relax_action) prob.init' prob.goal') (fun _ => 0) = some retA := by
+       simpa [delete_relaxation] using hA
+     have hB' : planner (PlanningTask.mk (i_g_normal_form prob).varNames
+         ((i_g_normal_form prob).actions'.map delete_relax_action)
+         (i_g_normal_form prob).init' (i_g_normal_form prob).goal') (fun _ => 0) = some retB := by
+       simpa [delete_relaxation] using hB
+     simp only [h_plus]
+     rw [hvs, hivs, hA', hB']
+     exact congrArg (fun x : ℕ => (x : ℕ∞)) (le_antisymm h_le h_ge)
 
 lemma i_g_normal_form_keeps_solvability {n : ℕ} {prob : PlanningTask n} :
     PlanningTask.Unsolvable (delete_relaxation prob) ↔
@@ -342,15 +405,18 @@ and the `goal` action has the (nonempty) embedded goal as precondition.
 lemma i_g_normal_form_has_preconditions {n : ℕ} (prob : PlanningTask n)
     (hg : prob.goal'.toList ≠ []) :
     has_preconditions (i_g_normal_form prob) := by
-      intro a ha;
-      unfold i_g_normal_form at ha;
-      unfold VarSet.ofList at *; simp_all +decide [ List.map ] ;
-      rcases ha with ( ⟨ a, ha, rfl ⟩ | rfl | rfl ) <;> simp_all +decide [ singletonVarSet ];
-      · simp +decide [ VarSet.toList ];
-        exact ne_of_apply_ne List.length ( by simp +decide [ Finset.length_sort ] );
-      · unfold VarSet.ofList; simp +decide [ List.SortedLT ] ;
-        exact List.ne_nil_of_mem ( List.mem_singleton_self _ );
-      · simp_all +decide [ List.eq_nil_iff_forall_not_mem ]
+  intro a ha
+  unfold i_g_normal_form at ha
+  simp [PlanningTask.actions] at ha
+  rcases ha with ⟨a, ha, rfl⟩ | rfl | rfl
+  · apply List.ne_nil_of_mem (a := (⟨n, by omega⟩ : Fin (n + 2)))
+    simp [VarSet.mem_toList_iff]
+  · apply List.ne_nil_of_mem (a := (⟨n, by omega⟩ : Fin (n + 2)))
+    simp [singletonVarSet, VarSet.mem_toList_iff]
+  · obtain ⟨x, hx⟩ := List.exists_mem_of_ne_nil prob.goal'.toList hg
+    apply List.ne_nil_of_mem (a := Fin.castLE (show n ≤ n + 2 by omega) x)
+    simp only [VarSet.mem_toList_iff, VarSet.mem_ofList, List.mem_map]
+    exact ⟨x, (by simpa using hx), rfl⟩
 
 def relax_invariant_pcf {n : ℕ} (prob : PlanningTask n) (pcf : precondition_choice_function prob) : Prop :=
   ∀ (a b : {x : Action n // x ∈ prob.actions'}),
@@ -388,10 +454,10 @@ lemma i_g_normalform_is_unitary_goal {n : ℕ} (prob : PlanningTask n):
 
 lemma init_eq_varset_toFinset {n : ℕ} (prob : PlanningTask n) :
     prob.init = ↑(prob.init').toList.toFinset :=
-  (BitVec.coe_toList_toFinset prob.init').symm
+  (BitVec.coe_toList_toFinset prob.init'.toBitVec).symm
 lemma init_ncard_eq_varset_length {n : ℕ} (prob : PlanningTask n) :
     prob.init.ncard = (prob.init').toList.length :=
-  BitVec.ncard_convertState_eq_toList_length prob.init'
+  BitVec.ncard_convertState_eq_toList_length prob.init'.toBitVec
 lemma unitary_init_varset_length {n : ℕ} (prob : PlanningTask n) (u : unitary_init prob) :
     (prob.init').toList.length = 1 := by
   have h : prob.init.ncard = 1 := by simpa [unitary_init, beq_iff_eq] using u
@@ -552,7 +618,7 @@ lemma cuts_in_justification_graph_are_delete_relaxed_landmarks {n : ℕ} (prob :
     (u_g : unitary_goal prob)
     (pcf : precondition_choice_function prob) (cut : List ((Fin n) × (Fin n))):
     cut_in_graph (justification_graph prob pcf) (get_unitary_init prob u_i) (get_unitary_goal prob u_g) cut →
-      is_delete_relaxed_disjunctive_action_landmark_for_state prob (landmark_induced_by_cut prob cut pcf) prob.init' := by
+      is_delete_relaxed_disjunctive_action_landmark_for_state prob (landmark_induced_by_cut prob cut pcf) prob.init'.toBitVec := by
         intro hcut
         constructor;
         · simp +decide [ PlanningTask.actions, delete_relaxation ];
@@ -568,8 +634,11 @@ lemma cuts_in_justification_graph_are_delete_relaxed_landmarks {n : ℕ} (prob :
                 exact mem_landmark_induced prob cut pcf a0 _ _ hcut rfl hy
               generalize_proofs at *;
               exact hplan a0.val h_mem ha0;
-            · have h_reachable : convertState prob.init' = {get_unitary_init prob u_i} := by
-                convert get_unitary_init_is_init prob u_i using 1
+            · have h_reachable : convertState prob.init'.toBitVec = {get_unitary_init prob u_i} := by
+                rw [show convertState prob.init'.toBitVec = prob.init by
+                  ext x
+                  simp [convertState, PlanningTask.init, VarSet.mem_iff]]
+                exact get_unitary_init_is_init prob u_i
               generalize_proofs at *;
               simp [h_reachable];
               exact ⟨ WeightedDiGraph.Walk.nil ⟩
@@ -578,7 +647,11 @@ lemma cuts_in_justification_graph_are_delete_relaxed_landmarks {n : ℕ} (prob :
             have h_goal_reachable : get_unitary_goal prob u_g ∈ prob.goal'.toList.toFinset := by
               have := get_unitary_goal_is_goal prob u_g; aesop;
             generalize_proofs at *;
-            exact h_reachable _ ( plan.goal <| by simpa [PlanningTask.goal'] using h_goal_reachable)
+            exact h_reachable _ (plan.goal <| by
+              have hg : get_unitary_goal prob u_g ∈ prob.goal' := by
+                simpa using h_goal_reachable
+              change get_unitary_goal prob u_g ∈ (delete_relaxation prob).goal'
+              simpa [delete_relaxation] using hg)
           generalize_proofs at *;
           exact ⟨ h_goal_reachable.some.bypass, h_goal_reachable.some.bypass_isPath ⟩
 
@@ -619,7 +692,8 @@ The constant-zero heuristic is admissible (costs are natural numbers, so `0` und
 -/
 lemma zero_heur_graph_admissible {V : Type} [FinEnum V] (g : NatGraph V) (goal : V) :
     g.admissible (fun _ => 0) goal := by
-      intro v p; exact zero_le _;
+  intro v p
+  exact bot_le
 
 lemma zero_cost_reachable_of_walk {V : Type} [FinEnum V] (g : NatGraph V) {v goal : V}
     (w : g.Walk v goal) (hw : w.cost = 0) : zero_cost_reachable g v goal := by
@@ -731,7 +805,7 @@ comment) lacked any reachability hypothesis:
 lemma goal_zone_landmark_of_justification_graph {n : ℕ} (prob : PlanningTask n)
     (u_i : unitary_init prob) (u_g : unitary_goal prob)
     (pcf : precondition_choice_function prob):
-      is_delete_relaxed_disjunctive_action_landmark_for_state prob (landmark_induced_by_cut prob (edges_entering_goal_zone (justification_graph prob pcf) (get_unitary_goal prob u_g)) pcf) prob.init'
+      is_delete_relaxed_disjunctive_action_landmark_for_state prob (landmark_induced_by_cut prob (edges_entering_goal_zone (justification_graph prob pcf) (get_unitary_goal prob u_g)) pcf) prob.init'.toBitVec
 
 With the new (minimum-action) edge costs this is **false**: if the unitary init fact is
 zero-cost reachable to the unitary goal in the justification graph, then `init` lies in the goal
@@ -745,7 +819,7 @@ lemma goal_zone_landmark_of_justification_graph {n : ℕ} (prob : PlanningTask n
     (pcf : precondition_choice_function prob)
     (i_g_not_zero_reachable : ¬ zero_cost_reachable (justification_graph prob pcf)
       (get_unitary_init prob u_i) (get_unitary_goal prob u_g)):
-      is_delete_relaxed_disjunctive_action_landmark_for_state prob (landmark_induced_by_cut prob (edges_entering_goal_zone (justification_graph prob pcf) (get_unitary_goal prob u_g)) pcf) prob.init' :=
+      is_delete_relaxed_disjunctive_action_landmark_for_state prob (landmark_induced_by_cut prob (edges_entering_goal_zone (justification_graph prob pcf) (get_unitary_goal prob u_g)) pcf) prob.init'.toBitVec :=
   cuts_in_justification_graph_are_delete_relaxed_landmarks prob u_i u_g pcf _
     (edges_entering_goal_zone_are_cut_if_init_not_zero_reachable _ _ _ i_g_not_zero_reachable)
 
@@ -929,7 +1003,7 @@ def lmcut_step {n : ℕ} (prob : PlanningTask n)
 theorem lmcut_step_yields_landmark {n : ℕ} (prob : PlanningTask n)
     (u_i : unitary_init prob) (u_g : unitary_goal prob)
     (pcf : precondition_choice_function prob):
-    is_delete_relaxed_disjunctive_action_landmark_for_state prob (lmcut_step prob u_g pcf).1 prob.init'
+    is_delete_relaxed_disjunctive_action_landmark_for_state prob (lmcut_step prob u_g pcf).1 prob.init'.toBitVec
 
 Since `(lmcut_step prob u_g pcf).1` is exactly the landmark induced by the edges entering the goal
 zone, this is **false** without a reachability assumption, for the same reason as
@@ -942,7 +1016,7 @@ theorem lmcut_step_yields_landmark {n : ℕ} (prob : PlanningTask n)
     (pcf : precondition_choice_function prob)
     (i_g_not_zero_reachable : ¬ zero_cost_reachable (justification_graph prob pcf)
       (get_unitary_init prob u_i) (get_unitary_goal prob u_g)) :
-    is_delete_relaxed_disjunctive_action_landmark_for_state prob (lmcut_step prob u_g pcf).1 prob.init' :=
+    is_delete_relaxed_disjunctive_action_landmark_for_state prob (lmcut_step prob u_g pcf).1 prob.init'.toBitVec :=
   goal_zone_landmark_of_justification_graph prob u_i u_g pcf i_g_not_zero_reachable
 
 /-
@@ -1010,11 +1084,11 @@ theorem lmcut_step_yields_landmark_with_heuristic_in_partition {n : ℕ} (prob :
     (pcf : precondition_choice_function prob)
     (i_g_reachable : reachable (justification_graph prob pcf) (get_unitary_init prob u_i) (get_unitary_goal prob u_g)) :
     (lmcut_step prob u_g pcf).2.1 =
-      elementary_landmark_heuristic (partition_STRIPS prob (lmcut_step prob u_g pcf).2.2 ⟨0, by omega⟩) (lmcut_step prob u_g pcf).1 prob.init'
+      elementary_landmark_heuristic (partition_STRIPS prob (lmcut_step prob u_g pcf).2.2 ⟨0, by omega⟩) (lmcut_step prob u_g pcf).1 prob.init'.toBitVec
 
-The right-hand side is `elementary_landmark_heuristic prob' lm prob.init'` where
+The right-hand side is `elementary_landmark_heuristic prob' lm prob.init'.toBitVec` where
 `prob' = partition_STRIPS prob _ 0` and `lm = (lmcut_step prob u_g pcf).1`.  `elementary_landmark_heuristic`
-first checks `is_disjunctive_action_landmark_for_state prob' lm prob.init'`, whose first conjunct is
+first checks `is_disjunctive_action_landmark_for_state prob' lm prob.init'.toBitVec`, whose first conjunct is
 `lm.all (fun a => decide (a ∈ prob'.actions))`.  But the actions in `lm` carry their *original* costs,
 whereas `partition_STRIPS prob _ 0` rewrites every action's cost to the partition-`0` value
 (`minCost` for landmark actions, `0` otherwise).  Since `Action`'s `DecidableEq` includes `cost`, a
@@ -1060,8 +1134,8 @@ lemma lmcut_closure_is_genuine {n : ℕ} (prob : PlanningTask n)
     (i_g_not_zero_reachable : ¬ zero_cost_reachable (justification_graph prob pcf)
       (get_unitary_init prob u_i) (get_unitary_goal prob u_g)) :
     is_disjunctive_action_landmark_for_state prob
-      (get_all_equiv_delete_relaxed_actions prob (lmcut_step prob u_g pcf).1) prob.init' := by
-  apply delete_relaxation_landmarks_are_landmarks prob (lmcut_step prob u_g pcf).1 ?_ prob.init'
+      (get_all_equiv_delete_relaxed_actions prob (lmcut_step prob u_g pcf).1) prob.init'.toBitVec := by
+  apply delete_relaxation_landmarks_are_landmarks prob (lmcut_step prob u_g pcf).1 ?_ prob.init'.toBitVec
   · exact lmcut_step_yields_landmark prob u_i u_g pcf i_g_not_zero_reachable
   · rw [List.all_eq_true]
     intro a ha
@@ -1112,9 +1186,9 @@ lemma genuine_landmark_partition_transfer {n P : ℕ} (prob : PlanningTask n)
     (hlm : ∀ a ∈ lm, a ∈ prob.actions')
     (hpart : ∀ (i j : Fin prob.actions'.length), prob.actions'[i] = prob.actions'[j] →
       partitioning p i = partitioning p j)
-    (h : is_disjunctive_action_landmark_for_state prob lm prob.init') :
+    (h : is_disjunctive_action_landmark_for_state prob lm prob.init'.toBitVec) :
     is_disjunctive_action_landmark_for_state (partition_STRIPS prob partitioning p)
-      (lm.map (adapt_cost_of_action_to_partition prob partitioning p)) prob.init' := by
+      (lm.map (adapt_cost_of_action_to_partition prob partitioning p)) prob.init'.toBitVec := by
   refine' ⟨ _, _ ⟩
   · simp [ List.all_eq_true, PlanningTask.actions ]
     exact fun x hx => adapt_cost_of_action_to_partition_mem prob partitioning p x (hlm x hx)
@@ -1238,7 +1312,7 @@ theorem lmcut_step_yields_landmark_with_heuristic_in_partition {n : ℕ} (prob :
         (partition_STRIPS prob (lmcut_step prob u_g pcf).2.2 ⟨0, by omega⟩)
         ((get_all_equiv_delete_relaxed_actions prob (lmcut_step prob u_g pcf).1).map
           (adapt_cost_of_action_to_partition prob (lmcut_step prob u_g pcf).2.2 ⟨0, by omega⟩))
-        prob.init' := by
+        prob.init'.toBitVec := by
   have hpos : 0 < (lmcut_step prob u_g pcf).2.1 :=
     lmcut_step_yields_non_zero_heuristic prob u_i u_g pcf i_g_reachable i_g_not_zero_reachable
   have hlm_ne : (lmcut_step prob u_g pcf).1 ≠ [] := lmcut_step_landmark_ne_nil prob u_g pcf hpos
@@ -1251,7 +1325,7 @@ theorem lmcut_step_yields_landmark_with_heuristic_in_partition {n : ℕ} (prob :
       (partition_STRIPS prob (lmcut_step prob u_g pcf).2.2 ⟨0, by omega⟩)
       ((get_all_equiv_delete_relaxed_actions prob (lmcut_step prob u_g pcf).1).map
         (adapt_cost_of_action_to_partition prob (lmcut_step prob u_g pcf).2.2 ⟨0, by omega⟩))
-      prob.init' := by
+      prob.init'.toBitVec := by
     apply genuine_landmark_partition_transfer prob (lmcut_step prob u_g pcf).2.2 ⟨0, by omega⟩
       (get_all_equiv_delete_relaxed_actions prob (lmcut_step prob u_g pcf).1)
     · intro a ha
@@ -1444,8 +1518,7 @@ lemma path_transfer_to_partition {n P : ℕ} (prob : PlanningTask n)
             · grind;
             · exact absurd ‹_› ( not_le_of_gt ( List.idxOf_lt_length_iff.mpr ‹_› ) )) (by
             unfold adapt_cost_of_action_to_partition; simp_all +decide [PlanningTask.actions];
-            split_ifs <;> simp_all +decide [ Successor ];
-            exact ⟨ h₁.1, rfl ⟩) path'
+            split_ifs <;> simp_all +decide [ Successor ]) path'
             generalize_proofs at *;
             simp +decide [ PlanningTask.Path.actionsUsed, hpath' ]
 
@@ -1458,8 +1531,12 @@ lemma plan_transfer_to_partition {n P : ℕ} (prob : PlanningTask n)
         (fun a => (adapt_cost_of_action_to_partition prob partitioning p a).cost)).sum := by
           obtain ⟨path', hpath'⟩ := path_transfer_to_partition prob partitioning p plan.path
           use ⟨plan.last, path', by
-            exact fun x hx => plan.goal <| by simpa using hx;⟩
+            exact fun x hx => plan.goal <| by
+              change x ∈ (partition_STRIPS prob partitioning p).goal' at hx
+              change x ∈ prob.goal'
+              simpa [partition_STRIPS] using hx;⟩
           generalize_proofs at *;
+          change path'.cost = _
           rw [ path_cost_eq_sum_actionsUsed, hpath', List.map_map ];
           rfl
 

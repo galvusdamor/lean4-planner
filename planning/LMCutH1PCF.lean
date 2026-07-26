@@ -38,7 +38,7 @@ open List
 /-- The `h_1` value of reaching a single fact `f` from the initial state of `p`, i.e. `h_1` of the
 problem `p` with its goal replaced by the singleton goal `{f}`. -/
 def h1_goal_value {m : ℕ} (p : PlanningTask m) (f : Fin m) : ℕ :=
-  h_1 (replace_goal p (singletonVarSet f)) p.init'
+  h_1 (replace_goal p (singletonVarSet f)) p.init'.toBitVec
 
 /-- The fact of `a`'s preconditions with the largest `h_1` value (taking that fact as the goal).
 Requires that `a` has at least one precondition (`hne`). -/
@@ -87,25 +87,24 @@ recursion of `lmcut_inner`:
 
 /-- A fact that is already satisfied in the initial state has `h_1`/`h^max` value `0`. -/
 lemma h1_goal_value_eq_zero_of_satisfies {m : ℕ} (p : PlanningTask m) (f : Fin m)
-    (hf : satisfies' (singletonVarSet f) p.init' = true) :
+    (hf : satisfies' (singletonVarSet f) p.init'.toBitVec = true) :
     h1_goal_value p f = 0 := by
   unfold h1_goal_value
-  exact h_1_goal_aware p (singletonVarSet f) p.init' hf
+  exact h_1_goal_aware p (singletonVarSet f) p.init'.toBitVec hf
 
 /-
 The unitary initial fact has `h_1`/`h^max` value `0`.
 -/
 lemma h1_goal_value_init_zero {m : ℕ} (p : PlanningTask m) (u_i : unitary_init p) :
     h1_goal_value p (get_unitary_init p u_i) = 0 := by
-      convert h1_goal_value_eq_zero_of_satisfies p ( get_unitary_init p u_i ) _;
-      unfold unitary_init at u_i;
-      convert satisfies'_singleton_of_mem _ _ _ _ _;
-      exact ⟨ p.init'.toList.head ( by
-        grind +suggestions ) :: p.init'.toList.tail, by
-        grind +suggestions ⟩
-      all_goals generalize_proofs at *;
-      · grind +suggestions;
-      · exact List.mem_cons_self
+      apply h1_goal_value_eq_zero_of_satisfies
+      apply (satisfies'_singleton (get_unitary_init p u_i) p.init'.toBitVec).mpr
+      have hmem : get_unitary_init p u_i ∈ p.init' := by
+        rw [← VarSet.mem_toList_iff]
+        unfold get_unitary_init
+        exact List.head_mem _
+      rw [VarSet.mem_iff] at hmem
+      exact hmem
 
 lemma mem_pre_of_mem_regress_add {m : ℕ} (a : Action m) (t : Fin m) (ht : t ∈ a.add.toList)
     {g' : Fin m}
@@ -118,33 +117,41 @@ lemma mem_pre_of_mem_regress_add {m : ℕ} (a : Action m) (t : Fin m) (ht : t �
 lemma h1_goal_value_bellman_argmax {m : ℕ} (p : PlanningTask m) (a : Action m) (ha : a ∈ p.actions')
     (hne : a.pre.toList ≠ []) (t : Fin m) (ht : t ∈ a.add.toList) :
     h1_goal_value p t ≤ a.cost + h1_goal_value p (h1_argmax_pre p a hne) := by
-  convert h_1_singleton_bellman_add p t p.init' a ha ht using 1;
-  -- By definition of `h1_goal_value`, we know that it is the h1 value of the singleton goal set for a given variable.
-  have h_h1_goal_value : ∀ g : Fin m, h1_goal_value p g = h_1 (replace_goal p (singletonVarSet g)) p.init' := by
-    grind +locals;
-  have h_h1_goal_value : ∀ g' ∈ (varset'_of_state' (regress' a (state'_of_varset' (singletonVarSet t)))).toList, h1_goal_value p g' ≤ h1_goal_value p (h1_argmax_pre p a hne) := by
+  have hstep : ∀ g' ∈ (varset'_of_state' (regress' a (state'_of_varset' (singletonVarSet t)))).toList,
+      h1_goal_value p g' ≤ h1_goal_value p (h1_argmax_pre p a hne) := by
     intros g' hg'
-    have h_g'_in_pre : g' ∈ a.pre.toList := by
-      apply mem_pre_of_mem_regress_add a t ht hg';
-    exact h1_argmax_pre_max p a hne h_g'_in_pre;
-  have h_h1_goal_value : h_1 (replace_goal p (varset'_of_state' (regress' a (state'_of_varset' (singletonVarSet t))))) p.init' ≤ h1_goal_value p (h1_argmax_pre p a hne) := by
-    by_cases hlen : (varset'_of_state' (regress' a (state'_of_varset' (singletonVarSet t)))).toList.length > 1;
-    · refine' le_trans ( h_1_multi_atom p _ _ hlen ) _;
-      rw [ List.max_le_iff ];
-      grind +suggestions;
-    · interval_cases _ : List.length ( varset'_of_state' ( regress' a ( state'_of_varset' ( singletonVarSet t ) ) ) ).toList <;> simp_all +decide;
-      · unfold h_1; simp +decide [ *, replace_goal ] ;
-        simp_all +decide [ List.eq_nil_iff_forall_not_mem ];
-      · obtain ⟨ g', hg' ⟩ := List.length_eq_one_iff.mp ‹_›;
-        convert h_h1_goal_value g' _;
-        · convert hg' using 1;
-          simp +decide [ varset'_of_state', singletonVarSet ];
-          simp +decide [ VarSet.ofList ];
-          simp +decide [ VarSet.toList ];
-        · replace hg' := congr_arg List.toFinset hg'; rw [ Finset.ext_iff ] at hg'; specialize hg' g'; simp_all +decide [ VarSet.ofList ] ;
-  refine' le_antisymm _ _ <;> simp_all +decide [ h1_goal_value ];
-  apply h_1_mono_of_mem;
-  apply regress_singleton_add_contains_pre; exact h1_argmax_pre_mem p a hne;
+    exact h1_argmax_pre_max p a hne (mem_pre_of_mem_regress_add a t ht hg')
+  have hle : h_1 (replace_goal p (varset'_of_state' (regress' a (state'_of_varset' (singletonVarSet t))))) p.init'.toBitVec
+      ≤ h1_goal_value p (h1_argmax_pre p a hne) := by
+    by_cases hlen : (varset'_of_state' (regress' a (state'_of_varset' (singletonVarSet t)))).toList.length > 1
+    · refine le_trans (h_1_multi_atom p _ _ hlen) ?_
+      rw [List.max_le_iff]
+      intro b hb
+      simp only [List.mem_map] at hb
+      obtain ⟨g', hg', rfl⟩ := hb
+      exact hstep g' hg'
+    · interval_cases hln : List.length (varset'_of_state' (regress' a (state'_of_varset' (singletonVarSet t)))).toList <;> simp_all +decide
+      · unfold h_1; simp +decide [*, replace_goal]
+        simp_all +decide [List.eq_nil_iff_forall_not_mem]
+      · obtain ⟨g', hg'⟩ := List.length_eq_one_iff.mp ‹_›
+        have hmem : g' ∈ (varset'_of_state' (regress' a (state'_of_varset' (singletonVarSet t)))).toList := by
+          rw [hg']; simp
+        have hrg : varset'_of_state' (regress' a (state'_of_varset' (singletonVarSet t)))
+            = singletonVarSet g' := by
+          apply SetLike.coe_injective
+          ext z
+          rw [SetLike.mem_coe, SetLike.mem_coe, ← VarSet.mem_toList_iff,
+            ← VarSet.mem_toList_iff, hg']
+          simp [singletonVarSet]
+        rw [hrg]
+        exact h1_argmax_pre_max p a hne
+          (mem_pre_of_mem_regress_add a t (VarSet.mem_toList_iff.mpr ht) hmem)
+  calc h1_goal_value p t
+      = h_1 (replace_goal p (singletonVarSet t)) p.init'.toBitVec := rfl
+    _ ≤ a.cost + h_1 (replace_goal p (varset'_of_state'
+          (regress' a (state'_of_varset' (singletonVarSet t))))) p.init'.toBitVec :=
+        h_1_singleton_bellman_add p t p.init'.toBitVec a ha ht
+    _ ≤ a.cost + h1_goal_value p (h1_argmax_pre p a hne) := by gcongr
 
 lemma jgraph_zero_cost_edge_witness {n : ℕ} (p : PlanningTask (n + 2)) (hp : has_preconditions p)
     {f t : Fin (n + 2)} (adj : (justification_graph p (h1_pcf p hp)).Adj f t)
@@ -221,19 +228,19 @@ fixpoint entry.  This is the per-fact specialisation of the computation inside `
 singleton goal `{w}` does not change the fixpoint (`h_1_iter_fix_replace_goal`).
 -/
 lemma h1_goal_value_eq_fixpoint {n : ℕ} (p : PlanningTask (n + 2)) (w : Fin (n + 2))
-    (hw : ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'))[w]).isSome) :
-    (h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'))[w] = some (h1_goal_value p w) := by
-  contrapose! hw;
-  unfold h1_goal_value at hw; simp_all +decide [ h_1 ] ;
-  convert Option.eq_none_iff_forall_not_mem.mpr _;
-  intro a ha; simp_all +decide [ h_1_iter_fix_replace_goal ] ;
-  split_ifs at hw <;> simp_all +decide [ replace_goal ];
-  · simp_all +decide [ VarSet.toList, singletonVarSet ];
-    simp_all +decide [ VarSet.ofList ];
-  · unfold singletonVarSet at hw; simp_all +decide [ VarSet.ofList ] ;
-    unfold VarSet.toList at hw; simp_all +decide [ List.attach ] ;
-    exact hw ( by simp +decide [ List.max ] );
-  · grind +suggestions
+    (hw : ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec))[w]).isSome) :
+    (h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec))[w] = some (h1_goal_value p w) := by
+  contrapose! hw
+  unfold h1_goal_value at hw; simp_all +decide [ h_1 ]
+  convert Option.eq_none_iff_forall_not_mem.mpr _
+  intro a ha; simp_all +decide [ h_1_iter_fix_replace_goal ]
+  split_ifs at hw <;> simp_all +decide [ replace_goal ]
+  · rename_i hex
+    obtain ⟨x, hx, hxf⟩ := hex
+    have hxw : x = w := by simpa [singletonVarSet, VarSet.ofList] using hx
+    subst hxw
+    rw [vec_to_state_getElem] at hxf
+    simp_all
 
 theorem withTop_getD_le_getD {a b : WithTop ℕ} (hab : a ≤ b) (hb : b.isSome) :
     a.getD 0 ≤ b.getD 0 := by
@@ -303,14 +310,14 @@ edge, `f` stabilises strictly earlier, `f` is finite at the fixpoint, and the ed
 `h_1`-value of `f` is at most the `h_1`-value of `w`. -/
 lemma h1_walk_pred_step {n : ℕ} (p : PlanningTask (n + 2)) (hp : has_preconditions p)
     (w : Fin (n + 2))
-    (hw : ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'))[w]).isSome)
-    (hr : 0 < h_1_rank p (h_1_base (n + 2) p.init') w) :
+    (hw : ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec))[w]).isSome)
+    (hr : 0 < h_1_rank p (h_1_base (n + 2) p.init'.toBitVec) w) :
     ∃ (f : Fin (n + 2)) (adj : (justification_graph p (h1_pcf p hp)).Adj f w),
-      h_1_rank p (h_1_base (n + 2) p.init') f < h_1_rank p (h_1_base (n + 2) p.init') w ∧
-        ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'))[f]).isSome ∧
+      h_1_rank p (h_1_base (n + 2) p.init'.toBitVec) f < h_1_rank p (h_1_base (n + 2) p.init'.toBitVec) w ∧
+        ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec))[f]).isSome ∧
         (justification_graph p (h1_pcf p hp)).edgeCost adj + h1_goal_value p f
           ≤ h1_goal_value p w := by
-  set base := h_1_base (n + 2) p.init' with hbase
+  set base := h_1_base (n + 2) p.init'.toBitVec with hbase
   obtain ⟨a, ha₁, ha₂, ha₃, ha₄, ha₅⟩ := h_1_rank_attained p base w hw hr
   set fixv := h_1_iter_fix (n + 2) p base with hfixv
   have hmem := h1_argmax_pre_mem p a (hp a ha₁)
@@ -367,19 +374,19 @@ lemma h1_walk_pred_step {n : ℕ} (p : PlanningTask (n + 2)) (hp : has_precondit
 
 lemma h1_goal_value_walk_lb {n : ℕ} (p : PlanningTask (n + 2)) (hp : has_preconditions p)
     (u_i : unitary_init p) (w : Fin (n + 2))
-    (hw : ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'))[w]).isSome) :
+    (hw : ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec))[w]).isSome) :
     ∃ walk : (justification_graph p (h1_pcf p hp)).Walk (get_unitary_init p u_i) w,
       walk.cost ≤ h1_goal_value p w := by
-        have h_ind : ∀ k (v : Fin (n + 2)), h_1_rank p (h_1_base (n + 2) p.init') v = k → ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'))[v]).isSome → ∃ walk : (justification_graph p (h1_pcf p hp)).Walk (get_unitary_init p u_i) v, walk.cost ≤ h1_goal_value p v := by
+        have h_ind : ∀ k (v : Fin (n + 2)), h_1_rank p (h_1_base (n + 2) p.init'.toBitVec) v = k → ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec))[v]).isSome → ∃ walk : (justification_graph p (h1_pcf p hp)).Walk (get_unitary_init p u_i) v, walk.cost ≤ h1_goal_value p v := by
           intro k v hv hv';
           induction' k using Nat.strong_induction_on with k ih generalizing v;
           by_cases hk : 0 < k;
           · obtain ⟨ f, adj, hf, hf', hf'' ⟩ := h1_walk_pred_step p hp v hv' ( by linarith );
             obtain ⟨ walk, hw ⟩ := ih _ ( by linarith ) _ rfl hf';
             exact ⟨ walk.concat adj, by simpa [ WeightedDiGraph.Walk.concat_inc_cost_by_edge ] using by omega ⟩;
-          · have h_base : p.init'[v] = true := by
-              have h_base : (h_1_iter p (h_1_base (n + 2) p.init') 0)[v] = (h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'))[v] := by
-                rw [ ← h_1_rank_spec p ( h_1_base ( n + 2 ) p.init' ) v ] ; aesop;
+          · have h_base : p.init'.toBitVec[v] = true := by
+              have h_base : (h_1_iter p (h_1_base (n + 2) p.init'.toBitVec) 0)[v] = (h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec))[v] := by
+                rw [ ← h_1_rank_spec p ( h_1_base ( n + 2 ) p.init'.toBitVec ) v ] ; aesop;
               unfold h_1_iter at h_base; simp_all +decide [ h_1_base ] ;
               grind;
             have hv_init : v ∈ p.init := by
@@ -395,7 +402,7 @@ lemma h1_goal_value_walk_lb {n : ℕ} (p : PlanningTask (n + 2)) (hp : has_preco
 
 lemma h1_goal_value_eq_walk_cost {n : ℕ} (p : PlanningTask (n + 2)) (hp : has_preconditions p)
     (u_i : unitary_init p) (w : Fin (n + 2))
-    (hw : ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'))[w]).isSome) :
+    (hw : ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec))[w]).isSome) :
     ∃ walk : (justification_graph p (h1_pcf p hp)).Walk (get_unitary_init p u_i) w,
       walk.cost = h1_goal_value p w := by
   obtain ⟨walk, hwalk⟩ := h1_goal_value_walk_lb p hp u_i w hw
@@ -418,12 +425,12 @@ lemma walk_first_crossing {V : Type} [FinEnum V] (G : NatGraph V) (S : V → Pro
           simp [WeightedDiGraph.Walk.cost];
         · obtain ⟨ u, hu, x, hx, adj, P, Q, h ⟩ := ‹¬S W → _› hW;
           use u, hu, x, hx, adj, WeightedDiGraph.Walk.cons ‹_› P, Q;
-          convert congr_arg₂ ( · + · ) rfl h using 1;
-          exact Nat.add_assoc _ _ _
+          simp only [WeightedDiGraph.Walk.cost, h]
+          ring
 
 lemma h1_optimal_walk_single_crossing {n : ℕ} (p : PlanningTask (n + 2)) (hp : has_preconditions p)
     (u_i : unitary_init p) (u_g : unitary_goal p)
-    (hw : ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'))[get_unitary_goal p u_g]).isSome)
+    (hw : ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec))[get_unitary_goal p u_g]).isSome)
     (hz : ¬ zero_cost_reachable (justification_graph p (h1_pcf p hp))
       (get_unitary_init p u_i) (get_unitary_goal p u_g)) :
     ∃ (u v : Fin (n + 2))
@@ -612,18 +619,18 @@ lemma h1_lm'_argmax_pre_not_mem_goal_zone {n : ℕ} (p : PlanningTask (n + 2)) (
   exact hf_notin
 
 lemma h1_goal_value_of_not_isSome {n : ℕ} (p : PlanningTask (n + 2)) (f : Fin (n + 2))
-    (hf : ¬ ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'))[f]).isSome) :
+    (hf : ¬ ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec))[f]).isSome) :
     h1_goal_value p f
-      = Vector.maxFinite (h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init')) + 1 := by
+      = Vector.maxFinite (h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec)) + 1 := by
   unfold h1_goal_value;
   unfold h_1; simp_all +decide [ h_1_iter_fix_replace_goal ] ;
   unfold replace_goal; simp +decide [ VarSet.ofList ] ;
   grind +suggestions
 
 lemma h1_goal_value_le_maxFinite {n : ℕ} (p : PlanningTask (n + 2)) (f : Fin (n + 2))
-    (hf : ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'))[f]).isSome) :
+    (hf : ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec))[f]).isSome) :
     h1_goal_value p f
-      ≤ Vector.maxFinite (h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init')) := by
+      ≤ Vector.maxFinite (h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec)) := by
   -- Apply the lemma `Vector.le_maxFinite` with the given hypothesis `hf`.
   apply le_trans (by
   grind) (Vector.le_maxFinite (h1_goal_value_eq_fixpoint p f hf))
@@ -632,42 +639,42 @@ lemma h1_goal_value_le_maxFinite {n : ℕ} (p : PlanningTask (n + 2)) (f : Fin (
 The unitary initial fact is discovered (`isSome`) at the `h^max` fixpoint.
 -/
 lemma h1_init_isSome {n : ℕ} (p : PlanningTask (n + 2)) (u_i : unitary_init p) :
-    ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'))[get_unitary_init p u_i]).isSome := by
+    ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec))[get_unitary_init p u_i]).isSome := by
       by_contra h_contra;
-      have h_unitary_init_zero : h1_goal_value p (get_unitary_init p u_i) = Vector.maxFinite (h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init')) + 1 := by
+      have h_unitary_init_zero : h1_goal_value p (get_unitary_init p u_i) = Vector.maxFinite (h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec)) + 1 := by
         convert h1_goal_value_of_not_isSome p ( get_unitary_init p u_i ) _ ; aesop;
       exact absurd h_unitary_init_zero ( by linarith [ h1_goal_value_init_zero p u_i ] )
 
 lemma h1_edge_preserves_isSome {n : ℕ} (p : PlanningTask (n + 2)) (hp : has_preconditions p)
     {f t : Fin (n + 2)} (adj : (justification_graph p (h1_pcf p hp)).Adj f t)
-    (hf : ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'))[f]).isSome) :
-    ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'))[t]).isSome := by
+    (hf : ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec))[f]).isSome) :
+    ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec))[t]).isSome := by
   obtain ⟨a, ha⟩ := adj
-  have h_preconditions : ∀ q ∈ a.val.pre.toList, ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'))[q]).isSome := by
+  have h_preconditions : ∀ q ∈ a.val.pre.toList, ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec))[q]).isSome := by
     intro q hq
     by_contra hq_not_discovered
-    have hq_goal_value : h1_goal_value p q = Vector.maxFinite (h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init')) + 1 := by
+    have hq_goal_value : h1_goal_value p q = Vector.maxFinite (h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec)) + 1 := by
       exact h1_goal_value_of_not_isSome p q hq_not_discovered
-    have hf_goal_value : h1_goal_value p f ≤ Vector.maxFinite (h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init')) := by
+    have hf_goal_value : h1_goal_value p f ≤ Vector.maxFinite (h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec)) := by
       exact h1_goal_value_le_maxFinite p f hf
     have hq_le_hf : h1_goal_value p q ≤ h1_goal_value p f := by
       convert h1_argmax_pre_max p a.val ( hp a.val a.property ) hq using 1
       rw [ha.1]; rfl
     linarith [hq_goal_value, hf_goal_value]
-  have h_applicable : applicable' a.val (vec_to_state (n + 2) (h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'))) = true := by
+  have h_applicable : applicable' a.val (vec_to_state (n + 2) (h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec))) = true := by
     unfold applicable' satisfies'; simp_all [ vec_to_state_getElem ]
-  have := h_1_step_applicable_effects p ( h_1_iter_fix ( n + 2 ) p ( h_1_base ( n + 2 ) p.init' ) ) a.val a.property h_applicable t ( by simpa using ha.2 ) ; simp_all [ h_1_iter_fix_is_fixpoint ]
+  have := h_1_step_applicable_effects p ( h_1_iter_fix ( n + 2 ) p ( h_1_base ( n + 2 ) p.init'.toBitVec ) ) a.val a.property h_applicable t ( by simpa using ha.2 ) ; simp_all [ h_1_iter_fix_is_fixpoint ]
 
 /-
 **A maximiser justification-graph walk out of a discovered fact ends in a discovered fact.**
 -/
 lemma h1_walk_preserves_isSome {n : ℕ} (p : PlanningTask (n + 2)) (hp : has_preconditions p)
     {f t : Fin (n + 2)} (w : (justification_graph p (h1_pcf p hp)).Walk f t)
-    (hf : ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'))[f]).isSome) :
-    ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'))[t]).isSome := by
+    (hf : ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec))[f]).isSome) :
+    ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec))[t]).isSome := by
   induction' w with f t w ih
   · exact hf
-  · exact ‹Option.isSome ( h_1_iter_fix ( n + 2 ) p ( h_1_base ( n + 2 ) p.init' ) )[w] = true → Option.isSome ( h_1_iter_fix ( n + 2 ) p ( h_1_base ( n + 2 ) p.init' ) )[ih] = true› ( h1_edge_preserves_isSome p hp ‹_› hf )
+  · exact ‹Option.isSome ( h_1_iter_fix ( n + 2 ) p ( h_1_base ( n + 2 ) p.init'.toBitVec ) )[w] = true → Option.isSome ( h_1_iter_fix ( n + 2 ) p ( h_1_base ( n + 2 ) p.init'.toBitVec ) )[ih] = true› ( h1_edge_preserves_isSome p hp ‹_› hf )
 
 /-- **Sub-statement of condition (b): the goal is discovered in the partition-`1` subproblem.**
 
@@ -688,18 +695,19 @@ lemma h1_partition_goal_isSome {n : ℕ} (p : PlanningTask (n + 2)) (u_i : unita
     ((h_1_iter_fix (n + 2)
         (partition_STRIPS p (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩)
         (h_1_base (n + 2)
-          (partition_STRIPS p (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩).init'))[
+          (partition_STRIPS p (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩).init'.toBitVec))[
       get_unitary_goal p u_g]).isSome := by
   set part := (lmcut_step p u_g (h1_pcf p hp)).2.2
   set p' := partition_STRIPS p part ⟨(1 : ℕ), by omega⟩ with hp'
   -- The initial state is preserved by cost partitioning.
-  have hinit : p'.init' = p.init' := (partition_STRIPS_init_goal p part ⟨1, by omega⟩).1
+  have hinit : p'.init'.toBitVec = p.init'.toBitVec :=
+    congrArg VarSet.toBitVec (partition_STRIPS_init_goal p part ⟨1, by omega⟩).1
   rw [hinit]
   -- `g` is discovered in `p`'s fixpoint: it is reachable from the (discovered) initial fact.
-  have hg : ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'))[get_unitary_goal p u_g]).isSome :=
+  have hg : ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec))[get_unitary_goal p u_g]).isSome :=
     h1_walk_preserves_isSome p hp (walk_of_reachable _ hr).some (h1_init_isSome p u_i)
   -- The `isSome` pattern is preserved under cost partitioning (same preconditions/add-effects).
-  refine h_1_iter_fix_isSome_eq_of_fields p p' ?_ ?_ ?_ (h_1_base (n + 2) p.init')
+  refine h_1_iter_fix_isSome_eq_of_fields p p' ?_ ?_ ?_ (h_1_base (n + 2) p.init'.toBitVec)
     (get_unitary_goal p u_g) hg
   · exact (partition_STRIPS_actions_length p part ⟨1, by omega⟩).symm
   · intro i h1 h2
@@ -767,12 +775,12 @@ lemma h1_partition_witness_below_base {n : ℕ} (p : PlanningTask (n + 2)) (u_i 
         (justification_graph (partition_STRIPS p (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩)
           (h1_partition_pcf p hp u_g)) (get_unitary_init p u_i) f))[i]
       ≤ (h_1_base (n + 2)
-          (partition_STRIPS p (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩).init')[i] := by
-  have hII : (partition_STRIPS p (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩).init'
-      = p.init' := (partition_STRIPS_init_goal p _ _).1
+          (partition_STRIPS p (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩).init'.toBitVec)[i] := by
+  have hII : (partition_STRIPS p (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩).init'.toBitVec
+      = p.init'.toBitVec := congrArg VarSet.toBitVec (partition_STRIPS_init_goal p _ _).1
   simp only [Fin.getElem_fin, Vector.getElem_ofFn, h_1_base, Vector.getElem_map,
     Vector.getElem_finRange, hII]
-  by_cases hbit : p.init'[i.val] = true
+  by_cases hbit : p.init'.toBitVec[i.val] = true
   · rw [if_pos hbit]
     simp only [Fin.eta]
     have hi_init : i = get_unitary_init p u_i := by
@@ -918,8 +926,9 @@ lemma h1_partition_edge_step {n : ℕ} (p : PlanningTask (n + 2)) (u_g : unitary
     rw [ ← ha_eq ];
     unfold partition_STRIPS; aesop;
   have ha0_cost : a.val.cost = (if a0 ∈ get_all_equiv_delete_relaxed_actions p (lmcut_step p u_g (h1_pcf p hp)).1 then a0.cost - (lmcut_step p u_g (h1_pcf p hp)).2.1 else a0.cost) := by
-    have := partition_STRIPS_getElem_cost p (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩ i hi hi_lt'; simp_all +decide [ lmcut_step_partition_one_apply ] ;
-    convert lmcut_step_partition_one_apply p u_g ( h1_pcf p hp ) ⟨ i, hi_lt' ⟩ using 1;
+    have h := partition_STRIPS_getElem_cost p (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩ i hi hi_lt'
+    rw [← ha_eq, h]
+    exact lmcut_step_partition_one_apply p u_g (h1_pcf p hp) ⟨i, hi_lt'⟩
   have ha0_argmax : x = h1_argmax_pre p a0 (hp a0 ha0_mem) := by
     rw [hxeq, h1_partition_pcf];
     convert h1_argmax_pre_congr p a.val a0 _ _ ha0_pre using 1;
@@ -1040,7 +1049,7 @@ lemma h1_step_postfixpoint_witness {n : ℕ} (p : PlanningTask (n + 2)) (u_i : u
           (partition_STRIPS p (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩) w)[i]) ∧
       (∀ i : Fin (n + 2),
         w[i] ≤ (h_1_base (n + 2)
-          (partition_STRIPS p (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩).init')[i]) ∧
+          (partition_STRIPS p (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩).init'.toBitVec)[i]) ∧
       (h1_goal_value p (get_unitary_goal p u_g) : WithTop ℕ)
         ≤ w[get_unitary_goal p u_g] + ((lmcut_step p u_g (h1_pcf p hp)).2.1 : WithTop ℕ) := by
   refine ⟨Vector.ofFn (fun f => graphDist
@@ -1083,7 +1092,7 @@ lemma h1_goal_value_step_bound {n : ℕ} (p : PlanningTask (n + 2)) (u_i : unita
   have hle := h_1_iter_fix_ge_of_postfixpoint
       (partition_STRIPS p (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩)
       (h_1_base (n + 2)
-        (partition_STRIPS p (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩).init')
+        (partition_STRIPS p (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩).init'.toBitVec)
       w hpf hbase (get_unitary_goal p u_g)
   -- The goal is discovered in the partition-`1` subproblem, so that fixpoint entry is the finite
   -- value `h1_goal_value (partition_STRIPS …) g`.

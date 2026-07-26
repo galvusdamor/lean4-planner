@@ -84,15 +84,21 @@ lemma ignf_embedded_action {n : ℕ} (P : PlanningTask n) {a : Action n} (ha : a
 lemma ignf_init_action {n : ℕ} (P : PlanningTask n) :
     ∃ aI : Action (n + 2), aI ∈ (i_g_normal_form P).actions ∧
       (↑aI.pre : Set (Fin (n+2))) = {ignf_iFin n} ∧
-      (↑aI.add : Set (Fin (n+2))) = ignf_embF n '' (convertState P.init') ∧
+      (↑aI.add : Set (Fin (n+2))) = ignf_embF n '' (convertState P.init'.toBitVec) ∧
       (↑aI.del : Set (Fin (n+2))) = ∅ ∧
       aI.cost = 0 := by
   refine' ⟨ _, _, _, _, _, _ ⟩;
   exact Action.mk "init" ( singletonVarSet ⟨ n, by omega ⟩ ) ( VarSet.ofList ( ( P.init' ).toList.map ( Fin.castLE ( by omega ) ) ) ) ( ∅ : VarSet ( n + 2 ) ) 0;
   · unfold i_g_normal_form; simp +decide [PlanningTask.actions];
   · exact Set.ext fun x => by simp +decide [ ignf_iFin, singletonVarSet ] ;
-  · convert Set.ext _;
-    simp +decide [ convertState, ignf_embF ];
+  · ext x
+    simp only [SetLike.mem_coe, VarSet.mem_ofList, List.mem_map, VarSet.mem_toList_iff,
+      Set.mem_image, convertState, Set.mem_setOf_eq, ignf_embF]
+    constructor
+    · rintro ⟨a, ha, rfl⟩
+      exact ⟨a, by rw [← VarSet.mem_iff]; exact ha, rfl⟩
+    · rintro ⟨a, ha, rfl⟩
+      exact ⟨a, by rw [VarSet.mem_iff]; exact ha, rfl⟩
   · aesop;
   · rfl
 
@@ -160,50 +166,62 @@ state of `P`, at cost `0`.
 -/
 lemma ignf_init_step {n : ℕ} (P : PlanningTask n) :
     ∃ q : PlanningTask.Path (i_g_normal_form P) (i_g_normal_form P).init
-        (ignf_lift_state (convertState P.init')), q.cost = 0 := by
-          -- The goal is to show that the cost of the path is zero, but the path is constructed by appending two paths, each with cost zero. This leads to a contradiction. Therefore, the assumption must be false.
-          apply Classical.byContradiction
-          intro h_contra;
-          obtain ⟨aI, haI⟩ := ignf_init_action P;
-          refine' h_contra ⟨ _, _ ⟩;
-          exact PlanningTask.Path.cons aI ( ignf_lift_state ( convertState P.init' ) ) haI.1 ( by
-            simp +decide [ Successor, haI ];
-            unfold Applicable; simp +decide [ haI, ignf_lift_state ] ;
-            unfold i_g_normal_form; simp +decide [ PlanningTask.init ] ;
-            simp +decide [ ignf_iFin, ignf_embF, convertState ];
-            grind ) ( PlanningTask.Path.empty _ )
-          generalize_proofs at *;
-          simp +decide [ PlanningTask.Path.cost, haI ]
+        (ignf_lift_state (convertState P.init'.toBitVec)), q.cost = 0 := by
+  obtain ⟨aI, haImem, haIpre, haIadd, haIdel, haIcost⟩ := ignf_init_action P
+  have hinit : (i_g_normal_form P).init = {ignf_iFin n} := by
+    ext x
+    simp only [PlanningTask.init, SetLike.mem_coe, VarSet.mem_iff, Set.mem_singleton_iff,
+      ignf_iFin, i_g_normal_form]
+    simp only [Fin.getElem_fin, BitVec.getElem_or, BitVec.getElem_twoPow]
+    simp [Fin.ext_iff]
+  refine ⟨PlanningTask.Path.cons aI (ignf_lift_state (convertState P.init'.toBitVec)) haImem ?_
+    (PlanningTask.Path.empty _), ?_⟩
+  · constructor
+    · rw [show (Applicable (i_g_normal_form P).init aI)
+          = ((↑aI.pre : Set (Fin (n+2))) ⊆ (i_g_normal_form P).init) from rfl, haIpre, hinit]
+    · show ignf_lift_state (convertState P.init'.toBitVec)
+        = ((i_g_normal_form P).init \ (↑aI.del : Set (Fin (n+2)))) ∪ (↑aI.add : Set (Fin (n+2)))
+      rw [haIdel, haIadd, hinit, ignf_lift_state, ignf_iFin]
+      simp [Set.union_comm]
+  · simp [PlanningTask.Path.cost, haIcost]
 
 lemma ignf_goal_step {n : ℕ} (P : PlanningTask n) {S : State n} (hg : P.GoalState S) :
     ∃ T : State (n + 2), (i_g_normal_form P).GoalState T ∧
       ∃ q : PlanningTask.Path (i_g_normal_form P) (ignf_lift_state S) T, q.cost = 0 := by
   refine' ⟨ _, _, _ ⟩;
   exact ignf_lift_state S ∪ { ignf_gFin n };
-  · simp +decide [ PlanningTask.GoalState, i_g_normal_form, ignf_lift_state, ignf_gFin ];
-    simp +decide [ convertVarSet, singletonVarSet ];
-  · obtain ⟨aG, haG⟩ := ignf_goal_action P;
-    use PlanningTask.Path.cons aG ( ignf_lift_state S ∪ { ignf_gFin n } ) haG.1 ( by
-      unfold Successor; simp +decide [ haG ] ;
-      unfold Applicable; simp +decide [ haG, ignf_lift_state ] ;
-      intro x hx; specialize hg; unfold PlanningTask.GoalState at hg; aesop; ) ( PlanningTask.Path.empty _ );
-    generalize_proofs at *;
-    simp +decide [ PlanningTask.Path.cost, haG ];
+  · intro x hx
+    have hx' : x = ignf_gFin n := by
+      have : x ∈ singletonVarSet (ignf_gFin n) := by
+        simpa [i_g_normal_form, ignf_gFin] using hx
+      simpa [singletonVarSet] using this
+    subst hx'
+    exact Or.inr rfl
+  · obtain ⟨aG, haGmem, haGpre, haGadd, haGdel, haGcost⟩ := ignf_goal_action P
+    refine ⟨PlanningTask.Path.cons aG (ignf_lift_state S ∪ {ignf_gFin n}) haGmem ?_
+      (PlanningTask.Path.empty _), ?_⟩
+    · constructor
+      · rw [show (Applicable (ignf_lift_state S) aG) = ((↑aG.pre : Set (Fin (n+2))) ⊆ ignf_lift_state S) from rfl, haGpre]
+        rintro x ⟨y, hy, rfl⟩
+        exact Or.inl ⟨y, hg (by simpa [convertVarSet] using hy), rfl⟩
+      · show ignf_lift_state S ∪ {ignf_gFin n}
+          = (ignf_lift_state S \ (↑aG.del : Set (Fin (n+2)))) ∪ (↑aG.add : Set (Fin (n+2)))
+        rw [haGdel, haGadd]
+        simp
+    · simp [PlanningTask.Path.cost, haGcost]
 
 lemma ignf_plan_lift {n : ℕ} (P : PlanningTask n) (plan : PlanningTask.Plan P P.init) :
     ∃ eplan : PlanningTask.Plan (i_g_normal_form P) (i_g_normal_form P).init,
       eplan.path.cost = plan.path.cost := by
-        by_contra h_contra;
-        obtain ⟨q, hq⟩ := ignf_lift_path P plan.path;
-        obtain ⟨T, hT⟩ := ignf_goal_step P plan.goal;
-        obtain ⟨eplan, heplan⟩ : ∃ eplan : PlanningTask.Path (i_g_normal_form P) (ignf_lift_state plan.last) T, eplan.cost = 0 := by
-          exact hT.2;
-        obtain ⟨q', hq'⟩ := ignf_init_step P;
-        refine' h_contra ⟨ ⟨ _, _, _ ⟩, _ ⟩;
-        exact T;
-        exact q'.append ( q.append eplan );
-        grind;
-        rw [ ignf_path_cost_append, ignf_path_cost_append, hq', heplan, hq ] ; ring
+        obtain ⟨q, hq⟩ := ignf_lift_path P plan.path
+        obtain ⟨T, hT, eplan, heplan⟩ := ignf_goal_step P plan.goal
+        obtain ⟨q', hq'⟩ := ignf_init_step P
+        have hqe : (q.append eplan).cost = plan.path.cost := by
+          rw [ignf_path_cost_append, heplan, hq, Nat.add_zero]
+        refine ⟨⟨T, q'.append (q.append eplan), hT⟩, ?_⟩
+        show (q'.append (q.append eplan)).cost = plan.path.cost
+        rw [ignf_path_cost_append, hq', Nat.zero_add]
+        exact hqe
 
 lemma path_set_init_transfer {n : ℕ} (prob : PlanningTask n) (s : BitVec n) {s1 s2 : State n}
     (p : PlanningTask.Path prob s1 s2) :
@@ -243,7 +261,7 @@ theorem lmcut_admissible {n : ℕ} (prob : PlanningTask n) (s : BitVec n)
     (plan.path.cost : ℕ∞) ≥ lmcut prob s pcf := by
   rw [ge_iff_le, lmcut]
   split_ifs with hg
-  · exact zero_le _
+  · exact bot_le
   · obtain ⟨q, hq⟩ := path_set_init_transfer prob s plan.path
     let plan_si : PlanningTask.Plan (set_init prob s) (set_init prob s).init :=
       ⟨plan.last, q, plan.goal⟩
