@@ -1170,15 +1170,10 @@ lemma h_1_rank_attained {n : ℕ} (prob : PlanningTask n) (base : Vector (WithTo
       cases h : ( h_1_iter_fix n prob base )[ x ] <;> cases h' : ( h_1_iter prob base ( h_1_rank prob base w - 1 ) )[ x ] <;> simp_all +decide [ Option.getD ];
       exact absurd ( vec_to_state_isSome_of_applicable n ( h_1_iter prob base ( h_1_rank prob base w - 1 ) ) a ha₂ x ( by simpa using hx ) ) ( by simp +decide [ h' ] )) ⟩;
   · have h_diff : (h_1_iter prob base (h_1_rank prob base w))[w] ≠ (h_1_iter prob base (h_1_rank prob base w - 1))[w] := by
-      obtain ⟨k, hk⟩ : ∃ k, h_1_rank prob base w = k + 1 := ⟨_, (Nat.succ_pred_eq_of_pos hr).symm⟩
-      rw [hk, h_1_iter]
-      simp
-      sorry
-      --conv => left; unfold h_1_iter
-      --by_cases eq_zero : h_1_rank prob base w = 0 
-      --· grind -- contradictory 
-      --· simp
-      --  sorry --grind
+      -- At the rank the value equals the fixpoint value, while one step earlier it does not.
+      rw [h_1_rank_spec prob base w]
+      exact fun h => h_1_rank_not_before prob base w (k := h_1_rank prob base w - 1)
+        (by omega) h.symm
     cases k : h_1_rank prob base w <;> aesop
 
 theorem h_1_admissible {n : ℕ} (prob : PlanningTask n) :
