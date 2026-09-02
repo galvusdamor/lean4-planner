@@ -112,7 +112,7 @@ lemma mem_pre_of_mem_regress_add {m : ℕ} (a : Action m) (t : Fin m) (ht : t �
     g' ∈ a.pre.toList := by
   contrapose! hg';
   unfold regress' varset'_of_state';
-  grind +suggestions
+  grind
 
 lemma h1_goal_value_bellman_argmax {m : ℕ} (p : PlanningTask m) (a : Action m) (ha : a ∈ p.actions')
     (hne : a.pre.toList ≠ []) (t : Fin m) (ht : t ∈ a.add.toList) :
@@ -622,10 +622,12 @@ lemma h1_goal_value_of_not_isSome {n : ℕ} (p : PlanningTask (n + 2)) (f : Fin 
     (hf : ¬ ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec))[f]).isSome) :
     h1_goal_value p f
       = Vector.maxFinite (h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec)) + 1 := by
-  unfold h1_goal_value;
-  unfold h_1; simp_all +decide [ h_1_iter_fix_replace_goal ] ;
-  unfold replace_goal; simp +decide [ VarSet.ofList ] ;
-  grind +suggestions
+  unfold h1_goal_value
+  unfold h_1
+  simp_all +decide [ h_1_iter_fix_replace_goal ] 
+  unfold replace_goal
+  simp +decide [ VarSet.ofList ] 
+  grind
 
 lemma h1_goal_value_le_maxFinite {n : ℕ} (p : PlanningTask (n + 2)) (f : Fin (n + 2))
     (hf : ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec))[f]).isSome) :
@@ -888,7 +890,7 @@ lemma h1_lm'_has_goal_zone_add {n : ℕ} (p : PlanningTask (n + 2)) (u_g : unita
   unfold get_all_equiv_delete_relaxed_actions at hb
   unfold lmcut_step at hb; simp_all [ landmark_induced_by_cut ]
   unfold delete_relax_action at hb; simp_all [ h1_pcf ]
-  grind +suggestions
+  grind
 
 /-
 **Per-edge step of the single-crossing bound.** For each edge `x → y` of the partition-`1`

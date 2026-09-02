@@ -1,7 +1,7 @@
-import Mathlib
-
 import SearchAlgorithms.NatGraph
 import Strips.PlanningTask
+import Mathlib.Data.Set.Card
+--import Mathlib.Basic.Logic.Lemmas
 
 namespace STRIPS
 /-! ### Runtime layer for the public `strips` dependency
@@ -91,7 +91,7 @@ lemma VarSet.toList_ne_nil_of_mem {n : ℕ} {V : VarSet n} {i : Fin n} (h : i �
     V.toList ≠ [] := by
   intro he
   have : i ∈ V.toList := by simpa using h
-  simpa [he] using this
+  simp [he] at this
 
 lemma VarSet.ncard_convertVarSet_eq_toList_length {n : ℕ} (V : VarSet n) :
     (convertVarSet V).ncard = V.toList.length := by
@@ -353,7 +353,7 @@ lemma min_cost_action_creates_successor {n : ℕ} (prob : PlanningTask n) (s s' 
     intro i
     change (s'[i.val] = true) ↔ ((s[i.val] = true ∧ i ∉ a.del) ∨ i ∈ a.add)
     rw [h_succ]
-    simp [a, successor', VarSet.mem_iff, Action.del, Action.add]
+    simp [a, successor', VarSet.mem_iff]
 
 def walk_to_strips_path {n : ℕ} (prob : PlanningTask n) {start goal : BitVec n} (walk : WeightedDiGraph.Walk (G:= trans_of_STRIPS prob) start goal) (is_goal : satisfies' prob.goal' goal):
     PlanningTask.Path prob (convertState start) (convertState goal):=
@@ -419,12 +419,13 @@ lemma adj_of_successor {n : ℕ} {a : Action n} (prob : PlanningTask n) {s s' : 
     cases succ ; aesop
   have h_succ : s' = successor' a s := by
     obtain ⟨ _, h_succ ⟩ := succ;
-    simp_all +decide [ Set.ext_iff, convertState ];
-    ext i; simp_all +decide [ successor' ] ;
-    specialize h_succ ⟨ i, by assumption ⟩ ; simp_all +decide [mem_convertState, VarSet.getElem_toBitVec' ] ;
-    grind;
+    ext i
+    simp_all [ Set.ext_iff, convertState, successor' ]
+    specialize h_succ ⟨ i, by assumption ⟩ 
+    simp_all [VarSet.getElem_toBitVec' ] ;
+    grind
   unfold trans_of_STRIPS; simp_all +decide [ PlanningTask.actions ] ;
-  exact ⟨ a, ha, h_app, by unfold is_successor'; simp +decide [ h_succ ] ⟩
+  exact ⟨ a, ha, h_app, by unfold is_successor'; simp  ⟩
 
 
 noncomputable def successor_dec {n : ℕ} (a : Action n) (s s' : State n) (succ : Successor a s s'):
@@ -460,7 +461,7 @@ decreasing_by
   simp
   expose_names
   have f : path'.length < path.length := by
-    have e := HEq.eq h_2
+    have e := heq_iff_eq.mp h_2
     rw [e]
     conv =>
       right
@@ -489,7 +490,7 @@ termination_by path.length
 decreasing_by
   expose_names
   have f : π.length < path.length := by
-    have e := HEq.eq h_2
+    have e := heq_iff_eq.mp h_2
     rw [e]
     conv =>
       right
@@ -630,9 +631,10 @@ lemma successor_implies_is_successor {n : ℕ}
   obtain ⟨h_pre, h_succ⟩ := succ;
   -- Since `convertState` is injective, we can conclude that `t = successor' a s`.
   have h_eq : t = successor' a s := by
-    ext i; simp [convertState, successor'] at *; (
-    replace h_succ := Set.ext_iff.mp h_succ ⟨ i, by assumption ⟩ ; simp_all +decide [Fin.ext_iff, mem_convertState, VarSet.getElem_toBitVec' ] ;
-    grind)
+    ext i;
+    replace h_succ := Set.ext_iff.mp h_succ ⟨ i, by assumption ⟩
+    simp_all [successor', VarSet.getElem_toBitVec' ]
+    grind
   simp [h_eq, is_successor']
 
 
@@ -804,8 +806,9 @@ lemma successor_goal_implies_regressable {n : ℕ} (a : Action n)
     (hgoal : convertVarSet g ⊆ goal) :
     regressable' a (state'_of_varset' g) = true := by
   obtain ⟨h_pre, h_succ⟩ := hsucc;
-  simp +decide [ regressable', h_succ ];
-  intro i hi; have := hgoal; simp_all +decide [ Set.subset_def, state'_of_varset'_getElem ] ;
+  simp [regressable']
+  intro i hi; have := hgoal
+  simp_all [ Set.subset_def]
   exact Classical.or_iff_not_imp_left.2 fun h => by simpa [ hi ] using hgoal i ( by simpa [ convertVarSet ] using h ) ;
 
 /-

@@ -203,7 +203,7 @@ If satisfies' g state holds and i ∈ g, then state[i] = true.
 lemma satisfies'_mem {n : ℕ} (g : VarSet n) (state : BitVec n) (i : Fin n)
     (hsat : satisfies' g state = true) (hmem : i ∈ g.toList) :
     state[i.val] = true := by
-  contrapose! hsat; simp_all [ satisfies', List.all_eq_true ] ;
+  contrapose! hsat; simp_all [ satisfies' ] 
   use i
 
 /-
@@ -235,7 +235,7 @@ If ¬ satisfies' g state, then there exists i ∈ g with state[i] = false.
 lemma not_satisfies'_exists {n : ℕ} (g : VarSet n) (state : BitVec n)
     (hsat : ¬ satisfies' g state = true) :
     ∃ i ∈ g.toList, state[i.val] = false := by
-  contrapose! hsat; simp_all [ satisfies', List.all_eq_true ] ;
+  contrapose! hsat; simp_all [ satisfies' ] 
 
 /-- The result vector for h_1 is the same regardless of the goal. -/
 lemma h_1_result_eq {n : ℕ} (prob : PlanningTask n) (g : VarSet n) (s : BitVec n) :
@@ -280,7 +280,7 @@ lemma h_1_step_le_action_contribution {n : ℕ} (prob : PlanningTask n)
       bef[x.1].get (vec_to_state_isSome_of_applicable n bef a happ x.1 x.2)) = []
     · by_cases hs : a.pre.toList = [] <;> simp [hs]
     · by_cases hs : a.pre.toList = [] <;> simp [hs]
-  have hne : L ≠ [] := fun he => by simpa [he] using hmem
+  have hne : L ≠ [] := fun he => by simp [he] at hmem
   change (if he : L = [] then bef[i] else updateIfCheaper (L.min he) bef[i]) ≤ some cost
   rw [dif_neg hne]
   exact le_trans (updateIfCheaper_le_newCost _ _) (WithTop.coe_le_coe.mpr (List.min_le_of_mem hmem))
@@ -350,7 +350,9 @@ lemma actionContribUB_eq_of_applicable {n : ℕ} (v : Vector (WithTop ℕ) n) (a
   convert rfl using 2;
   rw [ ← List.foldl_map ] ; congr! 2;
   refine' List.ext_get _ _ <;> simp ;
-  grind +suggestions
+  intro n1 n1_le
+  apply Option.get_eq_getD
+
 /-- For a nonempty list of naturals, `List.max` equals `List.foldl max 0`. -/
 lemma list_max_eq_foldl_max_zero (l : List ℕ) (h : l ≠ []) :
     l.max h = l.foldl max 0 := by
@@ -373,15 +375,25 @@ lemma h_1_step_getElem_contrib {n : ℕ} (prob : PlanningTask n) (v : Vector (Wi
           if applicable' a (vec_to_state n v) then .some (actionContribUB v a) else .none
         else .none);
       if hL : L = [] then v[i] else updateIfCheaper (L.min hL) v[i]) := by
-  rw [h_1_step_getElem];
-  simp +decide [ List.filterMap, actionContribUB_eq_of_applicable ];
+  rw [h_1_step_getElem]
+  simp 
   congr! 2;
   congr! 2;
-  · ext a; split_ifs <;> simp_all +decide [ actionContribUB_eq_of_applicable ] ;
-    · grind +splitIndPred;
+  · ext a; split_ifs <;> simp_all [ actionContribUB_eq_of_applicable ]
+    · grind 
     · rw [ list_max_eq_foldl_max_zero ];
       rw [ List.foldl_map ];
   · grind
+
+lemma updateIfCheaper_eq_of_ne {m : ℕ} {old : WithTop ℕ}
+    (h : updateIfCheaper m old ≠ old) : updateIfCheaper m old = some m := by
+  unfold updateIfCheaper at h ⊢
+  cases old with
+  | top => rfl
+  | coe v =>
+    by_cases hlt : m < v
+    · simp [hlt]
+    · simp [hlt] at h
 
 /-
 If `h_1_step` strictly changes the value at `i`, the new value is exactly some applicable
@@ -396,10 +408,43 @@ lemma h_1_step_attained {n : ℕ} (prob : PlanningTask n) (v : Vector (WithTop �
     have hL_nonempty : (prob.actions'.filterMap (fun a => if i ∈ a.add.toList then if applicable' a (vec_to_state n v) then some (actionContribUB v a) else none else none)) ≠ [] := by
       contrapose! h_ne;
       rw [ h_1_step_getElem_contrib, h_ne ] ; simp
-    rw [ h_1_step_getElem_contrib ] at *;
+      --rw [ h_1_step_getElem_contrib ] at *;
     have h_min_mem : (List.min (List.filterMap (fun a => if i ∈ a.add.toList then if applicable' a (vec_to_state n v) then some (actionContribUB v a) else none else none) prob.actions') hL_nonempty) ∈ List.filterMap (fun a => if i ∈ a.add.toList then if applicable' a (vec_to_state n v) then some (actionContribUB v a) else none else none) prob.actions' := by
-      exact List.min_mem hL_nonempty;
-    grind +suggestions;
+      exact List.min_mem hL_nonempty
+   
+    obtain ⟨a, ha_mem, ha_eq⟩ := List.mem_filterMap.mp h_min_mem
+    split_ifs at ha_eq with h_add h_app <;> simp only [Option.some.injEq] at ha_eq
+    refine ⟨a, ha_mem, h_app, h_add, ?_⟩
+    rw [ha_eq]
+    have key : (h_1_step n prob v)[i] = updateIfCheaper ((List.filterMap _ prob.actions').min hL_nonempty) v[i] := by
+      unfold h_1_step
+      simp only [Fin.getElem_fin, Vector.getElem_map, Vector.getElem_finRange, Fin.eta]
+      -- goal is now the body: (let s_b := …; if appli_nil : applicable = [] then v[i] else …) = _
+
+      split
+      · -- h_nil : filterMap f₁ prob.actions' = []
+        rename_i h_nil
+        exfalso
+        apply hL_nonempty
+        rw [List.filterMap_eq_nil_iff] at h_nil ⊢
+        intro a ha
+        have := h_nil a ha
+        split_ifs at this ⊢ <;> simp_all [actionContribUB]
+      · -- updateIfCheaper (filterMap f₁ …).min _ v[i] = updateIfCheaper (filterMap f₂ …).min _ v[i]
+        congr! 3 with a
+        split_ifs <;> simp_all [actionContribUB]
+        rw [List.foldl_max_eq_max]
+        · rw [Nat.zero_max]
+          have hget : ∀ (o : Option ℕ) (h : o.isSome = true), o.get h = o.getD 0 := by
+            intro o h; cases o <;> simp_all
+          simp only [hget]
+          congr! 1
+          apply List.ext_getElem <;> simp
+        · rename_i hne _ _ _
+          simpa only [ne_eq, List.map_eq_nil_iff, List.attach_eq_nil_iff] using hne  
+
+    rw [key] at h_ne ⊢
+    exact updateIfCheaper_eq_of_ne h_ne
   use a
 
 /-- Iteration invariant for fixpoint attainment: every discovered fact is either already true in `s`
@@ -443,13 +488,13 @@ private lemma getD_mono_of_isSome {x y : WithTop ℕ} (hxy : x ≤ y)
       change a ≤ b
       exact WithTop.coe_le_coe.mp hxy
 
-/-
+/--
 `h_1_step` preserves the attainment invariant.  Values only decrease (`h_1_step_le`) and
 applicability only grows (`h_1_step_preserves_isSome`), so an action witnessing the invariant at `v`
 still witnesses it (with a no-larger contribution) at `h_1_step n prob v`; an entry whose value
 strictly dropped was set to the minimum action contribution, witnessed by the minimiser action.
 -/
-set_option maxHeartbeats 1000000 in
+--set_option maxHeartbeats 1000000 in
 lemma h1_attained_invariant_step {n : ℕ} (prob : PlanningTask n) (s : BitVec n)
     (v : Vector (WithTop ℕ) n) (hv : h1_attained_invariant prob s v) :
     h1_attained_invariant prob s (h_1_step n prob v) := by
@@ -457,7 +502,7 @@ lemma h1_attained_invariant_step {n : ℕ} (prob : PlanningTask n) (s : BitVec n
   by_cases h_ne : (h_1_step n prob v)[i] ≠ v[i];
   · obtain ⟨a, ha⟩ := h_1_step_attained prob v i h_ne;
     refine' Or.inr ⟨ a, ha.1, _, ha.2.2.1, _ ⟩ <;> simp_all +decide [ actionContribUB ];
-    · unfold applicable' at *; simp_all +decide [ List.all_eq_true ] ;
+    · unfold applicable' at *; simp_all 
       intro j hj; specialize ha; have := ha.2.1 j hj; simp_all +decide [ vec_to_state_getElem ] ;
       exact h_1_step_preserves_isSome prob v j ( ha.2.1 j hj );
     · have h_foldl_le : ∀ j : Fin n, (h_1_step n prob v)[j] ≤ v[j] := by
@@ -470,7 +515,17 @@ lemma h1_attained_invariant_step {n : ℕ} (prob : PlanningTask n) (s : BitVec n
   · cases h : v[i] <;> simp_all +decide [ Option.isSome_iff_exists ];
     cases hv i ( by aesop ) <;> simp_all +decide [ Option.getD ];
     obtain ⟨ a, ha₁, ha₂, ha₃, ha₄ ⟩ := ‹_›; use Or.inr ⟨ a, ha₁, ?_, ha₃, ?_ ⟩ <;> simp_all +decide [ actionContribUB ] ;
-    · grind +suggestions;
+    · unfold applicable' satisfies' at ⊢ ha₂
+      apply decide_eq_true
+      apply of_decide_eq_true at ha₂
+      intro j j_in_pre
+      specialize ha₂ j j_in_pre
+      rw [vec_to_state_getElem] at ⊢ ha₂
+      unfold h_1_step
+      simp
+      split
+      · grind
+      · apply updateIfCheaper_isSome
     · refine' le_trans _ ha₄;
       have h_foldl_le : ∀ j ∈ a.pre.toList, (h_1_step n prob v)[j.val] ≤ v[j.val] := by
         exact fun j hj => h_1_step_le n prob v j;
@@ -1059,8 +1114,8 @@ lemma le_foldl_max_of_mem {β : Type*} (g : β → ℕ) {x : β} {l : List β} (
   · exact absurd hx (List.not_mem_nil)
   · rw [List.map_append, List.foldl_append]
     rcases List.mem_append.mp hx with h | h
-    · exact le_trans (ih h) (by simp [le_max_left])
-    · simp only [List.mem_singleton] at h; subst h; simp [le_max_right]
+    · exact le_trans (ih h) (by simp)
+    · simp only [List.mem_singleton] at h; subst h; simp 
 set_option maxHeartbeats 1000000 in
 lemma h_1_rank_attained {n : ℕ} (prob : PlanningTask n) (base : Vector (WithTop ℕ) n) (w : Fin n)
     (hw : ((h_1_iter_fix n prob base)[w]).isSome)
@@ -1102,7 +1157,15 @@ lemma h_1_rank_attained {n : ℕ} (prob : PlanningTask n) (base : Vector (WithTo
       cases h : ( h_1_iter_fix n prob base )[ x ] <;> cases h' : ( h_1_iter prob base ( h_1_rank prob base w - 1 ) )[ x ] <;> simp_all +decide [ Option.getD ];
       exact absurd ( vec_to_state_isSome_of_applicable n ( h_1_iter prob base ( h_1_rank prob base w - 1 ) ) a ha₂ x ( by simpa using hx ) ) ( by simp +decide [ h' ] )) ⟩;
   · have h_diff : (h_1_iter prob base (h_1_rank prob base w))[w] ≠ (h_1_iter prob base (h_1_rank prob base w - 1))[w] := by
-      grind +suggestions;
+      obtain ⟨k, hk⟩ : ∃ k, h_1_rank prob base w = k + 1 := ⟨_, (Nat.succ_pred_eq_of_pos hr).symm⟩
+      rw [hk, h_1_iter]
+      simp
+      sorry
+      --conv => left; unfold h_1_iter
+      --by_cases eq_zero : h_1_rank prob base w = 0 
+      --· grind -- contradictory 
+      --· simp
+      --  sorry --grind
     cases k : h_1_rank prob base w <;> aesop
 
 theorem h_1_admissible {n : ℕ} (prob : PlanningTask n) :
@@ -1121,8 +1184,12 @@ lemma actionContribUB_mono_of_applicable {n : ℕ} {v w : Vector (WithTop ℕ) n
     intros j hj; exact (by
     have := vec_to_state_isSome_of_applicable n w a haw j hj; have := h j; cases h : v[j] <;> cases h' : w[j] <;> aesop;);
   refine' ⟨ _, _ ⟩;
-  · unfold applicable';
-    grind +suggestions;
+  · unfold applicable' satisfies'
+    apply decide_eq_true
+    intro i in_pre_val
+    specialize h_applicable i (by unfold VarSet.toList; exact in_pre_val)
+    rw [vec_to_state_getElem]
+    exact h_applicable
   · refine' add_le_add le_rfl ( foldl_max_mono _ _ _ _ );
     intro j hj
     have hwSome := vec_to_state_isSome_of_applicable n w a haw j hj
@@ -1146,7 +1213,7 @@ lemma h_1_step_mono {n : ℕ} (prob : PlanningTask n) {v w : Vector (WithTop ℕ
   have h_min_le : (h_1_step n prob v)[i] ≤ some (actionContribUB v a) := by
     convert h_1_step_le_action_contribution prob v a ha.1 i ha.2.2.1 h_applicable using 1;
     rw [ actionContribUB_eq_of_applicable v a h_applicable ];
-    split_ifs <;> simp_all +decide [ List.foldl_map ];
+    split_ifs <;> simp_all 
     · grind;
     · rw [ list_max_eq_foldl_max_zero ];
       rw [ List.foldl_map ];
@@ -1184,7 +1251,8 @@ lemma h_1_step_ge_of_action_bound {n : ℕ} (prob : PlanningTask n) (bef : Vecto
     (h : ∀ a ∈ prob.actions', i ∈ a.add.toList → applicable' a (vec_to_state n bef) = true →
       ∃ q ∈ a.pre.toList, bef[i] ≤ (a.cost : WithTop ℕ) + bef[q]) :
     bef[i] ≤ (h_1_step n prob bef)[i] := by
-  contrapose! h; simp_all +decide [ h_1_step_getElem_contrib ] ;
+  contrapose! h
+  simp_all 
   obtain ⟨a, ha⟩ : ∃ a ∈ prob.actions', applicable' a (vec_to_state n bef) = true ∧ i ∈ a.add.toList ∧ (h_1_step n prob bef)[i] = some (actionContribUB bef a) := by
     have := h_1_step_attained prob bef i ( by aesop ) ; aesop;
   refine' ⟨ a, ha.1, _, ha.2.1, _ ⟩ <;> simp_all +decide [ actionContribUB ];
@@ -1192,7 +1260,9 @@ lemma h_1_step_ge_of_action_bound {n : ℕ} (prob : PlanningTask n) (bef : Vecto
   have h_foldl_le : ∀ {l : List (Fin n)}, q ∈ l → Option.getD bef[q] 0 ≤ List.foldl max 0 (List.map (fun j => Option.getD bef[j] 0) l) := by
     intros l hl; induction' l using List.reverseRecOn with l ih <;> aesop;
   cases h : bef[q] <;> simp_all +decide [ WithTop.some_eq_coe ];
-  · have := vec_to_state_isSome_of_applicable n bef a ha.2.1 q ( by simpa using hq ) ; simp_all +decide [ vec_to_state_getElem ] ;
+  · have := vec_to_state_isSome_of_applicable n bef a ha.2.1 q ( by simpa using hq )
+    rw [Fin.getElem_fin,h] at this
+    exact absurd this (by decide)
   · exact h_foldl_le (show q ∈ a.pre.toList from by simpa using hq)
 
 /-! ### `isSome`/discovery pattern depends only on the actions' fields (not on costs)
@@ -1250,7 +1320,7 @@ lemma h_1_step_isSome_eq_of_fields {n : ℕ} (prob1 prob2 : PlanningTask n)
   · grind;
   · rw [ h2 ];
     constructor <;> rintro ( h | ⟨ a, ha, hi, happ ⟩ );
-    · have := vec_to_state_getElem n bef1 i; have := vec_to_state_getElem n bef2 i; aesop;
+    · have := vec_to_state_getElem n bef1 i; have := vec_to_state_getElem n bef2 i; simp_all only [forall_true_left, Fin.getElem_fin, VarSet.mem_toList, VarSet.mem_val, true_or]
     · obtain ⟨ k, hk ⟩ := List.mem_iff_getElem.mp ha;
       obtain ⟨ hk₁, rfl ⟩ := hk; use Or.inr ⟨ prob2.actions'[k], by aesop, by
         have := hadd k hk₁ ( by linarith ) ; simp_all +decide [ Action.add ], by
@@ -1258,7 +1328,10 @@ lemma h_1_step_isSome_eq_of_fields {n : ℕ} (prob1 prob2 : PlanningTask n)
         unfold applicable'; simp +decide [ hpre k hk₁ ( by linarith ), hstate ] ⟩ ;
     · convert h using 1;
       rw [ ← vec_to_state_getElem n bef1 i, ← vec_to_state_getElem n bef2 i, hstate ];
-      grind +suggestions;
+      simp
+      intro x x_action i_in_x_add appli_before
+      rw [vec_to_state_getElem]
+      exact h
     · obtain ⟨ k, hk ⟩ := List.mem_iff_getElem.mp ha;
       obtain ⟨hk₂, rfl⟩ := hk
       have hk₁ : k < prob1.actions'.length := by linarith

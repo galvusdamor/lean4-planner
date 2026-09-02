@@ -3,7 +3,6 @@ import planning.CostPartitioning
 import Mathlib.Tactic.Ring
 import Mathlib.Tactic.Linarith
 import Mathlib.Data.Set.Card
-import Mathlib
 
 namespace STRIPS
 
