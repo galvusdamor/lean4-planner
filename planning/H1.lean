@@ -5,11 +5,11 @@ import planning.PerfectHeuristic
 
 import planning.temp
 
-set_option maxHeartbeats 0
+--set_option maxHeartbeats 0
 
 namespace STRIPS
 
-/-
+/--
 If two vectors are componentwise ≤ in WithTop ℕ and differ, then the first is
     lexicographically less than the second under `withTop.lex Nat.lt`.
 -/
@@ -19,28 +19,35 @@ lemma vector_le_ne_implies_lex {n : ℕ} (v1 v2 : Vector (WithTop ℕ) n)
     Vector.Lex n (withTop.lex Nat.lt) v1 v2 := by
       -- Since $v1 \neq v2$, there must be some $i$ such that $v1[i] \neq v2[i]$.
       obtain ⟨i, hi⟩ : ∃ i : Fin n, v1[i] ≠ v2[i] := by
-        contrapose! hne;
-        ext i;
+        contrapose! hne
+        ext i
         exact hne ⟨ i, by assumption ⟩;
-      induction' n with n ih <;> simp_all +decide [ Vector.Lex ];
+      induction' n with n ih <;> simp_all [ Vector.Lex ];
       · exact Fin.elim0 i;
       · -- Consider two cases: either the first element of v1 is less than the first element of v2, or they are equal and we can apply the induction hypothesis to the rest of the vectors.
         by_cases h_first : v1[0] < v2[0];
-        · rcases v1 with ⟨ _ | ⟨ a, v1 ⟩, hv1 ⟩ <;> rcases v2 with ⟨ _ | ⟨ b, v2 ⟩, hv2 ⟩ <;> simp_all +decide [ List.Lex ];
+        · rcases v1 with ⟨ _ | ⟨ a, v1 ⟩, hv1 ⟩ <;> rcases v2 with ⟨ _ | ⟨ b, v2 ⟩, hv2 ⟩ <;> simp_all 
           · cases hv2;
-          · cases h : a <;> cases h' : b <;> simp_all +decide [ withTop.lex ];
-            · exact List.Lex.rel ( by simp +decide [ withTop.lex ] );
-            · exact List.Lex.rel ( by aesop );
-        · cases eq_or_lt_of_le ( hle 0 ) <;> simp_all +decide [ List.Lex ];
-          · specialize ih ( v1.tail ) ( v2.tail ) ; simp_all +decide [ Fin.forall_fin_succ, List.Lex ];
+          · cases h : a <;> cases h' : b <;> simp_all 
+            · apply List.Lex.rel
+              simp  [ withTop.lex ]
+            · apply List.Lex.rel
+              rename_i h_1 a_2 h'_1
+              subst h_1 h'_1
+              simp_all only [ENat.some_eq_coe]
+              exact h_first
+        · cases eq_or_lt_of_le ( hle 0 ) <;> simp_all 
+          · specialize ih ( v1.tail ) ( v2.tail ) ; simp_all [ Fin.forall_fin_succ ]
             specialize ih ( fun i => by simpa only [ add_comm ] using hle i ) ( by
-              intro h; simp_all +decide [ Vector.ext_iff ] ;
-              induction i using Fin.inductionOn <;> simp_all +decide [ add_comm 1 ] );
-            rcases i with ⟨ _ | i, hi ⟩ <;> simp_all +decide [ add_comm ];
+              intro h
+              simp_all [ Vector.ext_iff ]
+              induction i using Fin.inductionOn <;> simp_all [ add_comm 1 ] )
+            rcases i with ⟨ _ | i, hi ⟩ <;> simp_all [ add_comm ]
             specialize ih ⟨ i, by linarith ⟩ hi;
-            rcases v1 with ⟨ _ | ⟨ a, v1 ⟩, hv1 ⟩ <;> rcases v2 with ⟨ _ | ⟨ b, v2 ⟩, hv2 ⟩ <;> simp_all +decide [ List.Lex ];
-            simp_all +decide [ List.take_of_length_le ( show v1.length ≤ n from by { have := hv1; simp_all +decide [ Vector.size ] } ) ];
-            rw [ List.take_of_length_le ( by simpa [ List.length ] using hv2.le ) ] at ih ; exact List.Lex.cons ih;
+            rcases v1 with ⟨ _ | ⟨ a, v1 ⟩, hv1 ⟩ <;> rcases v2 with ⟨ _ | ⟨ b, v2 ⟩, hv2 ⟩ <;> simp_all 
+            simp_all [ List.take_of_length_le ( show v1.length ≤ n from by { have := hv1; simp_all } ) ]
+            rw [ List.take_of_length_le ( by simpa [ List.length ] using hv2.le ) ] at ih
+            exact List.Lex.cons ih
           · exact absurd ‹_› ( not_lt_of_ge h_first )
 
 lemma h_1_step_lex_decreasing {n : ℕ} (prob : PlanningTask n) (bef : Vector (WithTop ℕ) n)
@@ -168,12 +175,14 @@ lemma h_1_goal_aware {n : ℕ} (prob : PlanningTask n) (g : VarSet n) (s : BitVe
       intro hsat
       have h_h1_iter_fix : ∀ i : Fin n, (h_1_iter_fix n (replace_goal prob g) (h_1_base n s))[i] ≤ (h_1_base n s)[i] := by
         exact fun i => h_1_iter_fix_le n ( replace_goal prob g ) ( h_1_base n s ) i;
-      unfold h_1; simp_all +decide [ satisfies' ] ;
-      split_ifs <;> simp_all +decide [ replace_goal ];
+      unfold h_1; simp_all [ satisfies' ] ;
+      split_ifs <;> simp_all [ replace_goal ];
       · have h_h1_iter_fix_zero : ∀ i : Fin n, i ∈ g.val → (h_1_iter_fix n (replace_goal prob g) (h_1_base n s))[i] = some 0 := by
-          intro i hi; specialize h_h1_iter_fix i; simp_all +decide [ replace_goal ] ;
-          cases h : ( h_1_iter_fix n { varNames := prob.varNames, actions' := prob.actions', init' := prob.init', goal' := g } ( h_1_base n s ) )[ i ] <;> simp_all +decide [ WithTop.some_eq_coe ];
-        simp_all +decide [ replace_goal ];
+          intro i hi
+          specialize h_h1_iter_fix i
+          simp_all [ replace_goal ]
+          cases h : ( h_1_iter_fix n { varNames := prob.varNames, actions' := prob.actions', init' := prob.init', goal' := g } ( h_1_base n s ) )[ i ] <;> simp_all [ WithTop.some_eq_coe ];
+        simp_all [ replace_goal ]
         have fold_zero : ∀ l : List (Fin n),
             (∀ i ∈ l, Option.getD
               (h_1_iter_fix n (replace_goal prob g) (h_1_base n s))[i] 0 = 0) →
@@ -320,12 +329,12 @@ lemma fixpoint_get_le_action_cost {n : ℕ} (prob : PlanningTask n)
     then a.cost
     else a.cost + (a.pre.toList.attach.map (fun x =>
       result[x.1].get (vec_to_state_isSome_of_applicable n result a happ x.1 x.2))).max h) := by
-        have := fixpoint_value_le_action_cost prob result hfix a ha i hadd happ; simp_all +decide [ WithTop.le_def ] ;
-        obtain ⟨ a, b, hab, h₁, h₂ ⟩ := this; simp_all +decide [ WithTop.some_eq_coe ] ;
+        have := fixpoint_value_le_action_cost prob result hfix a ha i hadd happ; simp_all [ WithTop.le_def ] ;
+        obtain ⟨ a, b, hab, h₁, h₂ ⟩ := this
+        simp_all [ WithTop.some_eq_coe ]
         exact hab
-  generalize_proofs at *;
   convert h_le using 1;
-  cases h : a.pre.toList.attach <;> simp_all +decide [ List.max ];
+  cases h : a.pre.toList.attach <;> simp_all [ List.max ];
   rw [ List.foldl_map ]
 
 /-- Upper-bound contribution of an action `a` at a value vector `v`, using `getD 0` so that no
@@ -395,7 +404,8 @@ lemma updateIfCheaper_eq_of_ne {m : ℕ} {old : WithTop ℕ}
     · simp [hlt]
     · simp [hlt] at h
 
-/-
+set_option maxHeartbeats 2000000
+/--
 If `h_1_step` strictly changes the value at `i`, the new value is exactly some applicable
 adding-action's `actionContribUB` (the action that attained the minimum).
 -/
@@ -413,7 +423,8 @@ lemma h_1_step_attained {n : ℕ} (prob : PlanningTask n) (v : Vector (WithTop �
       exact List.min_mem hL_nonempty
    
     obtain ⟨a, ha_mem, ha_eq⟩ := List.mem_filterMap.mp h_min_mem
-    split_ifs at ha_eq with h_add h_app <;> simp only [Option.some.injEq] at ha_eq
+    split_ifs at ha_eq with h_add h_app
+    simp only [Option.some.injEq] at ha_eq
     refine ⟨a, ha_mem, h_app, h_add, ?_⟩
     rw [ha_eq]
     have key : (h_1_step n prob v)[i] = updateIfCheaper ((List.filterMap _ prob.actions').min hL_nonempty) v[i] := by
@@ -558,8 +569,8 @@ lemma fixpoint_get_attained {n : ℕ} (prob : PlanningTask n) (s : BitVec n)
     (i : Fin n)
     (hi : ((h_1_iter_fix n prob (h_1_base n s))[i]).isSome)
     (hnb : s[i] = false) :
-    ∃ a, a ∈ prob.actions' ∧ ∃ (hadd : i ∈ a.add.toList)
-      (happ : applicable' a (vec_to_state n (h_1_iter_fix n prob (h_1_base n s))) = true),
+    ∃ a, a ∈ prob.actions' ∧ ∃ (_ : i ∈ a.add.toList)
+      (_ : applicable' a (vec_to_state n (h_1_iter_fix n prob (h_1_base n s))) = true),
       ((h_1_iter_fix n prob (h_1_base n s))[i]).getD 0 = actionContribUB (h_1_iter_fix n prob (h_1_base n s)) a := by
         convert h1_attained_invariant_iter prob s ( h_1_base n s ) ( h1_attained_invariant_base prob s ) i hi using 1;
         constructor;
@@ -1116,6 +1127,8 @@ lemma le_foldl_max_of_mem {β : Type*} (g : β → ℕ) {x : β} {l : List β} (
     rcases List.mem_append.mp hx with h | h
     · exact le_trans (ih h) (by simp)
     · simp only [List.mem_singleton] at h; subst h; simp 
+
+
 set_option maxHeartbeats 1000000 in
 lemma h_1_rank_attained {n : ℕ} (prob : PlanningTask n) (base : Vector (WithTop ℕ) n) (w : Fin n)
     (hw : ((h_1_iter_fix n prob base)[w]).isSome)
@@ -1129,12 +1142,12 @@ lemma h_1_rank_attained {n : ℕ} (prob : PlanningTask n) (base : Vector (WithTo
           ((h_1_iter prob base (h_1_rank prob base w - 1))[j]).getD 0)).foldl max 0
         = (a.pre.toList.map (fun j => ((h_1_iter_fix n prob base)[j]).getD 0)).foldl max 0 := by
   have := h_1_step_attained prob (h_1_iter prob base (h_1_rank prob base w - 1)) w ?_;
-  · obtain ⟨ a, ha₁, ha₂, ha₃, ha₄ ⟩ := this; use a; simp_all +decide [ h_1_iter_succ ] ;
+  · obtain ⟨ a, ha₁, ha₂, ha₃, ha₄ ⟩ := this; use a; simp_all 
     have h_pre_max_eq : (h_1_iter_fix n prob base)[w] ≤ some (a.cost + List.foldl max 0 (List.map (fun j => ((h_1_iter_fix n prob base)[j.val]).getD 0) a.pre.toList)) := by
       have h_pre_max_eq : applicable' a (vec_to_state n (h_1_iter_fix n prob base)) = true := by
         have h_pre_max_eq : ∀ j ∈ a.pre.toList, (h_1_iter_fix n prob base)[j].isSome = true := by
           intro j hj; exact h_1_iter_fix_isSome_of_iter prob base _ _ (vec_to_state_isSome_of_applicable n (h_1_iter prob base (h_1_rank prob base w - 1)) a ha₂ j hj);
-        unfold applicable' satisfies'; simp +decide [ h_pre_max_eq ] ;
+        unfold applicable' satisfies'; simp 
         intro j hj; specialize h_pre_max_eq j; simp_all +decide [ vec_to_state_getElem ] ;
       convert fixpoint_value_le_action_cost prob (h_1_iter_fix n prob base) (h_1_iter_fix_is_fixpoint n prob base) a ha₁ w ?_ h_pre_max_eq using 1;
       · convert actionContribUB_eq_of_applicable _ _ h_pre_max_eq |> Eq.symm using 1;
@@ -1197,7 +1210,6 @@ lemma actionContribUB_mono_of_applicable {n : ℕ} {v w : Vector (WithTop ℕ) n
     rcases hv : v[j] with (_ | _ | k) <;> rcases hw : w[j] with (_ | _ | l)
     all_goals simp [hv, hw] at h hwSome ⊢
     all_goals try contradiction
-    all_goals try omega
     exact Nat.le_of_succ_le_succ (WithTop.coe_le_coe.mp h)
 
 lemma h_1_step_mono {n : ℕ} (prob : PlanningTask n) {v w : Vector (WithTop ℕ) n}
@@ -1323,7 +1335,7 @@ lemma h_1_step_isSome_eq_of_fields {n : ℕ} (prob1 prob2 : PlanningTask n)
     · have := vec_to_state_getElem n bef1 i; have := vec_to_state_getElem n bef2 i; simp_all only [forall_true_left, Fin.getElem_fin, VarSet.mem_toList, VarSet.mem_val, true_or]
     · obtain ⟨ k, hk ⟩ := List.mem_iff_getElem.mp ha;
       obtain ⟨ hk₁, rfl ⟩ := hk; use Or.inr ⟨ prob2.actions'[k], by aesop, by
-        have := hadd k hk₁ ( by linarith ) ; simp_all +decide [ Action.add ], by
+        have := hadd k hk₁ ( by linarith ) ; simp_all , by
         convert happ using 1;
         unfold applicable'; simp +decide [ hpre k hk₁ ( by linarith ), hstate ] ⟩ ;
     · convert h using 1;
@@ -1337,7 +1349,7 @@ lemma h_1_step_isSome_eq_of_fields {n : ℕ} (prob1 prob2 : PlanningTask n)
       have hk₁ : k < prob1.actions'.length := by linarith
       refine Or.inr ⟨prob1.actions'[k], List.getElem_mem hk₁, ?_, ?_⟩
       · have := hadd k hk₁ hk₂
-        simp_all +decide [Action.add]
+        simp_all 
       · convert happ using 1
         unfold applicable'
         simp +decide [hpre k hk₁ hk₂, hstate]

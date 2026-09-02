@@ -208,7 +208,7 @@ lemma relax_path {n : ℕ} (prob : PlanningTask n) {s1 s2 : State n} (p : Planni
       exact ⟨ s1, by simpa [ PlanningTask.actions ] using π, rfl ⟩;
     · constructor;
       · grind;
-      · ext; simp [delete_relax_action];
+      · ext; simp 
     · exact hq
 
 /-
@@ -236,8 +236,7 @@ lemma delete_relaxation_landmarks_have_landmark_property {n : ℕ} (prob : Plann
           obtain ⟨ t2, ht2, q, hq ⟩ := relax_path prob plan.path ( le_refl ( convertState s ) );
           obtain ⟨ a, ha₁, ha₂ ⟩ := this ⟨ t2, q, by
             exact fun x hx => ht2 <| plan.goal hx ⟩
-          generalize_proofs at *;
-          simp_all +decide [ Membership.mem, PlanningTask.Path.actionsUsed ];
+          simp_all [ Membership.mem ]
           obtain ⟨ b, hb₁, hb₂ ⟩ := List.mem_map.mp ha₂;
           exact ⟨ b, hb₁, List.mem_map.mpr ⟨ a, ha₁, hb₂ ▸ rfl ⟩ ⟩
 
@@ -248,7 +247,6 @@ def get_all_equiv_delete_relaxed_actions {n : ℕ} (prob : PlanningTask n) (lm :
 stronger statement: if the actions a ∈ lm are actually part of the original problem, then if lm is part of every delete relaxed plan, then it must be part of any plan. The reasoning is that the set of all delete-relaxed plans is a "superset" (not in the strict sende due to missing deleting effects) of all plans. I.e. for every actual plan there is an equivalent delete relaxed one that contains an action a ∈ lm thus the actual plan must too. The proof here succeeds as all the actions a ∈ lm are part of prob and those are the only actions in plans
 -/
 lemma delete_relaxation_landmarks_are_landmarks {n : ℕ} (prob : PlanningTask n) (lm : List (Action n))
-  (action_all_exist : lm.all (fun a => decide (a ∈ prob.actions)))
     (s : BitVec n) :
     is_delete_relaxed_disjunctive_action_landmark_for_state prob lm s →
       is_disjunctive_action_landmark_for_state prob (get_all_equiv_delete_relaxed_actions prob lm) s := by

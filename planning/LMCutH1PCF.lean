@@ -110,9 +110,16 @@ lemma mem_pre_of_mem_regress_add {m : ℕ} (a : Action m) (t : Fin m) (ht : t �
     {g' : Fin m}
     (hg' : g' ∈ (varset'_of_state' (regress' a (state'_of_varset' (singletonVarSet t)))).toList) :
     g' ∈ a.pre.toList := by
-  contrapose! hg';
-  unfold regress' varset'_of_state';
-  grind
+  rw [VarSet.mem_toList, varset'_of_state'_mem, regress'] at hg'
+  rw [VarSet.mem_toList] at ht ⊢
+  simp only [BitVec.getElem_or, BitVec.getElem_and, BitVec.getElem_not, Bool.or_eq_true,
+    Bool.and_eq_true, state'_of_varset'_getElem, VarSet.getElem_toBitVec'] at hg'
+  rcases hg' with ⟨h1, h2⟩ | h
+  · simp only [mem_singletonVarSet, decide_eq_true_eq] at h1
+    subst h1
+    simp only [Bool.not_eq_true', decide_eq_false_iff_not] at h2
+    exact absurd ht h2
+  · simpa using h
 
 lemma h1_goal_value_bellman_argmax {m : ℕ} (p : PlanningTask m) (a : Action m) (ha : a ∈ p.actions')
     (hne : a.pre.toList ≠ []) (t : Fin m) (ht : t ∈ a.add.toList) :
@@ -199,7 +206,7 @@ lemma h1_goal_value_edge_bound {n : ℕ} (p : PlanningTask (n + 2)) (hp : has_pr
             have h_min : ∃ b ∈ Finset.filter (fun c : {b : Action (n + 2) // b ∈ p.actions'} => (↑(h1_pcf p hp c) : Fin (n + 2)) = f ∧ t ∈ c.val.add.toList.toFinset) (Finset.univ : Finset {b : Action (n + 2) // b ∈ p.actions'}), ∀ c ∈ Finset.filter (fun c : {b : Action (n + 2) // b ∈ p.actions'} => (↑(h1_pcf p hp c) : Fin (n + 2)) = f ∧ t ∈ c.val.add.toList.toFinset) (Finset.univ : Finset {b : Action (n + 2) // b ∈ p.actions'}), b.val.cost ≤ c.val.cost := by
               exact Finset.exists_min_image _ _ ⟨ a, by aesop ⟩;
             exact ⟨ h_min.choose, Finset.mem_filter.mp h_min.choose_spec.1 |>.2.1, Finset.mem_filter.mp h_min.choose_spec.1 |>.2.2, fun c hc₁ hc₂ => h_min.choose_spec.2 c ( Finset.mem_filter.mpr ⟨ Finset.mem_univ _, hc₁, hc₂ ⟩ ) ⟩;
-          simp_all +decide [ Finset.ext_iff ];
+          simp_all 
           grind;
         have := h1_goal_value_bellman_argmax p a.val a.property ( hp a.val a.property ) _ ( List.mem_toFinset.mp ha₂ ) ; simp_all +decide [ h1_pcf ] ;
 
@@ -301,7 +308,7 @@ lemma justification_graph_payload_le {n : ℕ} (prob : PlanningTask n)
     (ht : t ∈ a.val.add.toList.toFinset) :
     (justification_graph prob pcf).Payload f t adj ≤ a.val.cost := by
       apply List.min_le_of_mem;
-      simp +decide [ hf, ht, List.mem_map, List.mem_filter ];
+      simp [ List.mem_map, List.mem_filter ];
       exact ⟨ a, ⟨ ⟨ a.2, hf.symm ⟩, by simpa using ht ⟩, rfl ⟩
 
 /-- **Predecessor step for the justification-graph lower bound.**  A fact `w` with positive
@@ -623,11 +630,11 @@ lemma h1_goal_value_of_not_isSome {n : ℕ} (p : PlanningTask (n + 2)) (f : Fin 
     h1_goal_value p f
       = Vector.maxFinite (h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec)) + 1 := by
   unfold h1_goal_value
-  unfold h_1
-  simp_all +decide [ h_1_iter_fix_replace_goal ] 
-  unfold replace_goal
-  simp +decide [ VarSet.ofList ] 
-  grind
+  have hns : ¬ satisfies' (singletonVarSet f)
+      (vec_to_state (n + 2) (h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec))) = true := by
+    rw [satisfies'_singleton, vec_to_state_getElem]
+    simpa using hf
+  exact h_1_eq_maxFinite_of_not_satisfies p (singletonVarSet f) p.init'.toBitVec hns
 
 lemma h1_goal_value_le_maxFinite {n : ℕ} (p : PlanningTask (n + 2)) (f : Fin (n + 2))
     (hf : ((h_1_iter_fix (n + 2) p (h_1_base (n + 2) p.init'.toBitVec))[f]).isSome) :
@@ -742,7 +749,7 @@ lemma graphDist_jg_postfixpoint {n : ℕ} (prob : PlanningTask (n + 2))
   refine ⟨(↑(pcf ⟨a, ha⟩) : Fin (n + 2)), ?_, ?_⟩
   · -- the chosen precondition is indeed a precondition of `a`
     have := (pcf ⟨a, ha⟩).2
-    simpa [VarSet.toList] using (Action.mem_pre.mp this)
+    simp [VarSet.toList] using (Action.mem_pre.mp this)
   · -- triangle inequality along the justification edge `pcf a → i`
     have hadj : jg.Adj (↑(pcf ⟨a, ha⟩) : Fin (n + 2)) i :=
       ⟨⟨a, ha⟩, rfl, by simpa using hi⟩
@@ -876,6 +883,15 @@ lemma h1_partition_action_correspondence {n : ℕ} (p : PlanningTask (n + 2)) (u
     rw [hi'] at hcost
     rw [hcost, lmcut_step_partition_one_apply]
     simp only [Fin.getElem_fin]
+/-- The target of any edge recorded in `edges_entering_goal_zone` lies inside the goal zone. -/
+lemma edges_entering_goal_zone_target_mem {V : Type} [FinEnum V] (g : NatGraph V) (goal : V)
+    {u v : V} (h : (u, v) ∈ edges_entering_goal_zone g goal) : v ∈ goal_zone g goal := by
+  obtain ⟨u2, v2, hx, -, hv2, -⟩ :
+      ∃ u2 v2, (u, v) = (u2, v2) ∧ u2 ∉ goal_zone g goal ∧ v2 ∈ goal_zone g goal ∧ g.Adj u2 v2 := by
+    unfold edges_entering_goal_zone at h
+    simp_all [List.mem_flatMap, List.mem_filterMap]
+  rw [Prod.mk.injEq] at hx
+  rw [hx.2]; exact hv2
 
 /-
 **A cut-closure action adds a goal-zone fact.** Every action in the relax-equivalence closure
@@ -887,10 +903,24 @@ lemma h1_lm'_has_goal_zone_add {n : ℕ} (p : PlanningTask (n + 2)) (u_g : unita
     (hb : b ∈ get_all_equiv_delete_relaxed_actions p (lmcut_step p u_g (h1_pcf p hp)).1) :
     ∃ t : Fin (n + 2), t ∈ b.add.toList.toFinset ∧
       t ∈ goal_zone (justification_graph p (h1_pcf p hp)) (get_unitary_goal p u_g) := by
-  unfold get_all_equiv_delete_relaxed_actions at hb
-  unfold lmcut_step at hb; simp_all [ landmark_induced_by_cut ]
-  unfold delete_relax_action at hb; simp_all [ h1_pcf ]
-  grind
+  -- Extract a genuine landmark action `l` that is delete-relaxation-equivalent to `b`.
+  obtain ⟨-, l, hl, h_eq⟩ := (mem_get_all_equiv_iff p _ b).mp hb
+  have hl' : l ∈ landmark_induced_by_cut p
+      (edges_entering_goal_zone (justification_graph p (h1_pcf p hp))
+        (get_unitary_goal p u_g)) (h1_pcf p hp) := by
+    simpa [lmcut_step] using hl
+  rw [landmark_induced_by_cut, List.mem_flatMap] at hl'
+  obtain ⟨⟨f, t⟩, hft, hl2⟩ := hl'
+  rw [List.mem_map] at hl2
+  obtain ⟨a0, ha0f, ha0v⟩ := hl2
+  rw [List.mem_filter, decide_eq_true_eq] at ha0f
+  obtain ⟨-, -, ht⟩ := ha0f
+  refine ⟨t, ?_, edges_entering_goal_zone_target_mem _ _ hft⟩
+  have hbadd : b.add = l.add := by
+    have := congrArg Action.add h_eq
+    simpa [delete_relax_action] using this
+  rw [hbadd, ← ha0v]
+  exact ht
 
 /-
 **Per-edge step of the single-crossing bound.** For each edge `x → y` of the partition-`1`
@@ -936,11 +966,11 @@ lemma h1_partition_edge_step {n : ℕ} (p : PlanningTask (n + 2)) (u_g : unitary
     convert h1_argmax_pre_congr p a.val a0 _ _ ha0_pre using 1;
   have ha0_bellman : h1_goal_value p y ≤ a0.cost + h1_goal_value p (h1_argmax_pre p a0 (hp a0 ha0_mem)) := by
     apply h1_goal_value_bellman_argmax p a0 ha0_mem (hp a0 ha0_mem) y (by
-    simp_all +decide [ Finset.ext_iff ]);
+    simp_all 
   split_ifs at ha0_cost <;> simp_all +decide [ add_comm ];
   obtain ⟨ t, ht₁, ht₂ ⟩ := h1_lm'_has_goal_zone_add p u_g hp ‹_›;
   have ha0_bellman_t : h1_goal_value p (get_unitary_goal p u_g) ≤ h1_goal_value p t := by
-    have := walk_of_zero_cost_reachable ( justification_graph p ( h1_pcf p hp ) ) ( mem_goal_zone_iff ( justification_graph p ( h1_pcf p hp ) ) ( get_unitary_goal p u_g ) t |>.1 ht₂ ) ; simp_all +decide [ h1_goal_value_le_of_walk ] ;
+    have := walk_of_zero_cost_reachable ( justification_graph p ( h1_pcf p hp ) ) ( mem_goal_zone_iff ( justification_graph p ( h1_pcf p hp ) ) ( get_unitary_goal p u_g ) t |>.1 ht₂ ) ; simp_all 
     obtain ⟨ w, hw ⟩ := this; exact h1_goal_value_le_of_walk p hp w |> le_trans <| by simp +decide [ hw ] ;
   have ha0_bellman_t : h1_goal_value p t ≤ a0.cost + h1_goal_value p (h1_argmax_pre p a0 (hp a0 ha0_mem)) := by
     apply h1_goal_value_bellman_argmax p a0 ha0_mem (hp a0 ha0_mem) t (by
@@ -987,9 +1017,9 @@ cut operator) without increasing cost, so a minimum-cost walk crosses — and is
 once, by at most `minCost` (`minCost_le_cut_edge_payload`). -/
 lemma h1_witness_goal_bound {n : ℕ} (p : PlanningTask (n + 2)) (u_i : unitary_init p)
     (u_g : unitary_goal p) (hp : has_preconditions p)
-    (hr : reachable (justification_graph p (h1_pcf p hp))
+    --(hr : reachable (justification_graph p (h1_pcf p hp))
       (get_unitary_init p u_i) (get_unitary_goal p u_g))
-    (hz : ¬ zero_cost_reachable (justification_graph p (h1_pcf p hp))
+    --(hz : ¬ zero_cost_reachable (justification_graph p (h1_pcf p hp))
       (get_unitary_init p u_i) (get_unitary_goal p u_g)) :
     (h1_goal_value p (get_unitary_goal p u_g) : WithTop ℕ)
       ≤ graphDist
@@ -1065,7 +1095,7 @@ lemma h1_step_postfixpoint_witness {n : ℕ} (p : PlanningTask (n + 2)) (u_i : u
   · intro i
     exact h1_partition_witness_below_base p u_i u_g hp i
   · simpa only [Fin.getElem_fin, Vector.getElem_ofFn, Fin.eta] using
-      h1_witness_goal_bound p u_i u_g hp hr hz
+      h1_witness_goal_bound p u_i u_g hp --hr hz
 
 /-- **(K2) Helmert–Domshlak property (condition (b) of the reduction).**  In a recursive step of
 LM-cut, the `h_1`/`h^max` value of the goal fact decreases by at most the cut value `c_min` when the

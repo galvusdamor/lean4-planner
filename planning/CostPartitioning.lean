@@ -42,7 +42,7 @@ lemma partition_STRIPS_getElem_fields {n P : ℕ} (prob : PlanningTask n)
     ∧ (partition_STRIPS prob partitioning p).actions'[i].del = prob.actions'[i].del
     ∧ (partition_STRIPS prob partitioning p).actions'[i].name = prob.actions'[i].name := by
   unfold partition_STRIPS
-  simp [List.getElem_mapFinIdx, Action.pre, Action.add, Action.del]
+  simp [List.getElem_mapFinIdx]
 
 /-- Partitioning leaves the initial state and goal unchanged (only action costs are relabelled). -/
 lemma partition_STRIPS_init_goal {n P : ℕ} (prob : PlanningTask n)
@@ -87,7 +87,7 @@ lemma adapt_cost_of_action_to_partition_fields {n P : ℕ} (prob : PlanningTask 
     (adapt_cost_of_action_to_partition prob partitioning p a).add = a.add ∧
     (adapt_cost_of_action_to_partition prob partitioning p a).del = a.del := by
   unfold adapt_cost_of_action_to_partition; split <;>
-    simp [Action.pre, Action.add, Action.del]
+    simp
 
 /-- The cost assigned to an adapted action of `prob` is the partition value at its index. -/
 lemma adapt_cost_of_action_to_partition_cost {n P : ℕ} (prob : PlanningTask n)
@@ -193,7 +193,7 @@ private lemma partition_edge_cost_le_action {n P : ℕ} (prob : PlanningTask n)
         unfold ap partition_STRIPS
         rw [List.mem_mapFinIdx]
         refine ⟨i.val, i.isLt, ?_⟩
-        simp [Action.pre, Action.add, Action.del]
+        simp 
       have hapapp : applicable' ap f = true := by
         change applicable' prob.actions'[i.val] f = true
         exact a_app

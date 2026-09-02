@@ -34,7 +34,7 @@ private lemma satisfies'_mono {n : ℕ} (cond : VarSet n) (s t : BitVec n)
 
 /-- delete_relax_action has empty delete effects. -/
 private lemma delete_relax_action_del_empty {n : ℕ} (a : Action n) :
-    (delete_relax_action a).del = ∅ := by simp [delete_relax_action, Action.del]
+    (delete_relax_action a).del = ∅ := by simp [delete_relax_action]
 
 /-
 The successor state under delete_relax_action a from s is s ∪ a.add.

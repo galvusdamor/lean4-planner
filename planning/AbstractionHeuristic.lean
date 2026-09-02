@@ -322,7 +322,7 @@ lemma project_pattern_preserves_successor {n : ℕ} (pat : pattern n) (a : Actio
     unfold is_successor' at h_succ
     simp only [decide_eq_true_eq] at h_succ
     rw [h_succ]
-    simp [successor', VarSet.mem_iff, Action.del, Action.add]
+    simp [successor', VarSet.mem_iff]
   unfold is_successor'
   simp only [decide_eq_true_eq]
   apply BitVec.eq_of_getElem_eq
@@ -331,14 +331,10 @@ lemma project_pattern_preserves_successor {n : ℕ} (pat : pattern n) (a : Actio
   apply Bool.eq_iff_iff.mpr
   unfold successor'
   simp only [BitVec.getElem_or, BitVec.getElem_and, BitVec.getElem_not]
-  change (project_pattern_state pat v')[k] = true ↔
-    (((project_pattern_state pat v)[k] &&
-      !(project_pattern_action a pat).del.toBitVec[k]) ||
-      (project_pattern_action a pat).add.toBitVec[k]) = true
   rw [Bool.or_eq_true, Bool.and_eq_true, Bool.not_eq_true_eq_eq_false]
   rw [show (project_pattern_state pat v')[k] = true ↔ _ by simpa [x] using hstate v' x]
   rw [show (project_pattern_state pat v)[k] = true ↔ _ by simpa [x] using hstate v x]
-  simp only [project_pattern_action, Action.del, Action.add]
+  simp only [project_pattern_action]
   rw [Bool.eq_false_iff]
   have hdelbit : (project_pattern_VarSet pat a.del).toBitVec[k] = true ↔
       ∃ j ∈ a.del.toList, ∃ hj : j ∈ pat, project_pattern n pat ⟨j, hj⟩ = x := by

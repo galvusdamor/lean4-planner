@@ -262,7 +262,7 @@ noncomputable def ignf_extend {n : ℕ} (q : PlanningTask n) : _root_.Vector (Wi
 lemma ignf_extend_emb {n : ℕ} (q : PlanningTask n) (f : Fin n) :
     (ignf_extend q)[(Fin.castLE (show n ≤ n + 2 by omega) f)] = (ignf_R0 q)[f] := by
   unfold ignf_extend
-  simp only [Vector.getElem_ofFn, Fin.coe_castLE, Fin.getElem_fin, dif_pos f.isLt]
+  simp only [Vector.getElem_ofFn, Fin.val_castLE, Fin.getElem_fin, dif_pos f.isLt]
 
 /-
 `ignf_extend` value at the auxiliary fact `i`.
@@ -498,12 +498,12 @@ lemma ignf_extend_le_fix {n : ℕ} (q : PlanningTask n) (idx : Fin (n + 2)) :
   rcases eq_or_ne i.val n with h | h
   · have hbase : (h_1_base (n + 2) (i_g_normal_form q).init'.toBitVec)[i] = some 0 := by
       unfold h_1_base
-      simp only [Vector.getElem_map, Vector.getElem_finRange, ignf_init_bit]
+      simp only [ignf_init_bit]
       simp [h]
     rw [hbase, show i = (⟨n, by omega⟩ : Fin (n+2)) from Fin.ext h, ignf_extend_i]
   · have hbase : (h_1_base (n + 2) (i_g_normal_form q).init'.toBitVec)[i] = none := by
       unfold h_1_base
-      simp only [Vector.getElem_map, Vector.getElem_finRange, ignf_init_bit]
+      simp only [Vector.getElem_map, ignf_init_bit]
       simp [h]
     rw [hbase]; exact le_top
 /-- Monotonicity of `foldl max 0` over pointwise-bounded mapped lists. -/
@@ -632,10 +632,10 @@ lemma h_1_le_maxFinite_of_satisfies {n : ℕ} (q : PlanningTask n)
 lemma ignf_fix_goal_isSome {n : ℕ} (q : PlanningTask n) :
     ((ignf_RN q)[(⟨n + 1, by omega⟩ : Fin (n + 2))]).isSome
       = satisfies' q.goal' (vec_to_state n (ignf_R0 q)) := by
-  unfold satisfies';
-  rw [ ignf_RN_eq_extend, ignf_extend ];
-  simp +decide [ Fin.add_def, Nat.mod_eq_of_lt ];
-  split_ifs <;> simp_all +decide [ vec_to_state_getElem ]
+  unfold satisfies'
+  rw [ ignf_RN_eq_extend, ignf_extend ]
+  simp 
+  split_ifs <;> simp_all [ vec_to_state_getElem ]
 
 lemma ignf_fix_goal_value {n : ℕ} (q : PlanningTask n)
     (h : satisfies' q.goal' (vec_to_state n (ignf_R0 q)) = true) :
@@ -798,8 +798,8 @@ lemma h_1_of_empty_goal {n : ℕ} (prob : PlanningTask n) (s : BitVec n) (hg : p
   -- Since the goal is empty, there are no elements i in the goal. Therefore, the implication holds vacuously because there are no elements to check. We can use the fact that the goal is empty to derive a contradiction.
   intro i hi
   have := hg
-  simp_all +decide [ Finset.ext_iff ];
-  replace this := congr_arg List.toFinset this; rw [ Finset.ext_iff ] at this; specialize this i; aesop;
+  simp_all 
+  replace this := congr_arg List.toFinset this; rw [ Finset.ext_iff ] at this; specialize this i; aesop?
 
 theorem lmcut_h1_dominates {n : ℕ} (prob : PlanningTask n) (s : BitVec n)
     (plan : PlanningTask.Plan prob (convertState s)) :

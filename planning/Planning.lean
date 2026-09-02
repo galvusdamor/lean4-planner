@@ -428,9 +428,10 @@ lemma adj_of_successor {n : ℕ} {a : Action n} (prob : PlanningTask n) {s s' : 
   exact ⟨ a, ha, h_app, by unfold is_successor'; simp  ⟩
 
 
-noncomputable def successor_dec {n : ℕ} (a : Action n) (s s' : State n) (succ : Successor a s s'):
+@[instance_reducible]
+noncomputable def successor_dec {n : ℕ} (a : Action n) (s s' : State n) (_ : Successor a s s'):
   DecidablePred (Set.Mem s') :=
-  fun i => Classical.propDecidable _
+  fun _ => Classical.propDecidable _
 
 noncomputable def strips_path_to_walk {n : ℕ} (prob : PlanningTask n) {start goal : BitVec n} (path : PlanningTask.Path prob (convertState start) (convertState goal)):
     WeightedDiGraph.Walk (G:= trans_of_STRIPS prob) start goal

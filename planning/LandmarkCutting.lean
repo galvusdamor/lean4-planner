@@ -10,7 +10,7 @@ open List
 
 -- The `i_g_normal_form` construction unfolds to a sizable `STRIPS`, so some proofs about it need a
 -- larger elaboration budget than the default.
-set_option maxHeartbeats 1000000
+--set_option maxHeartbeats 1000000
 
 /-- Mapping a strictly sorted list of variables along the order embedding `Fin.castLE`
 keeps it strictly sorted. -/
@@ -63,20 +63,25 @@ private lemma PlanningTask.Path.cost_append {n : ℕ} {pt : PlanningTask n} {a b
   · simp_all [ PlanningTask.Path.cost ]
     ring
 
-/-
+/--
 In a delete relaxation every action has an empty delete effect.
 -/
 private lemma dr_action_del_empty {n : ℕ} (X : PlanningTask n) {a : Action n}
     (ha : a ∈ (delete_relaxation X).actions) : a.del = ∅ := by
-  unfold delete_relaxation at ha;
-  simp_all +decide [PlanningTask.actions];
-  unfold delete_relax_action at ha; aesop;
+  unfold delete_relaxation at ha
+  simp_all [PlanningTask.actions]
+  unfold delete_relax_action at ha
+  obtain ⟨w, h⟩ := ha
+  obtain ⟨left, right⟩ := h
+  subst right
+  simp_all only
 
+set_option maxHeartbeats 2000000
 private lemma lift_forward {n : ℕ} (prob : PlanningTask n) {S1 S2 : State n}
     (p : PlanningTask.Path (delete_relaxation prob) S1 S2)
     {T0 : State (n + 2)}
     (hi : (⟨n, by omega⟩ : Fin (n + 2)) ∈ T0)
-    (hsub : ∀ x ∈ S1, (Fin.castLE (show n ≤ n + 2 by omega) x) ∈ T0) :
+    (hsub : ∀ x ∈ S1, (Fin.castLE (show n ≤ n + 2 by lia) x) ∈ T0) :
     ∃ T2 : State (n + 2),
       (⟨n, by omega⟩ : Fin (n + 2)) ∈ T2 ∧
       (∀ x ∈ S2, (Fin.castLE (show n ≤ n + 2 by omega) x) ∈ T2) ∧
@@ -84,13 +89,26 @@ private lemma lift_forward {n : ℕ} (prob : PlanningTask n) {S1 S2 : State n}
   induction' p with a S_mid hS_mid succ rest ih generalizing T0;
   · exact ⟨ T0, hi, hsub, PlanningTask.Path.empty T0, rfl ⟩;
   · obtain ⟨a0, ha0⟩ : ∃ a0 : Action n, S_mid = delete_relax_action a0 ∧ a0 ∈ prob.actions := by
-      unfold delete_relaxation at ih; simp_all +decide [PlanningTask.actions];
-      grind;
+      unfold delete_relaxation at ih
+      simp_all [PlanningTask.actions]
+      grind
     rename_i h₁ h₂ h₃;
     -- Let `T0' := T0 ∪ emb '' (a0.add)` be the successor of `T0` under `A` (delete-relaxed: `Successor A T0 T0'` with no deletions).
     obtain ⟨A, hA⟩ : ∃ A : Action (n + 2), A = delete_relax_action (Action.mk a0.name (VarSet.ofList ((a0.pre.toList.map (Fin.castLE (by omega))) ++ [Fin.mk n (by omega)])) (VarSet.ofList (a0.add.toList.map (Fin.castLE (by omega)))) (VarSet.ofList (a0.del.toList.map (Fin.castLE (by omega)))) a0.cost) ∧ A ∈ (delete_relaxation (i_g_normal_form prob)).actions := by
-      unfold delete_relaxation i_g_normal_form; simp +decide [PlanningTask.actions] ;
-      unfold PlanningTask.actions at ha0; aesop;
+      unfold delete_relaxation i_g_normal_form
+      simp [PlanningTask.actions]
+      unfold PlanningTask.actions at ha0
+      simp_all only [Set.mem_union, Set.mem_sdiff, SetLike.mem_coe, coe_toFinset, Set.mem_setOf_eq]
+      obtain ⟨left, right⟩ := h₁
+      obtain ⟨left_1, right_1⟩ := ha0
+      subst right left_1
+      simp_all only [ge_iff_le]
+      apply Or.inr
+      apply Or.inr
+      apply Exists.intro
+      · apply And.intro
+        on_goal 2 => { rfl }
+        · simp_all only
     have hT0' : ⟨n, by omega⟩ ∈ (T0 ∪ A.add) ∧ (∀ x ∈ succ, Fin.castLE (by omega) x ∈ (T0 ∪ A.add)) := by
       constructor
       · exact Or.inl hi
@@ -109,13 +127,33 @@ private lemma lift_forward {n : ℕ} (prob : PlanningTask n) {S1 S2 : State n}
             exact mem_val_ofList.mpr (List.mem_map.mpr ⟨x, hx', rfl⟩)
           simpa [hA.1, delete_relax_action] using hm
     obtain ⟨ T2, hT2₁, hT2₂, q, hq ⟩ := h₃ hT0'.1 hT0'.2;
-    refine' ⟨ T2, hT2₁, hT2₂, PlanningTask.Path.cons A ( T0 ∪ A.add ) _ _ q, _ ⟩ <;> simp_all +decide [ PlanningTask.Path.cost ];
+    refine' ⟨ T2, hT2₁, hT2₂, PlanningTask.Path.cons A ( T0 ∪ A.add ) _ _ q, _ ⟩ <;> simp_all [ PlanningTask.Path.cost ];
     · exact hA.1 ▸ hA.2;
     · constructor;
-      · intro x hx; simp_all +decide [ delete_relax_action ] ;
-        cases h₁ ; aesop;
-      · unfold delete_relax_action; aesop;
-    · unfold delete_relax_action; aesop;
+      · intro x hx; simp_all [ delete_relax_action ] ;
+        cases h₁
+        rename_i left right
+        subst right
+        simp_all only [ge_iff_le]
+        obtain ⟨left_1, right⟩ := ha0
+        obtain ⟨left_2, right_1⟩ := hA
+        subst left_1 left_2
+        simp_all only
+        cases hx with
+        | inl h =>
+          obtain ⟨w, h⟩ := h
+          obtain ⟨left_1, right_2⟩ := h
+          subst right_2
+          apply hsub
+          apply left
+          simp_all only [SetLike.mem_coe]
+        | inr h_1 =>
+          subst h_1
+          simp_all only
+      · unfold delete_relax_action
+        simp_all only [convertVarSet_empty, Set.sdiff_empty]
+    · unfold delete_relax_action
+      simp_all only [Set.mem_union, Set.mem_sdiff, SetLike.mem_coe, true_or, true_and]
 
 /-
 The single delete-relaxed "init" step of the normal form: from the initial state (only `i`)
@@ -147,7 +185,7 @@ private lemma ignf_init_path {n : ℕ} (prob : PlanningTask n) :
         subst x
         simp [delete_relaxation, i_g_normal_form, PlanningTask.init, VarSet.mem_iff]
       · ext x
-        simp only [T, Set.mem_setOf_eq, initA, Successor, Set.mem_union,
+        simp only [T, Set.mem_setOf_eq, initA, Set.mem_union,
           SetLike.mem_coe, VarSet.mem_ofList, List.mem_map, VarSet.mem_toList_iff]
         constructor
         · intro hx
@@ -170,16 +208,18 @@ private lemma ignf_goal_path {n : ℕ} (prob : PlanningTask n) {T2 : State (n + 
     ∃ T3 : State (n + 2),
       (delete_relaxation (i_g_normal_form prob)).GoalState T3 ∧
       ∃ q : PlanningTask.Path (delete_relaxation (i_g_normal_form prob)) T2 T3, q.cost = 0 := by
-  refine' ⟨ T2 ∪ { ⟨ n + 1, by linarith ⟩ }, _, PlanningTask.Path.cons _ _ _ _ ( PlanningTask.Path.empty _ ), _ ⟩ <;> norm_num [ delete_relaxation, i_g_normal_form, PlanningTask.actions ];
-  rotate_left;
-  exact delete_relax_action ⟨ "goal", VarSet.ofList ( map ( Fin.castLE ( by omega ) ) prob.goal'.toList ), singletonVarSet ⟨ n + 1, by omega ⟩, ∅, 0 ⟩;
-  all_goals norm_num [ delete_relax_action, PlanningTask.Path.cost ];
-  · constructor <;> simp +decide [ singletonVarSet, PlanningTask.GoalState ];
-    · intro x hx; simp_all +decide [ mem_val_ofList ] ;
-      grind;
-    · ext; simp [VarSet.ofList];
-      tauto;
-  · intro x hx; simp_all +decide [ singletonVarSet ] ;
+  refine' ⟨ T2 ∪ { ⟨ n + 1, by linarith ⟩ }, _, PlanningTask.Path.cons _ _ _ _ ( PlanningTask.Path.empty _ ), _ ⟩ <;> norm_num [ delete_relaxation, i_g_normal_form, PlanningTask.actions ]
+  rotate_left
+  exact delete_relax_action ⟨ "goal", VarSet.ofList ( map ( Fin.castLE ( by omega ) ) prob.goal'.toList ), singletonVarSet ⟨ n + 1, by omega ⟩, ∅, 0 ⟩
+  all_goals norm_num [ delete_relax_action, PlanningTask.Path.cost ]
+  · constructor <;> simp [ singletonVarSet ]
+    · intro x hx; simp_all 
+      grind
+    · ext
+      simp [VarSet.ofList]
+      tauto
+  · intro x hx
+    simp_all [ singletonVarSet ]
 
 private lemma ignf_dr_plan_of_dr_plan {n : ℕ} (prob : PlanningTask n)
     (plan : PlanningTask.Plan (delete_relaxation prob) (delete_relaxation prob).init) :
@@ -197,9 +237,11 @@ private lemma ignf_dr_plan_of_dr_plan {n : ℕ} (prob : PlanningTask n)
 private lemma dr_path_mono {n : ℕ} {pt : PlanningTask n} (hdel : ∀ a ∈ pt.actions, a.del = ∅)
     {s1 s2 : State n} (p : PlanningTask.Path pt s1 s2) : s1 ⊆ s2 := by
   induction p;
-  · exact Set.Subset.rfl;
-  · rename_i a s1 s2 s3 ha succ π ih;
-    intro x hx; have := succ.2; simp_all +decide [ Finset.subset_iff, Set.subset_def ] ;
+  · exact Set.Subset.rfl
+  · rename_i a s1 s2 s3 ha succ π ih
+    intro x hx
+    have := succ.2
+    simp_all [ Set.subset_def ]
 
 private lemma ep_goal_facts {n : ℕ} (prob : PlanningTask n) {E1 E2 : State (n + 2)}
     (q : PlanningTask.Path (delete_relaxation (i_g_normal_form prob)) E1 E2)
@@ -208,16 +250,17 @@ private lemma ep_goal_facts {n : ℕ} (prob : PlanningTask n) {E1 E2 : State (n 
     ∀ x ∈ convertVarSet prob.goal', (Fin.castLE (show n ≤ n + 2 by omega) x) ∈ E2 := by
                                                   have h_goal : ∀ {s1 s2 : State (n + 2)}, (⟨n + 1, by omega⟩ : Fin (n + 2)) ∈ s2 → ∀ q : PlanningTask.Path (delete_relaxation (i_g_normal_form prob)) s1 s2, (⟨n + 1, by omega⟩ : Fin (n + 2)) ∉ s1 → ∀ x ∈ convertVarSet prob.goal', (Fin.castLE (by omega) x) ∈ s2 := by
                                                     intros s1 s2 hs2 q hs1 x hx;
-                                                    induction q <;> simp_all +decide [ Fin.castLE ];
+                                                    induction q <;> simp_all  [ Fin.castLE ];
                                                     rename_i a s1 s2 s3 π ih;
-                                                    unfold delete_relaxation at s3; simp_all +decide [ PlanningTask.actions ] ;
-                                                    unfold i_g_normal_form at s3; simp_all +decide [ PlanningTask.actions' ] ;
-                                                    rcases s3 with ⟨ a, ⟨ ⟨ b, hb, rfl ⟩ | rfl | rfl, rfl ⟩ ⟩ <;> simp_all +decide [ delete_relax_action ];
-                                                    · exact ih fun y hy => ne_of_lt ( Nat.lt_succ_of_le ( Nat.le_of_lt_succ ( by simp +decide [ Fin.ext_iff ] ) ) );
-                                                    · exact ih fun x hx => ne_of_lt ( Nat.lt_succ_of_le ( Nat.le_of_lt_succ ( by simp +decide [ Fin.ext_iff ] ) ) );
-                                                    · cases π ; simp_all +decide [ singletonVarSet ];
-                                                      rename_i h₁ h₂;
-                                                      have := dr_path_mono ( show ∀ a ∈ ( delete_relaxation ( i_g_normal_form prob ) ).actions, a.del = ∅ from ?_ ) s2; simp_all +decide [ Finset.subset_iff, Set.subset_def ] ;
+                                                    unfold delete_relaxation at s3; simp_all [ PlanningTask.actions ] ;
+                                                    unfold i_g_normal_form at s3; simp_all 
+                                                    rcases s3 with ⟨ a, ⟨ ⟨ b, hb, rfl ⟩ | rfl | rfl, rfl ⟩ ⟩ <;> simp_all [ delete_relax_action ];
+                                                    · exact ih fun y hy => ne_of_lt ( Nat.lt_succ_of_le ( Nat.le_of_lt_succ ( by simp  ) ) );
+                                                    · exact ih fun x hx => ne_of_lt ( Nat.lt_succ_of_le ( Nat.le_of_lt_succ ( by simp  ) ) );
+                                                    · cases π
+                                                      simp_all [ singletonVarSet ]
+                                                      rename_i h₁ h₂
+                                                      have := dr_path_mono ( show ∀ a ∈ ( delete_relaxation ( i_g_normal_form prob ) ).actions, a.del = ∅ from ?_ ) s2; simp_all [ Set.subset_def ] ;
                                                       · exact this _ ( Or.inl ( h₁ _ hx ) );
                                                       · grind +suggestions;
                                                   exact h_goal h2 q h1
@@ -236,8 +279,9 @@ private lemma project_cons_embedded {n : ℕ} (prob : PlanningTask n) {a : Actio
   refine' ⟨ PlanningTask.Path.cons _ _ _ _ dq, _ ⟩;
   exact delete_relax_action a;
   all_goals norm_num [ delete_relax_action, PlanningTask.Path.cost ];
-  · unfold delete_relaxation; simp +decide [ PlanningTask.actions ] ;
-    exact ⟨ a, ha, rfl ⟩;
+  · unfold delete_relaxation
+    simp [ PlanningTask.actions ]
+    exact ⟨ a, ha, rfl ⟩
   · constructor <;> aesop
 
 private lemma project_backward {n : ℕ} (prob : PlanningTask n) {E1 E2 : State (n + 2)}
@@ -260,7 +304,7 @@ private lemma project_backward {n : ℕ} (prob : PlanningTask n) {E1 E2 : State 
             obtain ⟨ D', hD', dq, hdq ⟩ := h hD ( by
               exact fun x hx => hx.elim ( fun hx => hD0 hx ) fun hx => hD ( by simpa [convertState, VarSet.mem_iff] using hx ) );
             exact ⟨ D', hD', dq, by simpa [ PlanningTask.Path.cost ] using hdq ⟩;
-          · cases π ; simp_all +decide [ Successor ];
+          · cases π ; simp_all 
             rename_i h₁ h₂ h₃; specialize h₃ hD; simp_all +decide [ delete_relax_action ] ;
             contrapose! h₃; simp_all +decide [ Set.subset_def ] ;
             constructor;
@@ -280,11 +324,11 @@ private lemma project_backward {n : ℕ} (prob : PlanningTask n) {E1 E2 : State 
             · intro D' hD' dq; specialize h₃ D' hD' dq; simp_all +decide [ PlanningTask.Path.cost ] ;
           · obtain ⟨ D', hD', dq, hdq ⟩ := ‹∀ { D0 : State n }, convertState prob.init'.toBitVec ⊆ D0 → { x | Fin.castLE _ x ∈ s3 } ⊆ D0 → ∃ D', { x | Fin.castLE _ x ∈ ha } ⊆ D' ∧ ∃ dq : PlanningTask.Path ( delete_relaxation prob ) D0 D', dq.cost ≤ ih.cost› ( show convertState prob.init'.toBitVec ⊆ D0 ∪ a0.add from by
                                                                                                                                                                                                                                                         exact Set.Subset.trans hD ( Set.subset_union_left ) ) ( show { x | Fin.castLE _ x ∈ s3 } ⊆ D0 ∪ a0.add from by
-                                                                                                                                                                                                                                                                                                                              intro x hx; cases' π with h1 h2 h3; simp_all +decide [ Finset.subset_iff, Set.subset_def ] ;
+                                                                                                                                                                                                                                                                                                                              intro x hx; cases' π with h1 h2 h3; simp_all +decide [ Set.subset_def ] ;
                                                                                                                                                                                                                                                                                                                               cases hx <;> simp_all +decide [ delete_relax_action ] );
             obtain ⟨ dq', hdq' ⟩ := project_cons_embedded prob ha0 ( show ( a0.pre : Set ( Fin n ) ) ⊆ D0 from by
-                                                                      intro x hx; have := π.1; simp_all +decide [ Finset.subset_iff, Set.subset_def ] ;
-                                                                      exact hD0 x ( by have := π.1; exact this ( by unfold delete_relax_action; simp +decide [ mem_val_ofList ] ; aesop ) ) ) dq;
+                                                                      intro x hx; have := π.1; simp_all +decide [ Set.subset_def ] ;
+                                                                      exact hD0 x ( by have := π.1; exact this ( by unfold delete_relax_action; simp ; aesop ) ) ) dq;
             exact ⟨ D', hD', dq', by simp +decide [ PlanningTask.Path.cost, hdq', hdq ] ⟩
 
 private lemma dr_plan_of_ignf_dr_plan {n : ℕ} (prob : PlanningTask n)
@@ -406,12 +450,12 @@ lemma i_g_normal_form_has_preconditions {n : ℕ} (prob : PlanningTask n)
     has_preconditions (i_g_normal_form prob) := by
   intro a ha
   unfold i_g_normal_form at ha
-  simp [PlanningTask.actions] at ha
+  simp  at ha
   rcases ha with ⟨a, ha, rfl⟩ | rfl | rfl
   · apply List.ne_nil_of_mem (a := (⟨n, by omega⟩ : Fin (n + 2)))
-    simp [VarSet.mem_toList_iff]
+    simp 
   · apply List.ne_nil_of_mem (a := (⟨n, by omega⟩ : Fin (n + 2)))
-    simp [singletonVarSet, VarSet.mem_toList_iff]
+    simp [singletonVarSet]
   · obtain ⟨x, hx⟩ := List.exists_mem_of_ne_nil prob.goal'.toList hg
     apply List.ne_nil_of_mem (a := Fin.castLE (show n ≤ n + 2 by omega) x)
     simp only [VarSet.mem_toList_iff, VarSet.mem_ofList, List.mem_map]
@@ -434,8 +478,8 @@ In the i/g normal form the only initial fact is the auxiliary variable `i` (at i
 lemma i_g_normalform_init_eq {n : ℕ} (prob : PlanningTask n) :
     (i_g_normal_form prob).init = {(⟨n, by omega⟩ : Fin (n + 2))} := by
       convert Set.ext _;
-      simp +decide [ i_g_normal_form, PlanningTask.init' ];
-      simp +decide [ PlanningTask.init, SetLike.coe ];
+      simp [ i_g_normal_form ];
+      simp [ PlanningTask.init, SetLike.coe ];
       exact fun x => ⟨ fun hx => Fin.ext hx, fun hx => hx ▸ rfl ⟩
 
 lemma i_g_normalform_is_unitary_init {n : ℕ} (prob : PlanningTask n):
@@ -448,7 +492,7 @@ lemma i_g_normalform_is_unitary_goal {n : ℕ} (prob : PlanningTask n):
       use Eq.symm (by
       rw [ eq_comm, ← Multiset.coe_card ] ;
       rw [ ← Multiset.toFinset_card_of_nodup ] <;> norm_num [ singletonVarSet ];
-      · rw [ Finset.card_eq_one ] ; use ⟨ n + 1, by omega ⟩ ; ext ; simp +decide [ mem_val_ofList ] ;
+      · rw [ Finset.card_eq_one ] ; use ⟨ n + 1, by omega ⟩ ; ext ; simp 
       · grind +suggestions)
 
 lemma init_eq_varset_toFinset {n : ℕ} (prob : PlanningTask n) :
@@ -556,23 +600,33 @@ private lemma jgraph_reach_of_dr_path {n : ℕ} (prob : PlanningTask n)
       ∀ y ∈ a0.val.add.toList.toFinset, ((↑(pcf a0) : Fin n), y) ∉ cut) →
     (∀ s ∈ S, Nonempty ((remove_edges (justification_graph prob pcf) cut).Walk src s)) →
     ∀ t ∈ T, Nonempty ((remove_edges (justification_graph prob pcf) cut).Walk src t) := by
-      intros S T p hp hsrc t ht;
-      induction' p with a s1 s2 s3 ha succ ih generalizing src;
-      · exact hsrc t ht;
-      · rename_i h₁ h₂;
+      intros S T p hp hsrc t ht
+      induction' p with a s1 s2 s3 ha succ ih generalizing src
+      · exact hsrc t ht
+      · rename_i h₁ h₂
         apply h₂ src (fun a0 ha0 => hp a0 (by
         exact List.mem_cons_of_mem _ ha0)) (fun s hs => by
-          cases ih ; simp_all +decide [ PlanningTask.Path.actionsUsed ];
-          cases hs <;> simp_all +decide [ Applicable ];
-          unfold delete_relaxation at succ; simp_all +decide [ PlanningTask.actions ] ;
+          cases ih
+          simp_all [ PlanningTask.Path.actionsUsed ]
+          cases hs <;> simp_all [ Applicable ]
+          unfold delete_relaxation at succ
+          simp_all +decide [ PlanningTask.actions ]
           obtain ⟨ a, ha, rfl ⟩ := succ; specialize hp a ha; simp_all +decide [ delete_relax_action ] ;
           obtain ⟨ p, hp ⟩ := hsrc ( pcf ⟨ a, ha ⟩ ) ( by
-            exact ‹ ( a.pre : Set ( Fin n ) ) ⊆ s2 › ( by simp [ Set.ext_iff ] ) );
-          · exact ⟨ WeightedDiGraph.Walk.cons ( by
-              unfold remove_edges; simp +decide [ justification_graph ] ;
-              exact ⟨ ⟨ a, ⟨ ha, rfl ⟩, by assumption ⟩, hp s ‹_› ⟩ ) ( WeightedDiGraph.Walk.nil ) ⟩;
+            apply Set.mem_of_mem_of_subset
+            rotate_left
+            · rename_i left _ _
+              exact left
+            · simp)
+            --exact ‹ ( a.pre : Set ( Fin n ) ) ⊆ s2 › ( by simp  ) );
+          · apply Nonempty.intro
+            apply WeightedDiGraph.Walk.cons
+            unfold remove_edges
+            simp [ justification_graph ]
+            exact ⟨ ⟨ a, ⟨ ha, rfl ⟩, by assumption ⟩, hp s ‹_› ⟩
+            use WeightedDiGraph.Walk.nil
           · exact ⟨ WeightedDiGraph.Walk.cons ‹_› ( ‹WeightedDiGraph.Walk _ _›.append ( WeightedDiGraph.Walk.cons ( by
-              exact ⟨ ⟨ ⟨ a, ha ⟩, rfl, by aesop ⟩, by aesop ⟩ ) WeightedDiGraph.Walk.nil ) ) ⟩) ht
+              exact ⟨ ⟨ ⟨ a, ha ⟩, rfl, by rename_i right h w h_1 p; subst right; simp_all only [mem_toFinset, VarSet.mem_toList, VarSet.mem_val] ⟩, by rename_i right h w h_1 p; subst right; simp_all only [not_false_eq_true] ⟩ ) WeightedDiGraph.Walk.nil ) ) ⟩) ht
 
 private lemma mem_landmark_induced {n : ℕ} (prob : PlanningTask n) (cut : List (Fin n × Fin n))
     (pcf : precondition_choice_function prob)
@@ -1158,9 +1212,9 @@ lemma path_partition_to_orig {n P : ℕ} (prob : PlanningTask n) (partitioning :
           · exact absurd ( h ( PlanningTask.Path.empty _ ) ) ( by simp +decide [ PlanningTask.Path.actionsUsed ] );
           · rename_i h₁ h₂ h₃ h₄;
             obtain ⟨a0, ha0⟩ : ∃ a0 : Action n, ∃ i : Fin prob.actions'.length, prob.actions'[i] = a0 ∧ a' = ⟨a0.name, a0.pre, a0.add, a0.del, partitioning p i⟩ := by
-              simp_all +decide [ PlanningTask.actions, partition_STRIPS ];
-              obtain ⟨ i, hi ⟩ := List.mem_iff_getElem.mp h₁;
-              obtain ⟨ hi₁, hi₂ ⟩ := hi;
+              simp_all [ partition_STRIPS ]
+              obtain ⟨ i, hi ⟩ := List.mem_iff_getElem.mp h₁
+              obtain ⟨ hi₁, hi₂ ⟩ := hi
               have h_mem : a' ∈ (prob.actions'.mapFinIdx (fun i a i_lt => Action.mk a.name a.pre a.add a.del (partitioning p ⟨i, i_lt⟩))) := by
                 exact hi₂ ▸ List.mem_dedup.mp ( List.getElem_mem _ ) |> fun h => by simpa [ partition_STRIPS ] using h;
               obtain ⟨ i, hi ⟩ := List.mem_mapFinIdx.mp h_mem;

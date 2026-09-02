@@ -75,29 +75,28 @@ private lemma planner_none_of_unsolvable {n : ℕ} (prob : PlanningTask n) (v : 
 lemma perferct_heuristic_is_perfect {n : ℕ} (prob : PlanningTask n):
   heur_is_perfect prob (perfect_heuristic prob) := by
   refine' ⟨ _, _, _ ⟩;
-  · intro v;
-    intro plan
+  · intro v plan
     unfold perfect_heuristic
-    cases h : planner ( PlanningTask.mk prob.varNames prob.actions' (varset'_of_state' v) prob.goal' ) ( fun _ => 0 ) <;> simp_all +decide [ zero_heur_admissible' ];
-    · have := planner_complete ( PlanningTask.mk prob.varNames prob.actions' (varset'_of_state' v) prob.goal' ) ( fun _ => 0 ) ( zero_heur_admissible' ( PlanningTask.mk prob.varNames prob.actions' (varset'_of_state' v) prob.goal' ) ) h; exact this.false ( cast_plan_to_replace prob v plan ) ;
+    cases h : planner ( PlanningTask.mk prob.varNames prob.actions' (varset'_of_state' v) prob.goal' ) ( fun _ => 0 ) <;> simp_all 
+    · have := planner_complete ( PlanningTask.mk prob.varNames prob.actions' (varset'_of_state' v) prob.goal' ) ( fun _ => 0 ) ( zero_heur_admissible' ( PlanningTask.mk prob.varNames prob.actions' (varset'_of_state' v) prob.goal' ) ) h; exact this.false ( cast_plan_to_replace prob v plan )
     · have := planner_optimal (PlanningTask.mk prob.varNames prob.actions' (varset'_of_state' v) prob.goal') (fun _ => 0) (zero_heur_admissible _) (by rw [h]; simp) (cast_plan_to_replace prob v plan);
-      convert this.le using 1;
-      · grind;
-      · exact cast_path_to_replace_cost prob v plan.path ▸ rfl;
-  · unfold perfect_heuristic;
-    intro v hv;
-    cases h : planner ( PlanningTask.mk prob.varNames prob.actions' (varset'_of_state' v) prob.goal' ) ( fun _ => 0 ) <;> simp_all +decide;
-    · convert planner_complete _ _ _ h;
-      · constructor <;> intro h <;> contrapose! h;
-        · trivial;
+      convert this.le using 1
+      · grind
+      · exact cast_path_to_replace_cost prob v plan.path ▸ rfl
+  · unfold perfect_heuristic
+    intro v hv
+    cases h : planner ( PlanningTask.mk prob.varNames prob.actions' (varset'_of_state' v) prob.goal' ) ( fun _ => 0 ) <;> simp_all
+    · convert planner_complete _ _ _ h
+      · constructor <;> intro h <;> contrapose! h
+        · trivial
         · exact ⟨ hv.some |> fun p => ⟨ p.last, cast_path_to_replace prob v p.path, p.goal ⟩ ⟩;
-      · exact fun goal _ p => by simp +decide [ heur_admissible' ] ;
+      · exact fun goal _ p => by simp
     · exact ⟨ cast_plan_from_replace prob v ‹_›, by exact_mod_cast cast_path_from_replace_cost prob v _ ⟩;
-  · intro v hv; unfold perfect_heuristic; exact (by
-    convert planner_none_of_unsolvable prob v hv using 1;
-    cases h : planner ( PlanningTask.mk prob.varNames prob.actions' (varset'_of_state' v) prob.goal' ) ( fun _ => 0 ) <;> simp +decide [ h ];
-    · exact h;
-    · exact h.symm ▸ by tauto;);
+  · intro v hv; unfold perfect_heuristic
+    convert planner_none_of_unsolvable prob v hv using 1
+    cases h : planner ( PlanningTask.mk prob.varNames prob.actions' (varset'_of_state' v) prob.goal' ) ( fun _ => 0 ) <;> simp [ h ]
+    · exact h
+    · exact h.symm ▸ by tauto
 
 lemma perfect_heuristic_weak_dominates_admissible {n : ℕ} (prob : PlanningTask n) (h : BitVec n → ℕ∞):
     heur_admissible prob h → ∀ s : BitVec n, Nonempty (PlanningTask.Plan prob (convertState s)) → (perfect_heuristic prob) s ≥ h s := by
@@ -177,7 +176,9 @@ private lemma path_cost_ge_heur_of_invariant {n : ℕ} (prob : PlanningTask n) (
             invariant_gives_le prob h hi start h_solvable a (mem_actions'_of_mem_actions ha) a_app
         _ ≤ (a.cost : ℕ∞) + (path'.cost : ℕ∞) := by gcongr
         _ = ((PlanningTask.Path.cons a (convertState (successor' a start)) ha succ path').cost : ℕ∞) := by
-              simp [PlanningTask.Path.cost]; push_cast; ring
+              simp [PlanningTask.Path.cost]; ring
+
+
 lemma goal_aware_of_perfect_heuristic_invariant {n : ℕ} (prob : PlanningTask n) (h : BitVec n → ℕ∞):
   perfect_heuristic_invariant prob h → heur_goal_aware prob h := by
     intro ⟨invar, _⟩ s s_is_goal
@@ -211,7 +212,7 @@ lemma Successor_of_applicable' {n : ℕ} (a : Action n) (s : BitVec n)
   refine ⟨fun i hi => (applicable'_iff a s).mp happ i (Action.mem_pre.mp hi), ?_⟩
   apply Set.ext
   intro i
-  simp [convertState, successor', VarSet.mem_iff, Action.del, Action.add]
+  simp [convertState, successor', VarSet.mem_iff]
 
 lemma solvable_non_goal_has_applicable {n : ℕ} (prob : PlanningTask n) (s : BitVec n)
     (hs : Nonempty (PlanningTask.Plan prob (convertState s)))
@@ -221,7 +222,7 @@ lemma solvable_non_goal_has_applicable {n : ℕ} (prob : PlanningTask n) (s : Bi
   have h_unsolvable : IsEmpty (PlanningTask.Plan prob (convertState s)) := by
     constructor;
     rintro ⟨ goal, path, hgoal ⟩;
-    rcases path with ( _ | ⟨ a, s', ha, succ, path ⟩ ) <;> simp_all +decide [ List.filter_eq ];
+    rcases path with ( _ | ⟨ a, s', ha, succ, path ⟩ ) <;> simp_all 
     · exact absurd ( GoalState_implies_satisfies' prob s hgoal ) ( by aesop );
     ·
       -- Apply the hypothesis `h_empty` to the action `a` and the fact that `a` is in the actions' list.
@@ -229,7 +230,7 @@ lemma solvable_non_goal_has_applicable {n : ℕ} (prob : PlanningTask n) (s : Bi
       -- Apply the hypothesis `h_empty` to the action `a` and the fact that `a` is in the actions' list to conclude that `a` is not applicable in `s`.
       apply absurd (succ.left) (by
       convert this using 1;
-      simp +decide [ applicable', Applicable ];
+      simp +decide [ applicable' ];
       simp +decide [ satisfies', Set.subset_def ])
   exact h_unsolvable.elim hs.some
 
@@ -313,7 +314,7 @@ lemma weak_invariant_gives_le {n : ℕ} (prob : PlanningTask n) (h : BitVec n �
     (a : Action n) (ha : a ∈ prob.actions') (happ : applicable' a s = true) :
     h s ≤ a.cost + h (successor' a s) := by
   convert hi s hs;
-  split_ifs <;> simp_all +decide [ List.min?_eq_some_iff ];
+  split_ifs <;> simp_all 
   · have := hi s hs; simp_all +decide [ weaker_than_perfect_heuristic_invariant ] ;
   · constructor <;> intro h;
     · exact ⟨ ⟨ a, ha, happ ⟩, by simpa [ List.min?_eq_some_iff ] using hi s hs |> fun h => by aesop ⟩;
@@ -358,7 +359,7 @@ private lemma path_cost_ge_heur_of_weak_invariant {n : ℕ} (prob : PlanningTask
             weak_invariant_gives_le prob h hi start h_solvable a (mem_actions'_of_mem_actions ha) a_app
         _ ≤ (a.cost : ℕ∞) + (path'.cost : ℕ∞) := by gcongr
         _ = ((PlanningTask.Path.cons a (convertState (successor' a start)) ha succ path').cost : ℕ∞) := by
-              simp [PlanningTask.Path.cost]; push_cast; ring
+              simp [PlanningTask.Path.cost]; ring
 lemma admissible_of_weak_perfect_heuristic_invariant {n : ℕ} (prob : PlanningTask n) (h : BitVec n → ℕ∞)
     (ga : heur_goal_aware prob h) :
   weaker_than_perfect_heuristic_invariant prob h → heur_admissible prob h := by
@@ -431,7 +432,7 @@ lemma apply_regressable_achieves_goal {n : ℕ} (a : Action n)
     convertVarSet g ⊆ (s_prev \ a.del) ∪ a.add := by
   intro i hi; by_cases hi' : i ∈ a.del <;> simp_all +decide [ regressable' ] ;
   · cases hreg i hi' <;> tauto;
-  · unfold convertVarSet varset'_of_state' regress' state'_of_varset' at hprev; simp_all +decide [ Finset.subset_iff, Set.subset_def, VarSet.mem_iff ] ;
+  · unfold convertVarSet varset'_of_state' regress' state'_of_varset' at hprev; simp_all [ Set.subset_def, VarSet.mem_iff ] ;
     grind
 
 noncomputable def cast_path_replace_goal {n : ℕ} (prob : PlanningTask n) (g1 g2 : VarSet n)
@@ -484,7 +485,6 @@ lemma pre_subset_convert_regress {n : ℕ} (a : Action n) (s : BitVec n) :
 lemma heur_le_regressable_action_cost {n : ℕ} (prob : PlanningTask n)
     (h : PlanningTask n → BitVec n → ℕ∞) (g : VarSet n) (s : BitVec n)
     (hperf : ∀ g' : VarSet n, heur_is_perfect (replace_goal prob g') (h (replace_goal prob g')))
-    (hs : Nonempty (PlanningTask.Plan (replace_goal prob g) (convertState s)))
     (a : Action n) (ha : a ∈ prob.actions')
     (hreg : regressable' a (state'_of_varset' g) = true) :
     h (replace_goal prob g) s ≤ a.cost + h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g)))) s := by
@@ -529,14 +529,14 @@ lemma heur_eq_last_action_cost {n : ℕ} (prob : PlanningTask n)
           obtain ⟨a, s_prev, prefix_path, ha, hreg, hsucc, hcost, hprev⟩ := plan_last_step_decomposition prob g plan (by
           exact hng);
           have hcost_eq : h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g)))) s ≤ prefix_path.cost := by
-            have := hperf ( varset'_of_state' ( regress' a ( state'_of_varset' g ) ) ) |>.1 s ⟨ s_prev, cast_path_replace_goal prob g ( varset'_of_state' ( regress' a ( state'_of_varset' g ) ) ) prefix_path, hprev ⟩ ; simp_all +decide [ PlanningTask.Path.cost ] ;
+            have := hperf ( varset'_of_state' ( regress' a ( state'_of_varset' g ) ) ) |>.1 s ⟨ s_prev, cast_path_replace_goal prob g ( varset'_of_state' ( regress' a ( state'_of_varset' g ) ) ) prefix_path, hprev ⟩ ; simp_all 
             exact this.trans ( by rw [ cast_path_replace_goal_cost ] );
           have hcost_eq : a.cost + h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g))) ) s ≤ h (replace_goal prob g) s := by
             convert add_le_add_left hcost_eq ( a.cost : ℕ∞ ) using 1;
             · ring;
             · exact hplan.symm.trans ( mod_cast hcost.symm );
           have hcost_eq : h (replace_goal prob g) s ≤ a.cost + h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g))) ) s := by
-            apply heur_le_regressable_action_cost prob h g s hperf hs a ha hreg;
+            apply heur_le_regressable_action_cost prob h g s hperf a ha hreg;
           exact ⟨ a, List.mem_filter.mpr ⟨ ha, hreg ⟩, le_antisymm ‹_› ‹_› ⟩
 
 def perfect_heuristic_regression_invariant {n : ℕ} (prob : PlanningTask n) (h : PlanningTask n → BitVec n → ℕ∞):=
@@ -598,7 +598,7 @@ lemma perfect_regression_invar_of_is_perfect {n : ℕ} (prob : PlanningTask n)
           rw [List.mem_map] at hx
           obtain ⟨a, ha_mem, rfl⟩ := hx
           rw [List.mem_filter] at ha_mem
-          exact heur_le_regressable_action_cost prob h _hs _s hperf _g a ha_mem.1 ha_mem.2
+          exact heur_le_regressable_action_cost prob h _hs _s hperf a ha_mem.1 ha_mem.2
   · intro isEmpty
     exact (hperf _hs).2.2 _s isEmpty
 
@@ -657,7 +657,7 @@ private lemma plan_cost_ge_heur_of_regression_aux {n : ℕ} (prob : PlanningTask
         have hcost_eq : h (replace_goal prob g) start ≤ a_last.cost + h (replace_goal prob (varset'_of_state' (regress' a_last (state'_of_varset' g)))) start := by
           apply regression_invariant_le prob h hinv g start;
           · exact ⟨ ⟨ goal, PlanningTask.Path.cons a s_mid ha succ rest, goal_state ⟩ ⟩;
-          · simp_all +decide [ satisfies' ];
+          · simp_all [ satisfies' ];
           · exact List.mem_dedup.mp ha_last;
           · exact successor_goal_implies_regressable a_last s_prev goal g succ_last goal_state;
         have hcost_eq : h (replace_goal prob (varset'_of_state' (regress' a_last (state'_of_varset' g)))) start ≤ prefix_path.cost := by
@@ -724,11 +724,11 @@ lemma weaker_regression_invariant_le {n : ℕ} (prob : PlanningTask n)
     (a : Action n) (ha : a ∈ prob.actions')
     (hreg : regressable' a (state'_of_varset' g) = true) :
     h (replace_goal prob g) s ≤ a.cost + h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g)))) s := by
-  have := hinv s g;
-  simp_all +decide [ List.min?_eq_some_iff ];
-  split_ifs at this;
+  have := hinv s g
+  simp_all
+  split_ifs at this
   · grind;
-  · cases h : List.min? ( List.map ( fun a => ( a.cost : ℕ∞ ) + h ( replace_goal prob ( varset'_of_state' ( regress' a ( state'_of_varset' g ) ) ) ) s ) ( List.filter ( fun a => regressable' a ( state'_of_varset' g ) ) prob.actions' ) ) <;> simp_all +decide [ List.min?_eq_some_iff ];
+  · cases h : List.min? ( List.map ( fun a => ( a.cost : ℕ∞ ) + h ( replace_goal prob ( varset'_of_state' ( regress' a ( state'_of_varset' g ) ) ) ) s ) ( List.filter ( fun a => regressable' a ( state'_of_varset' g ) ) prob.actions' ) ) <;> simp_all [ List.min?_eq_some_iff ];
     exact this.2.trans ( h.2 _ _ ha hreg rfl )
 
 lemma goal_aware_of_weaker_regression_invariant {n : ℕ} (prob : PlanningTask n)
@@ -737,9 +737,9 @@ lemma goal_aware_of_weaker_regression_invariant {n : ℕ} (prob : PlanningTask n
     (g : VarSet n) (s : BitVec n)
     (hsat : satisfies' g s = true) :
     h (replace_goal prob g) s = 0 := by
-  convert hinv s g |>.1 _ using 1;
-  · lia;
-  · refine' ⟨ ⟨ convertState s, PlanningTask.Path.empty _, _ ⟩ ⟩;
+  convert hinv s g |>.1 _ using 1
+  · lia
+  · refine' ⟨ ⟨ convertState s, PlanningTask.Path.empty _, _ ⟩ ⟩
     exact satisfies'_implies_GoalState (replace_goal prob g) s hsat
 
 /-
@@ -811,7 +811,8 @@ lemma bellman_regression_invariant_le {n : ℕ} (prob : PlanningTask n)
     (h_finite : h (replace_goal prob g) s ≠ ⊤) :
     h (replace_goal prob g) s ≤ a.cost + h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g)))) s := by
   specialize hinv s g;
-  split_ifs at hinv ; simp_all +decide [ List.min?_eq_some_iff ];
+  split_ifs at hinv
+  simp_all 
   exact hinv.choose_spec.2.trans ( by exact List.min_le_of_mem ( List.mem_map.mpr ⟨ a, List.mem_filter.mpr ⟨ ha, hreg ⟩, rfl ⟩ ) )
 
 lemma goal_aware_of_bellman_regression_invariant {n : ℕ} (prob : PlanningTask n)
@@ -855,10 +856,10 @@ private lemma plan_cost_ge_heur_of_bellman_regression_aux {n : ℕ} (prob : Plan
               · exact_mod_cast cast_path_replace_goal_cost prob g ( varset'_of_state' ( regress' a_last ( state'_of_varset' g ) ) ) prefix_path |> Eq.symm;
               · rw [ cast_path_replace_goal_length ] ; linarith;
               · exact predecessor_satisfies_regressed_goal a_last s_prev goal g succ_last goal_state;
-            have := hinv start g; split_ifs at this ; simp_all +decide [ List.min?_eq_some_iff ] ;
-            simp +zetaDelta at *;
-            split_ifs at this <;> simp_all +decide [ List.min?_eq_some_iff ];
-            · exact absurd ( ‹∀ a ∈ prob.actions', regressable' a ( state'_of_varset' g ) = false› a_last ha_last' ) ( by simp +decide [ hreg ] );
+            have := hinv start g; split_ifs at this ; simp_all 
+            simp at *
+            split_ifs at this <;> simp_all 
+            · exact absurd ( ‹∀ a ∈ prob.actions', regressable' a ( state'_of_varset' g ) = false› a_last ha_last' ) ( by simp [ hreg ] )
             · rename_i h₁ h₂ h₃;
               contrapose! h₃;
               refine' ne_of_lt ( lt_of_le_of_lt ( List.min_le_of_mem _ ) _ );
@@ -894,7 +895,7 @@ def h_1_heuristic_regression_invariant {n : ℕ} (prob : PlanningTask n) (h : Pl
           ∀ a ∈ prob.actions', regressable' a (state'_of_varset' g) = true →
             h (replace_goal prob g) s ≤ a.cost + h (replace_goal prob (varset'_of_state' (regress' a (state'_of_varset' g)))) s
 
-/-
+/--
 The h_1 regression invariant implies the pointwise bellman bound for single-atom goals.
 -/
 lemma h_1_implies_bellman_for_singletons {n : ℕ} (prob : PlanningTask n)
@@ -914,7 +915,7 @@ lemma h_1_implies_bellman_for_singletons {n : ℕ} (prob : PlanningTask n)
     rw [heq]
     simp
   have hi := hinv s (singletonVarSet g)
-  simp only [hng, ↓reduceIte, hlen] at hi
+  simp only [hng, hlen] at hi
   exact hi a ha hreg
 
 lemma plan_for_conjunction_gives_plan_for_atom {n : ℕ} (prob : PlanningTask n)
@@ -1056,6 +1057,7 @@ private lemma h_1_singleton_plan_cost_ge_heur_aux {n : ℕ} (prob : PlanningTask
             ≤ a_last.cost + h (replace_goal prob rg) start := hle
           _ ≤ a_last.cost + prefix_path.cost := by gcongr
           _ = ((prefix_path.cost + a_last.cost : ℕ) : ℕ∞) := by push_cast; ring
+
 private lemma h_1_any_goal_plan_cost_ge_heur {n : ℕ} (prob : PlanningTask n)
     (h : PlanningTask n → BitVec n → ℕ∞)
     (hinv : h_1_heuristic_regression_invariant prob h)

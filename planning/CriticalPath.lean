@@ -112,7 +112,7 @@ lemma updateIfCheaper_le_newCost (c : ℕ) (v : WithTop ℕ) :
     simp [updateIfCheaper]
     split_ifs with h
     · rfl
-    · push_neg at h; exact WithTop.coe_le_coe.mpr h
+    · push Not at h; exact WithTop.coe_le_coe.mpr h
 
 /-- If `updateIfCheaper` changes the current value, the result is exactly `some` of the new cost. -/
 lemma updateIfCheaper_eq_some_of_ne (c : ℕ) (v : WithTop ℕ) (h : updateIfCheaper c v ≠ v) :
@@ -318,7 +318,7 @@ lemma applicable_filter_grows {n : ℕ} (prob : PlanningTask n)
             simp_all only [Fin.getElem_fin]
             exact h_filter_eq
           · rw [h_1_step_getElem]
-            push_neg at h_add
+            push Not at h_add
             rw [dif_pos (by
               apply List.filterMap_eq_nil_iff.mpr
               intro a ha
