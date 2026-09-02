@@ -1188,13 +1188,10 @@ lemma lmcut_closure_is_genuine {n : ℕ} (prob : PlanningTask n)
       (get_unitary_init prob u_i) (get_unitary_goal prob u_g)) :
     is_disjunctive_action_landmark_for_state prob
       (get_all_equiv_delete_relaxed_actions prob (lmcut_step prob u_g pcf).1) prob.init'.toBitVec := by
-  apply delete_relaxation_landmarks_are_landmarks prob (lmcut_step prob u_g pcf).1 ?_ prob.init'.toBitVec
-  · exact lmcut_step_yields_landmark prob u_i u_g pcf i_g_not_zero_reachable
-  · rw [List.all_eq_true]
-    intro a ha
-    simpa [PlanningTask.actions] using landmark_subset_actions prob _ pcf a ha
+  apply delete_relaxation_landmarks_are_landmarks 
+  exact lmcut_step_yields_landmark prob u_i u_g pcf i_g_not_zero_reachable
 
-/-
+/--
 Transfer a plan of a cost-partitioned problem to a plan of the original problem, recording for
 each action used in the recovered plan its index in `prob.actions'` and the matching (cost-adapted)
 action in the partitioned plan.  This works because `partition_STRIPS` only relabels costs, leaving

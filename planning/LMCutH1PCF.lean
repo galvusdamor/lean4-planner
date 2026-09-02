@@ -749,7 +749,7 @@ lemma graphDist_jg_postfixpoint {n : ℕ} (prob : PlanningTask (n + 2))
   refine ⟨(↑(pcf ⟨a, ha⟩) : Fin (n + 2)), ?_, ?_⟩
   · -- the chosen precondition is indeed a precondition of `a`
     have := (pcf ⟨a, ha⟩).2
-    simp [VarSet.toList] using (Action.mem_pre.mp this)
+    simp [VarSet.toList] 
   · -- triangle inequality along the justification edge `pcf a → i`
     have hadj : jg.Adj (↑(pcf ⟨a, ha⟩) : Fin (n + 2)) i :=
       ⟨⟨a, ha⟩, rfl, by simpa using hi⟩
@@ -763,6 +763,8 @@ lemma graphDist_jg_postfixpoint {n : ℕ} (prob : PlanningTask (n + 2))
       _ ≤ graphDist jg src (↑(pcf ⟨a, ha⟩)) + (a.cost : WithTop ℕ) := by gcongr
       _ = (a.cost : WithTop ℕ) + graphDist jg src (↑(pcf ⟨a, ha⟩)) := by
             rw [add_comm]
+
+
 noncomputable def h1_partition_pcf {n : ℕ} (p : PlanningTask (n + 2)) (hp : has_preconditions p)
     (u_g : unitary_goal p) :
     precondition_choice_function
@@ -965,13 +967,16 @@ lemma h1_partition_edge_step {n : ℕ} (p : PlanningTask (n + 2)) (u_g : unitary
     rw [hxeq, h1_partition_pcf];
     convert h1_argmax_pre_congr p a.val a0 _ _ ha0_pre using 1;
   have ha0_bellman : h1_goal_value p y ≤ a0.cost + h1_goal_value p (h1_argmax_pre p a0 (hp a0 ha0_mem)) := by
-    apply h1_goal_value_bellman_argmax p a0 ha0_mem (hp a0 ha0_mem) y (by
-    simp_all 
+    apply h1_goal_value_bellman_argmax p a0 ha0_mem (hp a0 ha0_mem) y 
+    rw [← ha0_add]
+    apply List.mem_toFinset.mp at hyadd 
+    exact hyadd
   split_ifs at ha0_cost <;> simp_all +decide [ add_comm ];
   obtain ⟨ t, ht₁, ht₂ ⟩ := h1_lm'_has_goal_zone_add p u_g hp ‹_›;
   have ha0_bellman_t : h1_goal_value p (get_unitary_goal p u_g) ≤ h1_goal_value p t := by
     have := walk_of_zero_cost_reachable ( justification_graph p ( h1_pcf p hp ) ) ( mem_goal_zone_iff ( justification_graph p ( h1_pcf p hp ) ) ( get_unitary_goal p u_g ) t |>.1 ht₂ ) ; simp_all 
-    obtain ⟨ w, hw ⟩ := this; exact h1_goal_value_le_of_walk p hp w |> le_trans <| by simp +decide [ hw ] ;
+    obtain ⟨ w, hw ⟩ := this
+    exact h1_goal_value_le_of_walk p hp w |> le_trans <| by simp +decide [ hw ]
   have ha0_bellman_t : h1_goal_value p t ≤ a0.cost + h1_goal_value p (h1_argmax_pre p a0 (hp a0 ha0_mem)) := by
     apply h1_goal_value_bellman_argmax p a0 ha0_mem (hp a0 ha0_mem) t (by
     exact List.mem_toFinset.mp ht₁);
@@ -1016,11 +1021,7 @@ directly into the goal zone (it always adds a goal-zone fact, being relax-equiva
 cut operator) without increasing cost, so a minimum-cost walk crosses — and is discounted — only
 once, by at most `minCost` (`minCost_le_cut_edge_payload`). -/
 lemma h1_witness_goal_bound {n : ℕ} (p : PlanningTask (n + 2)) (u_i : unitary_init p)
-    (u_g : unitary_goal p) (hp : has_preconditions p)
-    --(hr : reachable (justification_graph p (h1_pcf p hp))
-      (get_unitary_init p u_i) (get_unitary_goal p u_g))
-    --(hz : ¬ zero_cost_reachable (justification_graph p (h1_pcf p hp))
-      (get_unitary_init p u_i) (get_unitary_goal p u_g)) :
+    (u_g : unitary_goal p) (hp : has_preconditions p):
     (h1_goal_value p (get_unitary_goal p u_g) : WithTop ℕ)
       ≤ graphDist
           (justification_graph
@@ -1070,11 +1071,7 @@ property is the general Bellman fact `graphDist_jg_postfixpoint`; the below-base
 `h1_partition_witness_below_base`; the goal bound is the single-crossing crux `h1_witness_goal_bound`.
 Via `h_1_iter_fix_ge_of_postfixpoint` this yields `h^max_{p'}(g) ≥ h^max_p(g) − m`, condition (b). -/
 lemma h1_step_postfixpoint_witness {n : ℕ} (p : PlanningTask (n + 2)) (u_i : unitary_init p)
-    (u_g : unitary_goal p) (hp : has_preconditions p)
-    (hr : reachable (justification_graph p (h1_pcf p hp))
-      (get_unitary_init p u_i) (get_unitary_goal p u_g))
-    (hz : ¬ zero_cost_reachable (justification_graph p (h1_pcf p hp))
-      (get_unitary_init p u_i) (get_unitary_goal p u_g)) :
+    (u_g : unitary_goal p) (hp : has_preconditions p):
     ∃ w : _root_.Vector (WithTop ℕ) (n + 2),
       (∀ i : Fin (n + 2),
         w[i] ≤ (h_1_step (n + 2)
@@ -1095,7 +1092,7 @@ lemma h1_step_postfixpoint_witness {n : ℕ} (p : PlanningTask (n + 2)) (u_i : u
   · intro i
     exact h1_partition_witness_below_base p u_i u_g hp i
   · simpa only [Fin.getElem_fin, Vector.getElem_ofFn, Fin.eta] using
-      h1_witness_goal_bound p u_i u_g hp --hr hz
+      h1_witness_goal_bound p u_i u_g hp 
 
 /-- **(K2) Helmert–Domshlak property (condition (b) of the reduction).**  In a recursive step of
 LM-cut, the `h_1`/`h^max` value of the goal fact decreases by at most the cut value `c_min` when the
@@ -1112,14 +1109,12 @@ value `h^max_{p'}(g)` through `h1_goal_value_eq_fixpoint`. -/
 lemma h1_goal_value_step_bound {n : ℕ} (p : PlanningTask (n + 2)) (u_i : unitary_init p)
     (u_g : unitary_goal p) (hp : has_preconditions p)
     (hr : reachable (justification_graph p (h1_pcf p hp))
-      (get_unitary_init p u_i) (get_unitary_goal p u_g))
-    (hz : ¬ zero_cost_reachable (justification_graph p (h1_pcf p hp))
-      (get_unitary_init p u_i) (get_unitary_goal p u_g)) :
+      (get_unitary_init p u_i) (get_unitary_goal p u_g)):
     h1_goal_value p (get_unitary_goal p u_g) ≤
       (lmcut_step p u_g (h1_pcf p hp)).2.1
         + h1_goal_value (partition_STRIPS p (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩)
             (get_unitary_goal p u_g) := by
-  obtain ⟨w, hpf, hbase, hwg⟩ := h1_step_postfixpoint_witness p u_i u_g hp hr hz
+  obtain ⟨w, hpf, hbase, hwg⟩ := h1_step_postfixpoint_witness p u_i u_g hp 
   -- The post-fixpoint witness lies below the partition-`1` `h^max` fixpoint at the goal.
   have hle := h_1_iter_fix_ge_of_postfixpoint
       (partition_STRIPS p (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩)
@@ -1187,8 +1182,12 @@ lemma lmcut_inner_ge_h1_goal {n : ℕ} (M : ℕ) :
             get_unitary_goal (partition_STRIPS p (lmcut_step p u_g (h1_pcf p hp)).2.2 ⟨1, by omega⟩)
               u_g = get_unitary_goal p u_g := rfl
         rw [hgoal_eq] at hIH
-        have hK2 := h1_goal_value_step_bound p u_i u_g hp hr hz
-        exact le_trans ( mod_cast hK2 ) ( add_le_add le_rfl hIH )
+        have hK2 := h1_goal_value_step_bound p u_i u_g hp
+        apply le_trans
+        rotate_left
+        · exact add_le_add le_rfl hIH
+        · rw [← Nat.cast_add, Nat.cast_le]
+          apply hK2 hr
     · exact ((lmcut_no_plan_of_not_reachable p u_i u_g (h1_pcf p hp) hr).false plan).elim
 
 /-- `h_1_iter_fix` ignores the initial state (it depends only on the actions), so `set_init` does not

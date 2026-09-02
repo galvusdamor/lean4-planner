@@ -1,4 +1,4 @@
-import planning.Planner
+import planning.PlannerGen
 import planning.H1
 
 import Strips.Parser
@@ -16,8 +16,8 @@ def runPlanner (dom : String) (heur : String) : IO Unit := do
     | "h1" => fun s => STRIPS.h_1 prob s
     | "h0" => fun _ => 0
     | _ => fun _ => 0
-
-    match STRIPS.planner prob h with
+    dbg_trace "foo"
+    match STRIPS.planner_gen prob h with
     | some plan =>
       IO.println "Solution found!"
       IO.println (pathToString plan.path)

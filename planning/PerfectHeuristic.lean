@@ -272,7 +272,6 @@ lemma perfect_achieves_min {n : ℕ} (prob : PlanningTask n) (h : BitVec n → �
 
 lemma perfect_le_action_succ_general {n : ℕ} (prob : PlanningTask n) (h : BitVec n → ℕ∞)
     (hp : heur_is_perfect prob h) (s : BitVec n)
-    (hs : Nonempty (PlanningTask.Plan prob (convertState s)))
     (a : Action n) (ha : a ∈ prob.actions')
     (happ : applicable' a s = true) :
     h s ≤ a.cost + h (successor' a s) := by

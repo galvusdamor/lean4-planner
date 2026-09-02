@@ -503,7 +503,7 @@ lemma ignf_extend_le_fix {n : ℕ} (q : PlanningTask n) (idx : Fin (n + 2)) :
     rw [hbase, show i = (⟨n, by omega⟩ : Fin (n+2)) from Fin.ext h, ignf_extend_i]
   · have hbase : (h_1_base (n + 2) (i_g_normal_form q).init'.toBitVec)[i] = none := by
       unfold h_1_base
-      simp only [Vector.getElem_map, ignf_init_bit]
+      simp only [ignf_init_bit]
       simp [h]
     rw [hbase]; exact le_top
 /-- Monotonicity of `foldl max 0` over pointwise-bounded mapped lists. -/
@@ -799,7 +799,10 @@ lemma h_1_of_empty_goal {n : ℕ} (prob : PlanningTask n) (s : BitVec n) (hg : p
   intro i hi
   have := hg
   simp_all 
-  replace this := congr_arg List.toFinset this; rw [ Finset.ext_iff ] at this; specialize this i; aesop?
+  replace this := congr_arg List.toFinset this
+  rw [ Finset.ext_iff ] at this
+  specialize this i
+  simp_all only [List.mem_toFinset, VarSet.mem_toList, VarSet.mem_val, List.toFinset_nil, Finset.notMem_empty, iff_false, not_true_eq_false]
 
 theorem lmcut_h1_dominates {n : ℕ} (prob : PlanningTask n) (s : BitVec n)
     (plan : PlanningTask.Plan prob (convertState s)) :

@@ -65,7 +65,7 @@ lemma sublist_of_map_sublist_of_injective {α β : Type*} {f : α → β} (hf : 
 
 /-- `BitVec.toNat` is injective on `BitVec n = BitVec n`. -/
 lemma toNat_injective_state : Function.Injective (BitVec.toNat : BitVec n → ℕ) :=
-  BitVec.toNat_injective
+   fun _ _ h => BitVec.eq_of_toNat_eq h
 
 /-- `FinEnum.toList` of an enumeration built from a duplicate-free exhaustive list returns that
 list unchanged. -/
