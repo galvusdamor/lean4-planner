@@ -1,6 +1,7 @@
 -- This module serves as the root of the `pddl` library:
 -- a parser, a formal (lifted) semantics for a fragment of PDDL, and a verified grounder.
 import pddl.Sexp
+import pddl.SexpRoundTrip
 import pddl.Ast
 import pddl.Parser
 import pddl.Printer
@@ -19,4 +20,12 @@ import pddl.Grounding.Positive
 import pddl.Grounding.Match
 import pddl.Grounding.Reach
 import pddl.Grounding.Solve
+import pddl.Grounding.Unconditional
+import pddl.Grounding.GoalSplit
 import pddl.SolveExamples
+import pddl.Grounding.SolveHeur
+import pddl.Grounding.SolveFull
+import pddl.Grounding.Optimal
+import pddl.SolveFullExamples
+import pddl.PlanFile
+import pddl.PlanFileExamples

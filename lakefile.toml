@@ -29,3 +29,15 @@ root = "Planner.Main"
 [[lean_exe]]
 name = "pddlparse"
 root = "PddlParse.Main"
+
+[[lean_exe]]
+name = "lmcutprobe"
+root = "Bench.LmcutProbe"
+
+[[lean_exe]]
+name = "varsetprobe"
+root = "Bench.VarSetProbe"
+
+[[lean_exe]]
+name = "letprobe"
+root = "Bench.LetProbe"

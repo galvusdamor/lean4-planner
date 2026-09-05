@@ -1,6 +1,6 @@
 import pddl.Grounding.Positive
 import pddl.Grounding.Reach
-import planning.PlannerHeap
+import planning.PlannerHeapLazy
 
 /-!
 # The end to end PDDL solver: grounding plus the STRIPS planner of `planning`
@@ -10,14 +10,14 @@ This module closes the chain
 ```
 PDDL source text --parse--> Instance --ground--> GroundTask --to STRIPS--> STRIPS.PlanningTask
                                                                                   |
-                                                                        planner_heap_fast
+                                                                   planner_heap_lazy_fast
                                                                                   |
                                                                                 plan
 ```
 
 No search is implemented here: the search is the A\* of the `planning` library
-(`STRIPS.planner_heap_fast`, see `planning.PlannerHeap`), run on the `STRIPS.PlanningTask`
-produced by the verified grounder.  What this module adds is
+(`STRIPS.planner_heap_lazy_fast`, see `planning.PlannerHeapLazy`), run on the
+`STRIPS.PlanningTask` produced by the verified grounder.  What this module adds is
 
 * `PDDL.GroundTask.opsOfPath`, which reads a path of the STRIPS task back as a list of
   ground operators of the ground task, together with its correctness proof
@@ -38,7 +38,15 @@ and yield the outcome `unknown`; nothing is claimed for them.
 The heuristic passed to A\* is the blind heuristic `fun _ => 0`, so the search is a
 uniform-cost search and the plans returned are cost optimal; the `planning` library's
 heuristics can be plugged in instead (they must be admissible for
-`STRIPS.planner_heap_fast_complete` to apply).
+`STRIPS.planner_heap_lazy_fast_complete` to apply).  For a heuristic that is not free to
+evaluate, use `STRIPS.planner_cached` (see `planning.PlannerCached`) instead of
+`STRIPS.planner_heap_lazy_fast`: it memoises the heuristic and returns the same plan.  With
+the blind heuristic the cache is pure overhead, which is why it is not used here.
+
+The solving functions take an optional argument `te`: if it is non-zero, the search prints a
+progress line on stderr every `te` expansions.  It is passed to `dbg_trace`, which is the
+identity function, so it does not change any result — all statements below are proved for
+every `te`.
 -/
 
 namespace PDDL
@@ -120,20 +128,22 @@ theorem planOps_isPlan {T : GroundTask} (hready : T.StripsReady)
 
 /-- **Solving a STRIPS-ready ground task** with the A\* of the `planning` library, run on the
 translation `GroundTask.toSTRIPS` with the heuristic `heur`. -/
-def solveStripsWith (T : GroundTask) (heur : BitVec T.numVars → ℕ∞) : Option (List GroundOp) :=
-  (STRIPS.planner_heap_fast T.toSTRIPS heur).map T.planOps
+def solveStripsWith (T : GroundTask) (heur : BitVec T.numVars → ℕ∞) (te : ℕ := 0) :
+    Option (List GroundOp) :=
+  (STRIPS.planner_heap_lazy_fast T.toSTRIPS heur te).map T.planOps
 
 /-- **Solving a STRIPS-ready ground task** with the A\* of the `planning` library and the
 blind heuristic, i.e. by a uniform-cost search. -/
-def solveStrips (T : GroundTask) : Option (List GroundOp) := T.solveStripsWith (fun _ => 0)
+def solveStrips (T : GroundTask) (te : ℕ := 0) : Option (List GroundOp) :=
+  T.solveStripsWith (fun _ => 0) te
 
 /-- **Soundness**: the operator sequence returned by `solveStripsWith` is a plan of the
 ground task, whatever heuristic was used. -/
 theorem solveStripsWith_isPlan {T : GroundTask} (hready : T.StripsReady)
-    {heur : BitVec T.numVars → ℕ∞} {π : List GroundOp}
-    (h : T.solveStripsWith heur = some π) : T.IsPlan π := by
+    {heur : BitVec T.numVars → ℕ∞} {te : ℕ} {π : List GroundOp}
+    (h : T.solveStripsWith heur te = some π) : T.IsPlan π := by
   unfold solveStripsWith at h
-  cases hp : STRIPS.planner_heap_fast T.toSTRIPS heur with
+  cases hp : STRIPS.planner_heap_lazy_fast T.toSTRIPS heur te with
   | none => rw [hp] at h; simp at h
   | some p =>
     rw [hp, Option.map_some, Option.some.injEq] at h
@@ -143,27 +153,27 @@ theorem solveStripsWith_isPlan {T : GroundTask} (hready : T.StripsReady)
 /-- **Completeness**: if `solveStripsWith` returns nothing and the heuristic is admissible,
 the ground task is unsolvable. -/
 theorem solveStripsWith_unsolvable {T : GroundTask} (hready : T.StripsReady)
-    {heur : BitVec T.numVars → ℕ∞} (hadm : STRIPS.heur_admissible' T.toSTRIPS heur)
-    (h : T.solveStripsWith heur = none) : ¬ T.Solvable := by
-  have hnone : STRIPS.planner_heap_fast T.toSTRIPS heur = none := by
+    {heur : BitVec T.numVars → ℕ∞} {te : ℕ} (hadm : STRIPS.heur_admissible' T.toSTRIPS heur)
+    (h : T.solveStripsWith heur te = none) : ¬ T.Solvable := by
+  have hnone : STRIPS.planner_heap_lazy_fast T.toSTRIPS heur te = none := by
     unfold solveStripsWith at h
-    cases hp : STRIPS.planner_heap_fast T.toSTRIPS heur with
+    cases hp : STRIPS.planner_heap_lazy_fast T.toSTRIPS heur te with
     | none => rfl
     | some p => rw [hp] at h; simp at h
-  have hempty := STRIPS.planner_heap_fast_complete T.toSTRIPS _ hadm hnone
+  have hempty := STRIPS.planner_heap_lazy_fast_complete T.toSTRIPS _ te hadm hnone
   rw [← strips_solvable_iff hready]
   rintro ⟨p⟩
   exact hempty.false p
 
 /-- **Soundness**: the operator sequence returned by `solveStrips` is a plan of the ground
 task. -/
-theorem solveStrips_isPlan {T : GroundTask} (hready : T.StripsReady) {π : List GroundOp}
-    (h : T.solveStrips = some π) : T.IsPlan π :=
+theorem solveStrips_isPlan {T : GroundTask} (hready : T.StripsReady) {te : ℕ}
+    {π : List GroundOp} (h : T.solveStrips te = some π) : T.IsPlan π :=
   solveStripsWith_isPlan hready h
 
 /-- **Completeness**: if `solveStrips` returns nothing, the ground task is unsolvable. -/
-theorem solveStrips_unsolvable {T : GroundTask} (hready : T.StripsReady)
-    (h : T.solveStrips = none) : ¬ T.Solvable :=
+theorem solveStrips_unsolvable {T : GroundTask} (hready : T.StripsReady) {te : ℕ}
+    (h : T.solveStrips te = none) : ¬ T.Solvable :=
   solveStripsWith_unsolvable hready (STRIPS.zero_heur_admissible' _) h
 
 end GroundTask
@@ -194,13 +204,13 @@ def stripsTask (I : Instance) (groundFuel : Nat := 1000) : Option GroundTask :=
 
 /-- **The PDDL solver**: ground the instance, translate the ground task to a
 `STRIPS.PlanningTask` and run the A\* of the `planning` library on it. -/
-def solveOutcome (I : Instance) (groundFuel : Nat := 1000) : SolveOutcome :=
+def solveOutcome (I : Instance) (groundFuel : Nat := 1000) (te : ℕ := 0) : SolveOutcome :=
   if I.domain.typesWellFormedB then
     match groundReachable I groundFuel with
     | none => .unknown
     | some T =>
       if T.unconditionalB && T.conjunctiveGoalB && T.negFreshB then
-        match T.toPositive.solveStrips with
+        match T.toPositive.solveStrips te with
         | some π => .plan (π.map (·.action))
         | none => .unsolvable
       else .unknown
@@ -216,8 +226,8 @@ theorem GroundTask.stripsReady_toPositive_of_checks {T : GroundTask}
 
 /-- **Soundness of the solver**: whenever it returns an action sequence, that sequence is a
 plan of the lifted PDDL instance. -/
-theorem solveOutcome_isPlan {I : Instance} {groundFuel : Nat} {σ : List GroundAction}
-    (h : solveOutcome I groundFuel = .plan σ) : I.IsPlan σ := by
+theorem solveOutcome_isPlan {I : Instance} {groundFuel : Nat} {te : ℕ}
+    {σ : List GroundAction} (h : solveOutcome I groundFuel te = .plan σ) : I.IsPlan σ := by
   unfold solveOutcome at h
   split at h
   · rename_i hwf
@@ -230,7 +240,7 @@ theorem solveOutcome_isPlan {I : Instance} {groundFuel : Nat} {σ : List GroundA
       · rw [if_pos hchk] at h
         have huc : T.Unconditional := GroundTask.unconditionalB_iff.1 (by simp_all)
         have hfresh : T.NegFresh := GroundTask.negFreshB_iff.1 (by simp_all)
-        cases hs : T.toPositive.solveStrips with
+        cases hs : T.toPositive.solveStrips te with
         | none => rw [hs] at h; simp at h
         | some π =>
           rw [hs] at h
@@ -247,8 +257,8 @@ theorem solveOutcome_isPlan {I : Instance} {groundFuel : Nat} {σ : List GroundA
 
 /-- **Completeness of the solver**: whenever it reports that the instance is unsolvable, the
 lifted PDDL instance really has no plan. -/
-theorem solveOutcome_unsolvable {I : Instance} {groundFuel : Nat}
-    (h : solveOutcome I groundFuel = .unsolvable) : ¬ I.Solvable := by
+theorem solveOutcome_unsolvable {I : Instance} {groundFuel : Nat} {te : ℕ}
+    (h : solveOutcome I groundFuel te = .unsolvable) : ¬ I.Solvable := by
   unfold solveOutcome at h
   split at h
   · rename_i hwf
@@ -261,7 +271,7 @@ theorem solveOutcome_unsolvable {I : Instance} {groundFuel : Nat}
       · rw [if_pos hchk] at h
         have huc : T.Unconditional := GroundTask.unconditionalB_iff.1 (by simp_all)
         have hfresh : T.NegFresh := GroundTask.negFreshB_iff.1 (by simp_all)
-        cases hs : T.toPositive.solveStrips with
+        cases hs : T.toPositive.solveStrips te with
         | some π => rw [hs] at h; simp at h
         | none =>
           rw [groundReachable_solvable_iff hwf hT,
@@ -272,15 +282,16 @@ theorem solveOutcome_unsolvable {I : Instance} {groundFuel : Nat}
   · simp at h
 
 /-- The solver, returning only the plan it found (if any). -/
-def solveChecked (I : Instance) (groundFuel : Nat := 1000) : Option (List GroundAction) :=
-  match solveOutcome I groundFuel with
+def solveChecked (I : Instance) (groundFuel : Nat := 1000) (te : ℕ := 0) :
+    Option (List GroundAction) :=
+  match solveOutcome I groundFuel te with
   | .plan σ => some σ
   | _ => none
 
 /-- **Unconditional soundness of the solver**: every action sequence returned by
 `solveChecked` is a plan of the lifted PDDL instance. -/
-theorem solveChecked_isPlan {I : Instance} {groundFuel : Nat} {σ : List GroundAction}
-    (h : solveChecked I groundFuel = some σ) : I.IsPlan σ := by
+theorem solveChecked_isPlan {I : Instance} {groundFuel : Nat} {te : ℕ}
+    {σ : List GroundAction} (h : solveChecked I groundFuel te = some σ) : I.IsPlan σ := by
   unfold solveChecked at h
   split at h
   · rename_i σ' hσ'

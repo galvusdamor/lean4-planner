@@ -1,6 +1,7 @@
 import SearchAlgorithms.NatGraph
 import Strips.PlanningTask
 import Mathlib.Data.Set.Card
+import planning.BitScan
 --import Mathlib.Basic.Logic.Lemmas
 
 namespace STRIPS
@@ -38,6 +39,25 @@ instance instFinEnumBitVec {n : ℕ} : FinEnum (BitVec n) :=
 /-- Enumerate the variables in a runtime variable set. -/
 def VarSet.val {n : ℕ} (V : VarSet n) : List (Fin n) :=
   (List.finRange n).filter (fun i => i ∈ V)
+
+/-- **Enumerating a variable set by scanning its bit vector one machine word at a time.**
+
+The filter of `VarSet.val` tests every one of the `n` variables, and each test shifts the whole
+bit vector, so it costs `Θ(n²/64)` machine words; `bitScan` (see `planning.BitScan`) extracts
+one 64-bit word per shift and skips a word without set bits in a single test.  Since
+`VarSet.val` is what `VarSet.toList` enumerates, this is the hottest primitive of the
+development: it is used by the `h^max` fixpoint, by the LM-cut precondition-choice function and
+by the successor generator. -/
+def VarSet.valFast {n : ℕ} (V : VarSet n) : List (Fin n) := bitScan V.toBitVec
+
+/-- **The scan enumerates the variable set.** -/
+@[csimp] theorem VarSet.val_eq_fast : @VarSet.val = @VarSet.valFast := by
+  funext n V
+  rw [VarSet.valFast, bitScan_eq, VarSet.val]
+  apply List.filter_congr
+  intro i _
+  rw [Bool.eq_iff_iff, decide_eq_true_iff, VarSet.mem_iff, Fin.getElem_fin,
+    BitVec.getElem_eq_testBit_toNat V.toBitVec i.val i.isLt]
 
 @[simp] lemma VarSet.mem_val {n : ℕ} {V : VarSet n} {i : Fin n} :
     i ∈ V.val ↔ i ∈ V := by simp [VarSet.val]
@@ -192,11 +212,45 @@ lemma _root_.BitVec.ncard_convertState_eq_toList_length {n : ℕ} (s : BitVec n)
 def satisfies' {n : ℕ} (cond : VarSet n) (state : BitVec n) : Bool :=
   decide (∀ i ∈ cond.val, state[i.val])
 
-def applicable' {n : ℕ} (a : Action n) (state : BitVec n) : Bool :=
-  satisfies' a.pre state
-
 @[simp] lemma satisfies'_iff {n : ℕ} (cond : VarSet n) (state : BitVec n) :
     satisfies' cond state = true ↔ ∀ i ∈ cond.val, state[i.val] := by simp [satisfies']
+
+/-- Bit-parallel implementation of `satisfies'`: a state satisfies a condition set iff the
+condition bits are a subset of the state bits, which is one bitwise `and` and one comparison.
+
+The declarative `satisfies'` enumerates `cond.val`, and `VarSet.val` builds and filters
+`List.finRange n`, so evaluating it costs `Θ(n)` list allocations *per call*; in a search this
+is by far the dominant cost, because the goal test and every applicability test go through it.
+The two functions are equal (`satisfies'_eq_fast`), and the equation is installed with
+`@[csimp]`, so the compiler uses this implementation for `satisfies'` everywhere and no result
+about `satisfies'` has to change. -/
+def satisfies'_fast {n : ℕ} (cond : VarSet n) (state : BitVec n) : Bool :=
+  (cond.toBitVec &&& state) == cond.toBitVec
+
+/-- `satisfies'` is the bit-parallel `satisfies'_fast`. -/
+@[csimp] theorem satisfies'_eq_fast : @satisfies' = @satisfies'_fast := by
+  funext n cond state
+  rw [Bool.eq_iff_iff, satisfies'_iff]
+  simp only [satisfies'_fast, beq_iff_eq, BitVec.eq_of_getElem_eq_iff, BitVec.getElem_and]
+  constructor
+  · intro h i hi
+    by_cases hc : cond.toBitVec[i] = true
+    · have hmem : (⟨i, hi⟩ : Fin n) ∈ cond.val := by
+        simp only [VarSet.mem_val, VarSet.mem_iff]
+        exact hc
+      simp [hc, h ⟨i, hi⟩ hmem]
+    · simp only [Bool.not_eq_true] at hc
+      simp [hc]
+  · intro h i hi
+    have hc : cond.toBitVec[i.val] = true := by
+      simpa only [VarSet.mem_val, VarSet.mem_iff, Fin.getElem_fin] using hi
+    have h' := h i.val i.isLt
+    rw [hc] at h'
+    simpa using h'
+
+
+def applicable' {n : ℕ} (a : Action n) (state : BitVec n) : Bool :=
+  satisfies' a.pre state
 
 lemma applicable'_iff {n : ℕ} (a : Action n) (state : BitVec n) :
     applicable' a state = true ↔ ∀ i ∈ a.pre.val, state[i.val] := by simp [applicable']

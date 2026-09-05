@@ -1,0 +1,3 @@
+; a plan for pddl/test/blocks-lite-problem.pddl, in IPC syntax
+(pick-up a)
+(stack a b)

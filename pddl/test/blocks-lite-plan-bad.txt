@@ -1,0 +1,2 @@
+; not a plan: the hand is not holding a
+(stack a b)

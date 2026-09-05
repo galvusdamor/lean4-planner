@@ -1,3 +1,4 @@
+import planning.GraphClosure
 import planning.Landmark
 import planning.CostPartitioning
 import Mathlib.Tactic.Ring
@@ -556,6 +557,212 @@ def justification_graph {n : ℕ} (prob : PlanningTask n) (pcf : precondition_ch
   WeightedDiGraph.mk dg cost dg_dec
 
 
+
+/-! ## A faster implementation of the justification graph
+
+`justification_graph` decides an adjacency query `Adj f t` by an existential over *all*
+actions of the task, building `a.add.toList` (a filter over all facts) and its `Finset` for
+each of them, and it filters the action list again for every edge cost.  Since the LM-cut
+heuristic runs one A* over this graph from *every* fact (`goal_zone`), and each of those
+searches tests adjacency for every pair of facts, this query is the hot spot of the whole
+heuristic.
+
+The following computes the same graph from data extracted **once** per graph: for every fact
+`f` the list of actions whose chosen precondition is `f` (`jgBuckets`), and the union of their
+add lists as a bit vector (`jgAdd`), so that an adjacency query is a single bit test.
+`justification_graph_eq_fast` states that the result *is* `justification_graph`, and is
+installed with `@[csimp]`, so the compiler uses it everywhere and no statement changes. -/
+
+
+/-! ### The data extracted once -/
+
+/-- For every fact `f`, the actions of `prob` whose chosen precondition is `f`. -/
+def jgBuckets (prob : PlanningTask n) (pcf : precondition_choice_function prob) :
+    _root_.Vector (List {b : Action n // b ∈ prob.actions'}) n :=
+  Vector.ofFn (fun f => prob.actions'.attach.filter (fun a => decide (f = (↑(pcf a) : Fin n))))
+
+lemma jgBuckets_get (prob : PlanningTask n) (pcf : precondition_choice_function prob) (f : Fin n) :
+    (jgBuckets prob pcf)[f] =
+      prob.actions'.attach.filter (fun a => decide (f = (↑(pcf a) : Fin n))) := by
+  simp [jgBuckets]
+
+lemma mem_jgBuckets {prob : PlanningTask n} {pcf : precondition_choice_function prob} {f : Fin n}
+    {a : {b : Action n // b ∈ prob.actions'}} :
+    a ∈ (jgBuckets prob pcf)[f] ↔ f = (↑(pcf a) : Fin n) := by
+  rw [jgBuckets_get]
+  simp [List.mem_filter, List.mem_attach]
+
+/-! #### Distributing the actions in one pass
+
+`jgBuckets` evaluates the precondition-choice function once per (fact, action) pair.  The same
+buckets are obtained by walking the action list once and putting every action into the bucket of
+its chosen precondition, which evaluates the choice function once per *action*. -/
+
+/-- Distribute a list into `n` buckets according to `key`, keeping the order of the list. -/
+def bucketsOfList {α : Type} (key : α → Fin n) (l : List α) : _root_.Vector (List α) n :=
+  l.foldr (fun a acc => acc.set (key a) (a :: acc[(key a : Fin n)])) (Vector.replicate n [])
+
+lemma bucketsOfList_get {α : Type} (key : α → Fin n) (f : Fin n) :
+    ∀ l : List α, (bucketsOfList key l)[f] = l.filter (fun a => decide (f = key a)) := by
+  have haux : ∀ (l : List α) (init : _root_.Vector (List α) n),
+      (l.foldr (fun a acc => acc.set (key a) (a :: acc[(key a : Fin n)])) init)[f]
+        = l.filter (fun a => decide (f = key a)) ++ init[f] := by
+    intro l
+    induction l with
+    | nil => intro init; simp
+    | cons a l ih =>
+        intro init
+        rw [List.foldr_cons]
+        simp only [Fin.getElem_fin, Vector.getElem_set, List.filter_cons]
+        by_cases h : f = key a
+        · subst h
+          simpa using ih init
+        · have h' : (key a : Fin n).val ≠ (f : Fin n).val := fun hc => h (Fin.ext hc.symm)
+          simp only [h, h', decide_false, Bool.false_eq_true, if_false, ite_false]
+          simpa using ih init
+  intro l
+  rw [bucketsOfList, haux l]
+  simp
+
+/-- **The buckets, computed in one pass over the action list.** -/
+def jgBucketsFast (prob : PlanningTask n) (pcf : precondition_choice_function prob) :
+    _root_.Vector (List {b : Action n // b ∈ prob.actions'}) n :=
+  bucketsOfList (fun a => (↑(pcf a) : Fin n)) prob.actions'.attach
+
+@[csimp] theorem jgBuckets_eq_fast : @jgBuckets = @jgBucketsFast := by
+  funext n prob pcf
+  apply Vector.ext
+  intro f hf
+  have h1 : (jgBuckets prob pcf)[f]'hf
+      = prob.actions'.attach.filter (fun a => decide ((⟨f, hf⟩ : Fin n) = (↑(pcf a) : Fin n))) :=
+    jgBuckets_get prob pcf ⟨f, hf⟩
+  have h2 : (jgBucketsFast prob pcf)[f]'hf
+      = prob.actions'.attach.filter (fun a => decide ((⟨f, hf⟩ : Fin n) = (↑(pcf a) : Fin n))) :=
+    bucketsOfList_get (fun a => (↑(pcf a) : Fin n)) ⟨f, hf⟩ prob.actions'.attach
+  rw [h1, h2]
+
+/-- For every fact `f`, the union of the add lists of the actions whose chosen precondition is
+`f`: the out-neighbours of `f` in the justification graph, as a bit vector. -/
+def jgAdd (prob : PlanningTask n) (pcf : precondition_choice_function prob) :
+    _root_.Vector (VarSet n) n :=
+  (jgBuckets prob pcf).map (fun l => l.foldl (fun acc a => acc ∪ a.val.add) ∅)
+
+/-- The out-neighbour bit vectors, read off buckets that have already been computed. -/
+def jgAddOfBuckets {prob : PlanningTask n}
+    (bs : _root_.Vector (List {b : Action n // b ∈ prob.actions'}) n) :
+    _root_.Vector (VarSet n) n :=
+  bs.map (fun l => l.foldl (fun acc a => acc ∪ a.val.add) ∅)
+
+lemma jgAdd_eq_ofBuckets (prob : PlanningTask n) (pcf : precondition_choice_function prob) :
+    jgAdd prob pcf = jgAddOfBuckets (jgBuckets prob pcf) := rfl
+
+lemma mem_foldl_union {α : Type} (add : α → VarSet n) (t : Fin n) :
+    ∀ (l : List α) (acc : VarSet n),
+      t ∈ l.foldl (fun acc a => acc ∪ add a) acc ↔ (t ∈ acc ∨ ∃ a ∈ l, t ∈ add a) := by
+  intro l
+  induction l with
+  | nil => intro acc; simp
+  | cons a l ih =>
+      intro acc
+      rw [List.foldl_cons, ih]
+      simp [VarSet.mem_union, or_assoc]
+
+/-- The bit vector `jgAdd` really lists the out-neighbours of a fact. -/
+lemma mem_jgAdd_iff (prob : PlanningTask n) (pcf : precondition_choice_function prob)
+    (f t : Fin n) :
+    t ∈ (jgAdd prob pcf)[f] ↔
+      ∃ a : {b : Action n // b ∈ prob.actions'},
+        f = (↑(pcf a) : Fin n) ∧ t ∈ a.val.add.toList.toFinset := by
+  have hget : (jgAdd prob pcf)[f]
+      = ((jgBuckets prob pcf)[f]).foldl (fun acc a => acc ∪ a.val.add) ∅ := by
+    simp [jgAdd]
+  rw [hget, mem_foldl_union]
+  constructor
+  · rintro (h | ⟨a, ha, hb⟩)
+    · simp [VarSet.mem_empty] at h
+    · exact ⟨a, mem_jgBuckets.mp ha, by simpa [VarSet.mem_toList_iff] using hb⟩
+  · rintro ⟨a, hf, ht⟩
+    exact Or.inr ⟨a, mem_jgBuckets.mpr hf, by simpa [VarSet.mem_toList_iff] using ht⟩
+
+/-- The actions that generate the edge `f → t`, read off the buckets instead of by a scan over
+all actions. -/
+lemma jgBuckets_filter_eq (prob : PlanningTask n) (pcf : precondition_choice_function prob)
+    (f t : Fin n) :
+    ((jgBuckets prob pcf)[f]).filter (fun a => decide (t ∈ a.val.add))
+      = prob.actions'.attach.filter
+          (fun a => decide (f = (↑(pcf a) : Fin n) ∧ t ∈ a.val.add.toList.toFinset)) := by
+  rw [jgBuckets_get, List.filter_filter]
+  apply List.filter_congr
+  intro a _
+  simp [Bool.and_comm]
+
+/-! ### The graph -/
+
+/-- The adjacency relation of the justification graph, spelled out. -/
+private def jgAdj (prob : PlanningTask n) (pcf : precondition_choice_function prob) :
+    Fin n → Fin n → Prop :=
+  fun f t => ∃ a : {b : Action n // b ∈ prob.actions'},
+    f = (↑(pcf a) : Fin n) ∧ t ∈ a.val.add.toList.toFinset
+
+/-- The justification graph, built from data that is extracted once: the buckets `bs` of
+actions by their chosen precondition and the bit vectors `av` of their add lists.  The two
+hypotheses fix them to be `jgBuckets` and `jgAdd`; they are arguments (rather than local
+definitions) so that they are evaluated once per graph and not once per query. -/
+def justification_graph_of (prob : PlanningTask n) (pcf : precondition_choice_function prob)
+    (bs : _root_.Vector (List {b : Action n // b ∈ prob.actions'}) n) (av : _root_.Vector (VarSet n) n)
+    (hb : bs = jgBuckets prob pcf) (ha : av = jgAdd prob pcf) : NatGraph (Fin n) where
+  toDigraph := Digraph.mk (jgAdj prob pcf)
+  Payload := fun f t adj =>
+    ((bs[f].filter (fun a => decide (t ∈ a.val.add))).map (fun a => a.val.cost)).min (by
+      subst hb
+      obtain ⟨a, hf, ht⟩ := adj
+      have ha' : a ∈ ((jgBuckets prob pcf)[f]).filter (fun a => decide (t ∈ a.val.add)) := by
+        rw [List.mem_filter]
+        exact ⟨mem_jgBuckets.mpr hf, by simpa [VarSet.mem_toList_iff] using ht⟩
+      exact List.ne_nil_of_mem (List.mem_map_of_mem ha'))
+  instDecAdj := fun f t => decidable_of_iff (t ∈ av[f]) (by
+    subst ha; exact mem_jgAdd_iff prob pcf f t)
+
+/-- The justification graph built from buckets that are passed in, so that they are computed
+once and used both for the payloads and for the adjacency bit vectors. -/
+def justification_graph_ofBuckets (prob : PlanningTask n)
+    (pcf : precondition_choice_function prob)
+    (bs : _root_.Vector (List {b : Action n // b ∈ prob.actions'}) n)
+    (hb : bs = jgBuckets prob pcf) : NatGraph (Fin n) :=
+  justification_graph_of prob pcf bs (jgAddOfBuckets bs) hb (by rw [hb, jgAdd_eq_ofBuckets])
+
+/-- **The justification graph, computed from precomputed buckets.** -/
+def justification_graph_fast (prob : PlanningTask n) (pcf : precondition_choice_function prob) :
+    NatGraph (Fin n) :=
+  justification_graph_ofBuckets prob pcf (jgBuckets prob pcf) rfl
+
+/-- Equality of two weighted digraphs with the same adjacency relation: the payloads have to
+agree, the decidability instances are irrelevant. -/
+private lemma wdg_mk_eq {V : Type} [FinEnum V] (D : Digraph V) (P Q : (u v : V) → D.Adj u v → ℕ)
+    (I J : DecidableRel D.Adj) (h : ∀ u v adj, P u v adj = Q u v adj) :
+    (⟨D, P, I⟩ : WeightedDiGraph V ℕ) = ⟨D, Q, J⟩ := by
+  have hPQ : P = Q := by funext u v adj; exact h u v adj
+  subst hPQ
+  have hIJ : I = J := Subsingleton.elim _ _
+  subst hIJ
+  rfl
+
+/-- **The fast justification graph is the justification graph.** -/
+@[csimp] theorem justification_graph_eq_fast :
+    @justification_graph = @justification_graph_fast := by
+  funext n prob pcf
+  refine wdg_mk_eq _ _ _ _ _ ?_
+  intro f t adj
+  show (((prob.actions'.attach.filter
+      (fun a => decide (f = (↑(pcf a) : Fin n) ∧ t ∈ a.val.add.toList.toFinset))).map
+        (·.val)).map (fun a => a.cost)).min _
+    = (((jgBuckets prob pcf)[f].filter (fun a => decide (t ∈ a.val.add))).map
+        (fun a => a.val.cost)).min _
+  congr 1
+  rw [jgBuckets_filter_eq, List.map_map]
+  rfl
+
+
 def remove_edges {V : Type} {E : Type} [FinEnum V] (g : WeightedDiGraph V E) (cut : List (V × V)) : WeightedDiGraph V E :=
   let edges : V → V → Prop := fun f t => (g.Adj f t) ∧ (f,t) ∉ cut
 
@@ -727,19 +934,6 @@ def goal_zone {V : Type} [FinEnum V] (g : NatGraph V) (goal : V) : List V :=
   let vList : List V := (FinEnum.toList (Finset.univ : Finset V))
   vList.filter (fun v => zero_cost_reachable g v goal)
 
-/-- returns all edges that enter the goal zone -/
-def edges_entering_goal_zone {V : Type} [FinEnum V] (g : NatGraph V) (goal : V) : List (V × V) :=
-  let gz := (goal_zone g goal)
-
-  gz.flatMap (fun v =>
-    let vList : List V := (FinEnum.toList (Finset.univ : Finset V))
-    vList.filterMap (fun u =>
-      haveI := g.instDecAdj u v
-      if u ∉ gz ∧ g.Adj u v then .some (u,v)
-      else .none
-    )
-  )
-
 /-
 The constant-zero heuristic is admissible (costs are natural numbers, so `0` underestimates).
 -/
@@ -772,6 +966,376 @@ lemma walk_of_zero_cost_reachable {V : Type} [FinEnum V] (g : NatGraph V) {v goa
       contrapose! h
       unfold zero_cost_reachable
       cases h' : NatGraph.astar ( fun _ => 0 ) v goal <;> simp_all
+
+/-! ## A faster implementation of the goal zone
+
+`goal_zone` runs one A* over the justification graph *from every fact*, so computing it costs
+`O(n)` searches, each of which enumerates every vertex on every expansion.  The same set can be
+obtained by a single backward closure: start from the goal and repeatedly add every vertex with
+a zero-cost edge into the set already found.  `goal_zone_eq_fast` proves that this computes the
+same list, and is installed with `@[csimp]`, so the compiler uses it everywhere and no
+statement changes. -/
+
+section GoalZoneFast
+
+variable {V : Type} [FinEnum V]
+
+/-- `u → v` is an edge of zero cost. -/
+def zeroEdgeB (g : NatGraph V) (u v : V) : Bool :=
+  haveI := g.instDecAdj u v
+  if h : g.Adj u v then decide (g.Payload u v h = 0) else false
+
+lemma zeroEdgeB_iff {g : NatGraph V} {u v : V} :
+    zeroEdgeB g u v = true ↔ ∃ h : g.Adj u v, g.Payload u v h = 0 := by
+  unfold zeroEdgeB
+  haveI := g.instDecAdj u v
+  by_cases h : g.Adj u v
+  · simp [h]
+  · simp [h]
+
+/-- `u → v` is an edge. -/
+def edgeB (g : NatGraph V) (u v : V) : Bool :=
+  haveI := g.instDecAdj u v
+  decide (g.Adj u v)
+
+lemma edgeB_iff {g : NatGraph V} {u v : V} : edgeB g u v = true ↔ g.Adj u v := by
+  unfold edgeB
+  haveI := g.instDecAdj u v
+  simp
+
+/-- Following zero-cost edges is exactly walking at cost `0`. -/
+lemma reach_zeroEdgeB_iff (g : NatGraph V) (u goal : V) :
+    GraphClosure.Reach (zeroEdgeB g) u goal ↔ ∃ w : g.Walk u goal, w.cost = 0 := by
+  constructor
+  · intro h
+    induction h using Relation.ReflTransGen.head_induction_on with
+    | refl => exact ⟨WeightedDiGraph.Walk.nil, rfl⟩
+    | @head a b hab _ ih =>
+        obtain ⟨w, hw⟩ := ih
+        obtain ⟨hadj, hcost⟩ := zeroEdgeB_iff.mp hab
+        refine ⟨WeightedDiGraph.Walk.cons hadj w, ?_⟩
+        show NatGraph.edgeCost hadj + w.cost = 0
+        rw [hw]
+        exact hcost
+  · rintro ⟨w, hw⟩
+    induction w with
+    | nil => exact Relation.ReflTransGen.refl
+    | @cons f x t hadj rest ih =>
+        have hsplit : NatGraph.edgeCost hadj + rest.cost = 0 := hw
+        have h1 : g.Payload f x hadj = 0 := by
+          show NatGraph.edgeCost hadj = 0
+          omega
+        exact Relation.ReflTransGen.head (zeroEdgeB_iff.mpr ⟨hadj, h1⟩) (ih (by omega))
+
+/-- Following edges is exactly walking. -/
+lemma reach_edgeB_iff (g : NatGraph V) (u goal : V) :
+    GraphClosure.Reach (edgeB g) u goal ↔ Nonempty (g.Walk u goal) := by
+  constructor
+  · intro h
+    induction h using Relation.ReflTransGen.head_induction_on with
+    | refl => exact ⟨WeightedDiGraph.Walk.nil⟩
+    | @head a b hab _ ih =>
+        obtain ⟨w⟩ := ih
+        exact ⟨WeightedDiGraph.Walk.cons (edgeB_iff.mp hab) w⟩
+  · rintro ⟨w⟩
+    induction w with
+    | nil => exact Relation.ReflTransGen.refl
+    | @cons f x t hadj rest ih =>
+        exact Relation.ReflTransGen.head (edgeB_iff.mpr hadj) ih
+
+/-- The set of vertices from which the goal is reachable with cost `0`, computed by a single
+breadth-first backward closure instead of one A* search per vertex. -/
+def goalZoneSet (g : NatGraph V) (goal : V) : List V :=
+  GraphClosure.closure (zeroEdgeB g) goal
+
+/-- The backward closure computes exactly zero-cost reachability. -/
+lemma mem_goalZoneSet_iff (g : NatGraph V) (goal u : V) :
+    u ∈ goalZoneSet g goal ↔ zero_cost_reachable g u goal := by
+  rw [goalZoneSet, GraphClosure.mem_closure_iff, reach_zeroEdgeB_iff]
+  constructor
+  · rintro ⟨w, hw⟩
+    exact zero_cost_reachable_of_walk g w hw
+  · intro hu
+    exact walk_of_zero_cost_reachable g hu
+
+/-- **The goal zone, computed by one backward closure.** -/
+def goal_zone_fast (g : NatGraph V) (goal : V) : List V :=
+  let Z := goalZoneSet g goal
+  (GraphClosure.allVerts V).filter (fun v => decide (v ∈ Z))
+
+/-- The fast goal zone is the goal zone. -/
+@[csimp] theorem goal_zone_eq_fast : @goal_zone = @goal_zone_fast := by
+  funext V inst g goal
+  show (FinEnum.toList (Finset.univ : Finset V)).filter (fun v => zero_cost_reachable g v goal)
+    = (FinEnum.toList (Finset.univ : Finset V)).filter (fun v => decide (v ∈ goalZoneSet g goal))
+  apply List.filter_congr
+  intro v _
+  by_cases h : zero_cost_reachable g v goal
+  · simp [h, (mem_goalZoneSet_iff g goal v).mpr h]
+  · have hnot : v ∉ goalZoneSet g goal := fun hc => h ((mem_goalZoneSet_iff g goal v).mp hc)
+    simp [h, hnot]
+
+/-- **Zero-cost reachability, decided by membership in the goal zone.**  No search of its own. -/
+def zero_cost_reachable_fast (g : NatGraph V) (v goal : V) : Bool :=
+  decide (v ∈ goalZoneSet g goal)
+
+@[csimp] theorem zero_cost_reachable_eq_fast :
+    @zero_cost_reachable = @zero_cost_reachable_fast := by
+  funext V inst g v goal
+  rw [Bool.eq_iff_iff, zero_cost_reachable_fast, decide_eq_true_iff]
+  exact (mem_goalZoneSet_iff g goal v).symm
+
+/-- The set of vertices from which the goal can be reached. -/
+def reachSet (g : NatGraph V) (goal : V) : List V :=
+  GraphClosure.closure (edgeB g) goal
+
+/-- `reachable` yields an actual walk. -/
+lemma walk_of_reachable (g : NatGraph V) {v goal : V}
+    (h : reachable g v goal) : Nonempty (g.Walk v goal) := by
+  unfold reachable at h
+  cases h' : NatGraph.astar (g := g) (fun _ => 0) v goal with
+  | none => rw [h'] at h; simp at h
+  | some p => exact ⟨p.val⟩
+
+/-- A walk witnesses `reachable` (`astar` is complete). -/
+lemma reachable_of_walk (g : NatGraph V) {v goal : V} (w : g.Walk v goal) :
+    reachable g v goal := by
+  have h_complete : (NatGraph.astar (g := g) (fun _ => 0) v goal).isSome := by
+    apply NatGraph.astar_is_complete
+    exact ⟨⟨w.bypass, WeightedDiGraph.Walk.bypass_isPath w⟩,
+      fun u _ => by simp [NatGraph.hsearch_expandable]⟩
+  unfold reachable
+  cases h' : NatGraph.astar (g := g) (fun _ => 0) v goal with
+  | none => rw [h'] at h_complete; simp at h_complete
+  | some p => simp
+
+/-- The closure computes exactly reachability. -/
+lemma mem_reachSet_iff (g : NatGraph V) (goal u : V) :
+    u ∈ reachSet g goal ↔ reachable g u goal := by
+  rw [reachSet, GraphClosure.mem_closure_iff, reach_edgeB_iff]
+  constructor
+  · rintro ⟨w⟩
+    exact reachable_of_walk g w
+  · intro hu
+    exact walk_of_reachable g hu
+
+/-- **Reachability, computed by one backward closure instead of an A\* search.** -/
+def reachable_fast (g : NatGraph V) (v goal : V) : Bool :=
+  decide (v ∈ reachSet g goal)
+
+@[csimp] theorem reachable_eq_fast : @reachable = @reachable_fast := by
+  funext V inst g v goal
+  rw [Bool.eq_iff_iff, reachable_fast, decide_eq_true_iff]
+  exact (mem_reachSet_iff g goal v).symm
+
+end GoalZoneFast
+
+/-! ### Reachability by bit-vector intersections
+
+The closure above tests, for every unvisited vertex `u` and every frontier vertex `v`, whether
+`u → v` is an edge.  An adjacency test of the justification graph is a bit test on an `n`-bit
+number, which shifts the whole number, so a round costs `Θ(|U| · |F| · n/64)` machine words.
+
+With the out-neighbour bit vectors of the graph (`jgAdd`) at hand, "does `u` have an edge into
+the frontier" is *one* intersection of bit vectors, so a round costs `Θ(|U| · n/64)`: the
+frontier is turned into a bit mask once per round.  `reachableFast_eq` proves that the result
+is unchanged. -/
+
+section ReachAdj
+
+variable {n : ℕ}
+
+/-- The vertices of `U` with an edge into the mask, by one bit-vector intersection each. -/
+def adjNewOf (av : _root_.Vector (VarSet n) n) (mask : VarSet n) (U : List (Fin n)) :
+    List (Fin n) :=
+  U.filter (fun u => decide (av[u] ∩ mask ≠ ∅))
+
+/-- The vertices of `U` with an edge into the frontier `F`; the mask is built once. -/
+def adjNew (av : _root_.Vector (VarSet n) n) (F U : List (Fin n)) : List (Fin n) :=
+  adjNewOf av (VarSet.ofList F) U
+
+/-- The vertices of `U` *without* an edge into the mask. -/
+def adjRestOf (av : _root_.Vector (VarSet n) n) (mask : VarSet n) (U : List (Fin n)) :
+    List (Fin n) :=
+  U.filter (fun u => decide (av[u] ∩ mask = ∅))
+
+/-- The vertices of `U` without an edge into the frontier `F`; the mask is built once. -/
+def adjRest (av : _root_.Vector (VarSet n) n) (F U : List (Fin n)) : List (Fin n) :=
+  adjRestOf av (VarSet.ofList F) U
+
+/-- The bit-vector test is the edge test into the frontier. -/
+lemma adj_hasEdgeTo (e : Fin n → Fin n → Bool) (av : _root_.Vector (VarSet n) n)
+    (hav : ∀ u v : Fin n, v ∈ av[u] ↔ e u v = true) (F : List (Fin n)) (u : Fin n) :
+    decide (av[u] ∩ VarSet.ofList F ≠ ∅) = GraphClosure.hasEdgeTo e F u := by
+  rw [Bool.eq_iff_iff, decide_eq_true_iff, GraphClosure.hasEdgeTo_iff, ne_eq,
+    VarSet.inter_eq_empty_iff]
+  push_neg
+  constructor
+  · rintro ⟨v, hv, hv'⟩
+    exact ⟨v, VarSet.mem_ofList.mp hv', (hav u v).mp hv⟩
+  · rintro ⟨v, hvF, hev⟩
+    exact ⟨v, (hav u v).mpr hev, VarSet.mem_ofList.mpr hvF⟩
+
+lemma adjNew_eq (e : Fin n → Fin n → Bool) (av : _root_.Vector (VarSet n) n)
+    (hav : ∀ u v : Fin n, v ∈ av[u] ↔ e u v = true) (F U : List (Fin n)) :
+    adjNew av F U = GraphClosure.newVerts e F U := by
+  rw [adjNew, adjNewOf, GraphClosure.newVerts]
+  exact List.filter_congr (fun u _ => adj_hasEdgeTo e av hav F u)
+
+lemma adjRest_eq (e : Fin n → Fin n → Bool) (av : _root_.Vector (VarSet n) n)
+    (hav : ∀ u v : Fin n, v ∈ av[u] ↔ e u v = true) (F U : List (Fin n)) :
+    adjRest av F U = GraphClosure.restVerts e F U := by
+  rw [adjRest, adjRestOf, GraphClosure.restVerts]
+  refine List.filter_congr (fun u _ => ?_)
+  have h := adj_hasEdgeTo e av hav F u
+  by_cases hu : GraphClosure.hasEdgeTo e F u
+  · rw [hu] at h
+    simp only [hu, Bool.not_true, decide_eq_true_eq] at *
+    simpa using h
+  · simp only [hu] at h ⊢
+    simp only [Bool.not_false, decide_eq_true_eq]
+    simpa using h
+
+/-- The set of vertices from which `goal` is reachable, computed with the out-neighbour bit
+vectors `av` of the graph. -/
+def reachSetAdj (g : NatGraph (Fin n)) (av : _root_.Vector (VarSet n) n)
+    (hav : ∀ u v : Fin n, v ∈ av[u] ↔ edgeB g u v = true) (goal : Fin n) : List (Fin n) :=
+  GraphClosure.closureWith (edgeB g) (adjNew av) (adjRest av)
+    (adjNew_eq (edgeB g) av hav) (adjRest_eq (edgeB g) av hav) goal
+
+lemma reachSetAdj_eq (g : NatGraph (Fin n)) (av : _root_.Vector (VarSet n) n)
+    (hav : ∀ u v : Fin n, v ∈ av[u] ↔ edgeB g u v = true) (goal : Fin n) :
+    reachSetAdj g av hav goal = reachSet g goal :=
+  GraphClosure.closureWith_eq _ _ _ _ _ goal
+
+/-- **Reachability, decided with the out-neighbour bit vectors of the graph.** -/
+def reachableAdj (g : NatGraph (Fin n)) (av : _root_.Vector (VarSet n) n)
+    (hav : ∀ u v : Fin n, v ∈ av[u] ↔ edgeB g u v = true) (v goal : Fin n) : Bool :=
+  decide (v ∈ reachSetAdj g av hav goal)
+
+/-- **The bit-vector reachability test is `reachable`.** -/
+theorem reachableAdj_eq (g : NatGraph (Fin n)) (av : _root_.Vector (VarSet n) n)
+    (hav : ∀ u v : Fin n, v ∈ av[u] ↔ edgeB g u v = true) (v goal : Fin n) :
+    reachableAdj g av hav v goal = reachable g v goal := by
+  rw [reachableAdj, reachSetAdj_eq, Bool.eq_iff_iff, decide_eq_true_iff, mem_reachSet_iff]
+
+/-- The out-neighbour bit vectors a justification graph is built from decide its adjacency. -/
+lemma jgAdd_edgeB {n : ℕ} (prob : PlanningTask n) (pcf : precondition_choice_function prob)
+    (bs : _root_.Vector (List {b : Action n // b ∈ prob.actions'}) n)
+    (av : _root_.Vector (VarSet n) n) (hb : bs = jgBuckets prob pcf) (ha : av = jgAdd prob pcf)
+    (u v : Fin n) :
+    v ∈ av[u] ↔ edgeB (justification_graph_of prob pcf bs av hb ha) u v = true := by
+  subst hb
+  subst ha
+  rw [edgeB_iff]
+  exact mem_jgAdd_iff prob pcf u v
+
+/-- A justification graph built from precomputed buckets and out-neighbour vectors is the
+justification graph. -/
+lemma justification_graph_of_eq {n : ℕ} (prob : PlanningTask n)
+    (pcf : precondition_choice_function prob)
+    (bs : _root_.Vector (List {b : Action n // b ∈ prob.actions'}) n)
+    (av : _root_.Vector (VarSet n) n) (hb : bs = jgBuckets prob pcf) (ha : av = jgAdd prob pcf) :
+    justification_graph_of prob pcf bs av hb ha = justification_graph prob pcf := by
+  subst hb
+  subst ha
+  exact (congrFun (congrFun (congrFun justification_graph_eq_fast n) prob) pcf).symm
+
+end ReachAdj
+
+
+
+/-- returns all edges that enter the goal zone -/
+def edges_entering_goal_zone {V : Type} [FinEnum V] (g : NatGraph V) (goal : V) : List (V × V) :=
+  let gz := (goal_zone g goal)
+
+  gz.flatMap (fun v =>
+    let vList : List V := (FinEnum.toList (Finset.univ : Finset V))
+    vList.filterMap (fun u =>
+      haveI := g.instDecAdj u v
+      if u ∉ gz ∧ g.Adj u v then .some (u,v)
+      else .none
+    )
+  )
+
+/-! ### The cut, without rescanning the goal zone
+
+`edges_entering_goal_zone` tests `u ∉ gz` for *every* pair of a goal-zone vertex and a vertex,
+and each of those tests scans the goal zone.  Selecting the vertices outside the goal zone once
+turns the `Θ(|V| · |gz|²)` scan into `Θ(|V| · |gz|)` adjacency tests. -/
+
+section CutFast
+
+variable {V : Type} [FinEnum V]
+
+/-- The edges from `outside` into `gz`. -/
+def cut_pairs (g : NatGraph V) (gz outside : List V) : List (V × V) :=
+  gz.flatMap (fun v =>
+    outside.filterMap (fun u =>
+      haveI := g.instDecAdj u v
+      if g.Adj u v then .some (u, v) else .none))
+
+/-- The edges entering `gz`, with the complement of `gz` computed once. -/
+def cut_of_goal_zone (g : NatGraph V) (gz : List V) : List (V × V) :=
+  cut_pairs g gz ((GraphClosure.allVerts V).filter (fun u => decide (u ∉ gz)))
+
+/-- **The edges entering the goal zone, computed with one pass over the goal zone.** -/
+def edges_entering_goal_zone_fast (g : NatGraph V) (goal : V) : List (V × V) :=
+  cut_of_goal_zone g (goal_zone g goal)
+
+/-- The edges entering a zone `gz` that is supplied by the caller.
+
+This is literally the body of `edges_entering_goal_zone` with the goal zone abstracted out, so
+`edges_entering_goal_zone g goal` and `cut_entering g (goal_zone g goal)` are definitionally
+equal (`edges_entering_goal_zone_eq_cut_entering`).  A caller that already has the goal zone (for
+example for a zero-cost-reachability test) can therefore reuse it instead of computing it a
+second time. -/
+def cut_entering (g : NatGraph V) (gz : List V) : List (V × V) :=
+  gz.flatMap (fun v =>
+    let vList : List V := (FinEnum.toList (Finset.univ : Finset V))
+    vList.filterMap (fun u =>
+      haveI := g.instDecAdj u v
+      if u ∉ gz ∧ g.Adj u v then .some (u, v)
+      else .none
+    )
+  )
+
+/-- `edges_entering_goal_zone` is `cut_entering` applied to the goal zone. -/
+theorem edges_entering_goal_zone_eq_cut_entering (g : NatGraph V) (goal : V) :
+    edges_entering_goal_zone g goal = cut_entering g (goal_zone g goal) := rfl
+
+private lemma filterMap_and_eq {α β : Type} (P : α → Prop) [DecidablePred P] (Q : α → Prop)
+    [DecidablePred Q] (f : α → β) :
+    ∀ l : List α, l.filterMap (fun u => if P u ∧ Q u then some (f u) else none)
+      = (l.filter (fun u => decide (P u))).filterMap (fun u => if Q u then some (f u) else none) := by
+  intro l
+  induction l with
+  | nil => simp
+  | cons a l ih =>
+      by_cases hP : P a
+      · by_cases hQ : Q a <;> simp [List.filterMap_cons, List.filter_cons, hP, hQ, ih]
+      · simp [List.filterMap_cons, List.filter_cons, hP, ih]
+
+/-- **The edges entering a zone, with the complement of the zone computed once.** -/
+@[csimp] theorem cut_entering_eq_cut_of_goal_zone :
+    @cut_entering = @cut_of_goal_zone := by
+  funext V inst g gz
+  show gz.flatMap _ = cut_pairs g gz _
+  rw [cut_pairs]
+  apply List.flatMap_congr
+  intro v _
+  dsimp only
+  exact @filterMap_and_eq V (V × V) (fun u => u ∉ gz) _ (fun u => g.Adj u v)
+    (fun u => g.instDecAdj u v) (fun u => (u, v)) _
+
+@[csimp] theorem edges_entering_goal_zone_eq_fast :
+    @edges_entering_goal_zone = @edges_entering_goal_zone_fast := by
+  funext V inst g goal
+  rw [edges_entering_goal_zone_eq_cut_entering, cut_entering_eq_cut_of_goal_zone,
+    edges_entering_goal_zone_fast]
+
+end CutFast
+
 
 /-- Membership in the goal zone is exactly zero-cost reachability. -/
 lemma mem_goal_zone_iff {V : Type} [FinEnum V] (g : NatGraph V) (goal v : V) :
@@ -877,14 +1441,6 @@ lemma goal_zone_landmark_of_justification_graph {n : ℕ} (prob : PlanningTask n
     (edges_entering_goal_zone_are_cut_if_init_not_zero_reachable _ _ _ i_g_not_zero_reachable)
 
 
-
-/-- `reachable` yields an actual walk. -/
-lemma walk_of_reachable {V : Type} [FinEnum V] (g : NatGraph V) {v goal : V}
-    (h : reachable g v goal) : Nonempty (g.Walk v goal) := by
-  unfold reachable at h
-  cases h' : NatGraph.astar (g:=g) (fun _ => 0) v goal with
-  | none => rw [h'] at h; simp at h
-  | some p => exact ⟨p.val⟩
 
 /-- If a walk leads from outside the goal zone into it, then at least one edge enters the goal
 zone, so `edges_entering_goal_zone` is nonempty. -/
@@ -1048,6 +1604,125 @@ def lmcut_step {n : ℕ} (prob : PlanningTask n)
       | 1 => fun a_index => if prob.actions'[a_index] ∈ lm' then prob.actions'[a_index].cost - minCost else prob.actions'[a_index].cost
 
     (lm,minCost,part)
+
+/-! ### Sharing the landmark computation
+
+The `let`s of `lmcut_step` are zeta-expanded during elaboration, so the compiled code
+recomputes the landmark — and with it the cut and the goal zone — once per occurrence.
+`lmcut_step_fast` computes the landmark once and passes it as an argument, which is evaluated
+once; `lmcut_step_eq_fast` proves the two equal and installs the fast one with `@[csimp]`, so
+nothing that is stated about `lmcut_step` changes. -/
+
+/-- The body of `lmcut_step`, with the landmark as an argument. -/
+def lmcut_step_of {n : ℕ} (prob : PlanningTask n)
+    (pcf : precondition_choice_function prob) (lm : List (Action n)) :
+      (List (Action n)) × ℕ × (cost_partitioning prob 2) :=
+    let minCost := if ne : lm = [] then 0 else
+      (lm.map (fun a => a.cost)).min (by simp_all only [ne_eq, map_eq_nil_iff, not_false_eq_true])
+    let lm' := get_all_equiv_delete_relaxed_actions prob lm
+    let part : cost_partitioning prob 2 := fun p =>
+      match p with
+      | 0 => fun a_index => if prob.actions'[a_index] ∈ lm' then minCost else 0
+      | 1 => fun a_index => if prob.actions'[a_index] ∈ lm' then prob.actions'[a_index].cost - minCost else prob.actions'[a_index].cost
+
+    (lm,minCost,part)
+
+/-- `lmcut_step`, computing the landmark once. -/
+def lmcut_step_fast {n : ℕ} (prob : PlanningTask n)
+    (u_g : unitary_goal prob)
+    (pcf : precondition_choice_function prob) :
+      (List (Action n)) × ℕ × (cost_partitioning prob 2) :=
+  lmcut_step_of prob pcf
+    (landmark_induced_by_cut prob
+      (edges_entering_goal_zone (justification_graph prob pcf) (get_unitary_goal prob u_g)) pcf)
+
+@[csimp] theorem lmcut_step_eq_fast : @lmcut_step = @lmcut_step_fast := by
+  funext n prob u_g pcf
+  rfl
+
+/-! ### The cost partitioning as a table
+
+The partition returned by `lmcut_step_of` is a *function* of the action index, and it reads the
+action at that index off `prob.actions'` — a list — and tests membership of that action in the
+relax-equivalence closure of the landmark.  Since the caller (`partition_STRIPS`) applies it to
+every index, that costs `Θ(|A|²)` list steps and `Θ(|A| · |closure|)` action comparisons per
+round.  The two lookups are tabulated once below. -/
+
+/-- The costs of the actions of `prob`, as an array. -/
+def actionCosts {n : ℕ} (prob : PlanningTask n) : Array ℕ :=
+  (prob.actions'.map (fun a => a.cost)).toArray
+
+lemma actionCosts_get {n : ℕ} (prob : PlanningTask n) (i : Fin prob.actions'.length) :
+    (actionCosts prob).getD i.val 0 = prob.actions'[i].cost := by
+  have hsize : (actionCosts prob).size = prob.actions'.length := by
+    simp [actionCosts]
+  rw [Array.getD, dif_pos (by rw [hsize]; exact i.isLt)]
+  simp [actionCosts]
+
+/-! #### The relax-equivalence closure, without building it
+
+The partition charges the landmark cost on the *relax-equivalence closure*
+`get_all_equiv_delete_relaxed_actions prob lm`, and then asks, for every action index, whether the
+action at that index lies in that closure.  Both steps compare whole actions: the closure is a
+filtered copy of the action list, and the membership test scans it once per index.  But an action
+of `prob` lies in the closure exactly if it is relax-equivalent to some action of `lm`
+(`mem_get_all_equiv_iff`), so the marks can be produced directly, without the intermediate list
+and without a second comparison per index. -/
+
+/-- Two actions agree after the delete relaxation, tested field by field (so that neither
+relaxed action has to be built). -/
+def relaxEqB {n : ℕ} (a b : Action n) : Bool :=
+  a.cost == b.cost && a.pre == b.pre && a.add == b.add && a.name == b.name
+
+lemma relaxEqB_iff {n : ℕ} (a b : Action n) :
+    relaxEqB a b = true ↔ delete_relax_action a = delete_relax_action b := by
+  rw [relaxEqB, delete_relax_action, delete_relax_action, Action.mk.injEq]
+  simp only [Bool.and_eq_true, beq_iff_eq]
+  constructor
+  · rintro ⟨⟨⟨hc, hp⟩, ha⟩, hn⟩
+    exact ⟨hn, hp, ha, trivial, hc⟩
+  · rintro ⟨hn, hp, ha, -, hc⟩
+    exact ⟨⟨⟨hc, hp⟩, ha⟩, hn⟩
+
+/-- For every action index of `prob`, whether that action is relax-equivalent to an action of
+`lm` — that is, whether it lies in the relax-equivalence closure of `lm`. -/
+def relaxMarks {n : ℕ} (prob : PlanningTask n) (lm : List (Action n)) : Array Bool :=
+  (prob.actions'.map (fun a => lm.any (fun l => relaxEqB a l))).toArray
+
+lemma relaxMarks_get {n : ℕ} (prob : PlanningTask n) (lm : List (Action n))
+    (i : Fin prob.actions'.length) :
+    (relaxMarks prob lm).getD i.val false
+      = decide (prob.actions'[i] ∈ get_all_equiv_delete_relaxed_actions prob lm) := by
+  have hsize : (relaxMarks prob lm).size = prob.actions'.length := by
+    simp [relaxMarks]
+  rw [Array.getD, dif_pos (by rw [hsize]; exact i.isLt), Bool.eq_iff_iff, decide_eq_true_iff]
+  simp [relaxMarks, mem_get_all_equiv_iff, relaxEqB_iff]
+
+/-- `lmcut_step_of` with the two lookups of the partition tabulated. -/
+def lmcut_step_of_fast {n : ℕ} (prob : PlanningTask n)
+    (pcf : precondition_choice_function prob) (lm : List (Action n)) :
+      (List (Action n)) × ℕ × (cost_partitioning prob 2) :=
+    let minCost := if ne : lm = [] then 0 else
+      (lm.map (fun a => a.cost)).min (by simp_all only [ne_eq, map_eq_nil_iff, not_false_eq_true])
+    let marks := relaxMarks prob lm
+    let costs := actionCosts prob
+    let part : cost_partitioning prob 2 := fun p =>
+      match p with
+      | 0 => fun a_index => if marks.getD a_index.val false then minCost else 0
+      | 1 => fun a_index =>
+          if marks.getD a_index.val false then costs.getD a_index.val 0 - minCost
+          else costs.getD a_index.val 0
+    (lm, minCost, part)
+
+@[csimp] theorem lmcut_step_of_eq_fast : @lmcut_step_of = @lmcut_step_of_fast := by
+  funext n prob pcf lm
+  rw [lmcut_step_of, lmcut_step_of_fast]
+  refine Prod.ext rfl (Prod.ext rfl ?_)
+  funext p a
+  match p with
+  | 0 => simp [relaxMarks_get prob _ a]
+  | 1 => simp [relaxMarks_get prob _ a, actionCosts_get prob a]
+
 
 
 
@@ -1501,17 +2176,6 @@ noncomputable def walk_of_remove_edges_walk {V E : Type} [FinEnum V] (g : Weight
   induction w with
   | nil => exact WeightedDiGraph.Walk.nil
   | cons adj _ ih => exact WeightedDiGraph.Walk.cons adj.1 ih
-
-/-- A walk witnesses reachability (`astar` is complete). -/
-lemma reachable_of_walk {V : Type} [FinEnum V] (g : NatGraph V) {v goal : V}
-    (w : g.Walk v goal) : reachable g v goal := by
-  have hcomplete : (NatGraph.astar (g := g) (fun _ => 0) v goal).isSome := by
-    apply NatGraph.astar_is_complete
-    exact ⟨⟨w.bypass, WeightedDiGraph.Walk.bypass_isPath w⟩, fun u _ => by simp [NatGraph.hsearch_expandable]⟩
-  unfold reachable
-  cases h : NatGraph.astar (g := g) (fun _ => 0) v goal with
-  | none => rw [h] at hcomplete; simp at hcomplete
-  | some p => rfl
 
 /-
 If the unitary goal is not reachable from the unitary initial fact in the justification graph,

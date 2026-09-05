@@ -10,6 +10,8 @@ import planning.PerfectHeuristic
 import planning.Planner
 import planning.PlannerGen
 import planning.PlannerHeap
+import planning.PlannerHeapLazy
+import planning.PlannerCached
 import planning.Planning
 import planning.SearchCompat
 import planning.temp
@@ -18,3 +20,8 @@ import planning.LandmarkCutting
 import planning.LMCutHeuristic
 import planning.LMCutH1PCF
 import planning.LMCutH1Normal
+import planning.H1Fast
+import planning.LMCutFast
+import planning.LMCutRun
+import planning.SuccIndex
+import planning.PlannerFast

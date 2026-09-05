@@ -8,7 +8,8 @@
 # Every file is parsed, printed back to PDDL, parsed again and compared (--roundtrip);
 # every problem is additionally checked for static well-formedness against its domain
 # (--check); the STRIPS test instance is also grounded (--ground) and the small shipped
-# instances are solved by the verified planner (--solve).  Files that use
+# instances are solved by the verified planner (--solve); a plan file is checked with the
+# verified plan validator (--validate).  Files that use
 # features outside the supported fragment (derived predicates, numeric fluents, durative
 # actions, preferences, ...) are reported as failures with an explanatory message; this is
 # intended behaviour.
@@ -37,6 +38,25 @@ $PDDLPARSE --solve \
   pddl/test/blocks-lite-domain.pddl pddl/test/blocks-lite-problem.pddl || status=1
 $PDDLPARSE --solve \
   pddl/test/transport-lite-domain.pddl pddl/test/transport-lite-problem.pddl || status=1
+
+echo "== validating a plan file =="
+$PDDLPARSE --validate=pddl/test/blocks-lite-plan.txt \
+  pddl/test/blocks-lite-domain.pddl pddl/test/blocks-lite-problem.pddl || status=1
+# the second plan is invalid on purpose, so the front end must reject it
+if $PDDLPARSE --validate=pddl/test/blocks-lite-plan-bad.txt \
+    pddl/test/blocks-lite-domain.pddl pddl/test/blocks-lite-problem.pddl; then
+  echo "FAIL: an invalid plan was accepted"
+  status=1
+fi
+
+echo "== solving and re-validating the plan =="
+tmpplan=$(mktemp)
+$PDDLPARSE --solve \
+  pddl/test/transport-lite-domain.pddl pddl/test/transport-lite-problem.pddl \
+  | grep '^(' > "$tmpplan" || status=1
+$PDDLPARSE --validate="$tmpplan" \
+  pddl/test/transport-lite-domain.pddl pddl/test/transport-lite-problem.pddl || status=1
+rm -f "$tmpplan"
 
 if [ $# -ge 1 ]; then
   bench=$1
