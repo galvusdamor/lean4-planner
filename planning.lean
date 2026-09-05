@@ -9,6 +9,7 @@ import planning.Heuristics
 import planning.PerfectHeuristic
 import planning.Planner
 import planning.PlannerGen
+import planning.PlannerHeap
 import planning.Planning
 import planning.SearchCompat
 import planning.temp

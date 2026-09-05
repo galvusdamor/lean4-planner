@@ -1,10 +1,12 @@
 name = "planning"
 version = "0.1.0"
-defaultTargets = ["planning", "planner"]
+defaultTargets = ["planning", "planner", "pddl"]
 
 [[lean_lib]]
 name = "planning"
 
+[[lean_lib]]
+name = "pddl"
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"
@@ -18,8 +20,12 @@ rev = "v4.32.0"
 [[require]]
 name = "SearchAlgorithms"
 git = "https://github.com/galvusdamor/lean4-search-algorithms"
-rev = "v4.32.0"
+rev = "v4.32.0-wip"
+#path = "../lean4-graphlib"
 
 [[lean_exe]]
 name = "planner"
 root = "Planner.Main"
+[[lean_exe]]
+name = "pddlparse"
+root = "PddlParse.Main"

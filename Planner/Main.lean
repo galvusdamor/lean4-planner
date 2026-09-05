@@ -1,8 +1,7 @@
-import planning.PlannerGen
+import planning.PlannerHeap
 import planning.H1
 
 import Strips.Parser
-
 
 
 def pathToString {n : ℕ} {prob : STRIPS.PlanningTask n} {cur goal : STRIPS.State n}
@@ -16,8 +15,7 @@ def runPlanner (dom : String) (heur : String) : IO Unit := do
     | "h1" => fun s => STRIPS.h_1 prob s
     | "h0" => fun _ => 0
     | _ => fun _ => 0
-    dbg_trace "foo"
-    match STRIPS.planner_gen prob h with
+    match STRIPS.planner_heap_fast prob h with
     | some plan =>
       IO.println "Solution found!"
       IO.println (pathToString plan.path)
