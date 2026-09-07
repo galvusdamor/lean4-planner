@@ -31,12 +31,12 @@ def isWhitespace (c : Char) : Bool :=
 end Token
 
 /-- Push the token accumulated in `cur` (if any) onto the reversed token list `acc`. -/
-private def flush (cur : String) (acc : List Token) : List Token :=
+def flush (cur : String) (acc : List Token) : List Token :=
   if cur.isEmpty then acc else Token.atom cur.toLower :: acc
 
 /-- Tokeniser worker.  `inComment` records whether we are inside a `;` comment, `cur`
 is the name token read so far and `acc` the (reversed) list of tokens produced so far. -/
-private def tokenizeAux : List Char → Bool → String → List Token → List Token
+def tokenizeAux : List Char → Bool → String → List Token → List Token
   | [], _, cur, acc => (flush cur acc).reverse
   | c :: cs, true, cur, acc =>
       tokenizeAux cs (c != '\n') cur acc
@@ -65,7 +65,7 @@ inductive Sexp where
 namespace Sexp
 
 /-- Render an s-expression back into concrete syntax (used for error messages). -/
-partial def toString : Sexp → String
+def toString : Sexp → String
   | .atom s => s
   | .node xs => "(" ++ String.intercalate " " (xs.map toString) ++ ")"
 
@@ -75,7 +75,7 @@ end Sexp
 
 /-- Reader worker.  `stack` holds the (reversed) lists of the s-expressions that are
 currently open, innermost first. -/
-private def readAux : List Token → List (List Sexp) → Except String (List Sexp)
+def readAux : List Token → List (List Sexp) → Except String (List Sexp)
   | [], [top] => .ok top.reverse
   | [], _ => .error "unexpected end of input: missing ')'"
   | Token.lparen :: ts, stack => readAux ts ([] :: stack)
